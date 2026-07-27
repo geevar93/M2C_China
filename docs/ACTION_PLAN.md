@@ -559,8 +559,8 @@ Verified on this machine: `dotnet build` (0 warnings), `dotnet test` (**151 pass
 
 | # | Item |
 | --- | --- |
-| **N-7** | **A deactivated user keeps full API access for up to 8 hours.** Verified live: after `DELETE /admin/users/{id}`, login and refresh both correctly return 401, but the user's **already-issued access token still returns 200**. The access token lifetime is 8h (TECH_SPEC §4.2), so that is the exposure window. E11-03's own wording is "blocks login and **revokes sessions**" — refresh tokens *are* revoked, so the gap is specifically the bearer token. TECH_SPEC §4.3 knowingly accepts this for *permission* changes, but deactivation is a different risk class: it is the "remove access now" operation, used when someone leaves or is compromised. Genuinely low risk at Q7's stated 2–5 internal staff, but it should be an **explicit accepted decision, not an unnoticed gap**. Three options: (a) shorten the access-token lifetime and lean on refresh rotation — simplest; (b) check `IsActive` per request — a DB hit §4.3 deliberately avoided; (c) a revocation deny-list in `ICacheService` keyed by user id with TTL equal to the token lifetime — no DB hit, bounded size, and the cache now has a proven consumer. **Recommend (c), or (a) if simplicity wins.** |
-| N-8 | **Seeded default lookups are deletable while unreferenced.** Observed during verification: `DELETE` removed the seeded `ACTIVE` vendor status because no vendor referenced it yet. This is *correct* per E3-08 and consistent with FSD §3.3 configurability, but it means an early mistake can remove a default the seeder will not restore (seeding is idempotent and only fills gaps on an empty set). Consider whether seeded defaults should be retire-only. |
+| **N-7** | **CLOSED — commit `dd0f8cf`**, extended to the credential-change paths in `5ffbfef`. Option (c) was taken, as recommended: an `ICacheService` deny-list keyed by user id with a TTL equal to the token lifetime, checked in `TokenRevocationMiddleware`. No per-request DB hit, so TECH_SPEC §4.3's deliberate design holds. The original finding is kept below as the rationale record. <br><br> *Original finding:* **A deactivated user keeps full API access for up to 8 hours.** Verified live: after `DELETE /admin/users/{id}`, login and refresh both correctly return 401, but the user's **already-issued access token still returns 200**. The access token lifetime is 8h (TECH_SPEC §4.2), so that is the exposure window. E11-03's own wording is "blocks login and **revokes sessions**" — refresh tokens *are* revoked, so the gap is specifically the bearer token. TECH_SPEC §4.3 knowingly accepts this for *permission* changes, but deactivation is a different risk class: it is the "remove access now" operation, used when someone leaves or is compromised. Genuinely low risk at Q7's stated 2–5 internal staff, but it should be an **explicit accepted decision, not an unnoticed gap**. Three options: (a) shorten the access-token lifetime and lean on refresh rotation — simplest; (b) check `IsActive` per request — a DB hit §4.3 deliberately avoided; (c) a revocation deny-list in `ICacheService` keyed by user id with TTL equal to the token lifetime — no DB hit, bounded size, and the cache now has a proven consumer. **Recommend (c), or (a) if simplicity wins.** |
+| N-8 | **CLOSED — commit `ea7c440`.** Seeded default rows are now retire-only: they can be deactivated but not deleted, so an early mistake is recoverable and the idempotent seeder is never asked to restore something it cannot. Non-seeded rows are unaffected and still follow E3-08 exactly. The original finding is kept below as the rationale record. <br><br> *Original finding:* **Seeded default lookups are deletable while unreferenced.** Observed during verification: `DELETE` removed the seeded `ACTIVE` vendor status because no vendor referenced it yet. This is *correct* per E3-08 and consistent with FSD §3.3 configurability, but it means an early mistake can remove a default the seeder will not restore (seeding is idempotent and only fills gaps on an empty set). Consider whether seeded defaults should be retire-only. |
 | N-1 | **Unchanged.** The Angular 19 pin and staying on patched Angular remain mutually exclusive until Node is upgraded. TECH_SPEC OI-7 reopened. |
 | N-3, N-4 | **N-3 unchanged** (automatic HTTPS still untested — no public DNS name; first real exercise is E2-05). **N-4 now closed** — Redis was exercised as a real cache under E3-09, not merely as a reachable provider. |
 | N-5 | **Unchanged and re-encountered.** Changing `DB_PASSWORD` against an existing `pgdata` volume still breaks auth confusingly. Belongs in the E12-09 operating guide. |
@@ -580,3 +580,65 @@ M1's two real defects were both wiring between components that each passed their
 **M3 — CRM vertical slice (E4).** Now unblocked: FSD Q1 is answered, and Q2 confirmed E4-08 in scope needing no migration.
 
 **Do first, before any E4 story:** the single reviewed **pre-M3 migration** carrying the three deferred schema corrections — the six `external_*` columns on `customers` (Q1), `shipments.reference`, and `company_settings` (shape only; Q9c values still outstanding). Deliberately held out of M2 so the M1 freeze (DR-2) breaks once, with review.
+
+---
+
+## 11. Pre-M3 hardening pass and M3 close-out — CRM vertical slice
+
+**Last updated:** 2026-07-27. Same evidentiary standard as §9 and §10: `Done` means an executed command backs it.
+
+**Verified on this machine, this pass:** `dotnet test` — **246 passing, 0 failed** (168 unit + 78 integration on Testcontainers Postgres), up from the 151 at M2 close. `ng test` (Karma, ChromeHeadless) — **38 passing, 0 failed**, up from 10. Migrations are exercised for real by the integration suite, so `AddCustomerListFilterIndexes` is known to apply, not assumed to.
+
+**Not yet done: live HTTP verification.** M1 and M2 were both closed against real requests through Caddy, and two of M1's defects were invisible to tests. M3 has **not** had that treatment — it is closed on test evidence only. See §11.4.
+
+### 11.1 Pre-M3 hardening pass (committed before any E4 story)
+
+| Commit | Change |
+| --- | --- |
+| `3321ad2` | Docs: corrected a false claim about `customers.external_purchase_reference`. |
+| `e8c9444` | The single reviewed pre-M3 migration — the three deferred schema corrections, exactly as §10.4 required. |
+| `dd0f8cf` | **N-7 closed.** Option (c): an `ICacheService` deny-list keyed by user id, TTL equal to the token lifetime, checked in `TokenRevocationMiddleware`. No per-request DB hit, so TECH_SPEC §4.3's deliberate design survives. |
+| `ea7c440` | **N-8 closed.** Seeded default lookup rows are retire-only. Non-seeded rows still follow E3-08 unchanged. |
+| `1481eb4` | Tests for the above: 171 passing, no regressions. |
+| `5ffbfef` | **N-7 extended to the two credential-change paths.** `dd0f8cf` covered deactivation only, but an admin-forced reset and a self-service change carry the same "cut existing access now" intent. Also fixed a genuine intermittent: `/auth/login` is `[AllowAnonymous]`, which skips *authorization* but not *authentication*, so a stale `Authorization` header on a shared `HttpClient` was rejected by `TokenRevocationMiddleware` with 401 "Token revoked" before reaching the controller — reproducing only when the two actions landed in different wall-clock seconds. |
+
+### 11.2 E4 — Customer Intake & CRM
+
+| ID | Status | Verification |
+| --- | --- | --- |
+| E4-01 | **Done** | `CustomersController` — full CRUD, every endpoint `[Authorize]`-gated on `Customers.View`/`.Edit`, mutations audit-logged. |
+| E4-02 | **Done** | Service type FK required on save. |
+| E4-03 | **Done** | Category interest many-to-many via `categoryIds`. |
+| E4-04 | **Done** | `PhoneNumberNormalizer` normalises at the boundary, so the stored value builds a `wa.me` link with no further transformation — the invariant holds for E9, which does not exist yet. Default country code is configurable (`Customers:DefaultCountryPhoneCode`) rather than a hard-coded `+91`. |
+| E4-05 | **Done** | Status from the configurable lookup; each change lands on the timeline with user and timestamp. |
+| E4-06 | **Done** | List with `search`/`page`/`pageSize` and all five filters. Needed a migration: `ServiceTypeId`/`StatusId`/`OwnerUserId` already had FK-derived indexes, but `Region` and `Tags` did not. `Tags` gets **GIN** because the filter is array containment, which a btree index would not serve. |
+| E4-07 | **Done** | `POST /{id}/interactions` plus the merged chronological timeline feed. |
+| E4-08 | **Backend done, UI pending** | `GET /customers/follow-ups/due` returns interactions earliest-due first; `CustomersService.dueFollowUps()` exists client-side. **The screen and route are the gap** — see §11.3. This is the story that answers FSD Q2, so it is not optional. |
+| E4-09 | **Done** | `PUT /{id}/owner`; change is audit-logged and appears on the timeline. |
+| E4-10 | **Done** | Duplicate phone returns 409 with the existing customer in the ProblemDetails body, requiring explicit confirmation. Deliberately **not** a hard block: a shared family or office line is real, so the collision is made visible rather than the second customer made unrepresentable. |
+| E4-11 | **Backend done, UI pending** | `?tag=` filter, GIN index, and `Tags` accepted on create/update with trim / drop-empty / case-insensitive de-dup normalisation. **The UI is the gap** — see §11.3. |
+| E4-12 | **Done** | Minimum the prototype shows, per FSD Q1 as answered. |
+| E4-13 | **Done** | Intake screen; all dropdowns resolve through `MasterDataService`, not local constants. |
+| E4-14 | **Done** | Customers list screen against the E4-06 endpoint. |
+| E4-15 | **Done** | Customer detail screen — profile, timeline, note entry. WhatsApp dispatch launch point is E9. |
+
+Committed as `3acdbac` (backend) and `ed04a76` (frontend), split so the migration and API surface are reviewable independently of the screens.
+
+### 11.3 Open items after M3
+
+| # | Item |
+| --- | --- |
+| N-9 | **M3 has no live HTTP verification.** M1 and M2 were both closed against real requests through Caddy, and M1's two real defects were wiring between components that each passed their own tests. M3 breaks that precedent: it is closed on test evidence alone. The seam most worth exercising is the same one §10.3 flagged — the API response diffed against the TypeScript interfaces, since the CRM DTOs are far wider than the master-data ones. |
+| N-1, N-3, N-5, N-6 | **All unchanged.** N-6 in particular: E0-06 is still unsigned and now gates more surface than before. |
+
+### 11.4 Decisions required from the business owner — none of these have been asked yet
+
+**These are drafted asks, not sent ones.** Nothing below has been put to the owner; no sign-off has been obtained or implied. Each needs a human to actually make the request.
+
+| # | Ask | Why it matters now |
+| --- | --- | --- |
+| **E0-06** | Review and sign off the four net-new screen designs (E0-02…E0-05) as belonging to the same visual language as the approved prototype. | Unchanged as a hard gate on E1-13/E1-14 (already shipped unsigned under the §5 fallback and may need a restyle), E8-09/E8-10 and E11-07/E11-08. It has now been open since M0 and its cost grows with each milestone, because a divergent verdict means reworking screens rather than drafts. |
+| **FSD Q9c** | The actual billing block values: legal entity name, GSTIN, registered address, bank details. | Real data, not a decision. `company_settings` is built and deliberately **empty**, with single-row-ness enforced by a CHECK constraint rather than a seeded row of nulls, so "not configured" stays representable. **No invoice can be issued until these values exist — this gates M6.** |
+| **FSD Q6** | Expected data volumes: customers, vendors and catalogs per month. | **Never actually asked** — it was omitted from the batch that produced the Q1–Q9a answers, so it is unanswered rather than pending. Sets the representative volumes E12-02's performance pass tests against, and gates the E2-10 memory-budget recheck (M1 measured only idle usage, which is weak evidence). |
+| **FSD Q8** | A sample of the legacy data to be migrated — what it contains, roughly how much. | Confirmed in scope; E12-07 cannot be estimated without it. **Ask this together with Q6:** the legacy data *is* the initial data volume, so one request answers both. Do not request them separately. |
+| **Deployment track** | Provision the VPS now, or accept local `docker compose` verification through M8? | Not an engineering call. M3 closed without live HTTP verification (N-9) partly because there is no persistent environment to verify against. The longer this runs, the more milestones accumulate that were only ever proven locally — and N-3 (automatic HTTPS, untested for want of a public DNS name) cannot be closed at all until a real environment exists. |
