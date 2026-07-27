@@ -141,4 +141,60 @@ describe('CustomersComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('No customers match these filters');
   });
+
+  describe('tags (E4-11)', () => {
+    it('renders each customer\'s tags as chips in the list', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      flushList([customer({ tags: ['VIP', 'Repeat Buyer'] })]);
+      fixture.detectChanges();
+
+      const text: string = fixture.nativeElement.textContent;
+      expect(text).toContain('VIP');
+      expect(text).toContain('Repeat Buyer');
+    });
+
+    it('sends the tag filter as a query param when a tag chip is clicked', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      flushList([customer({ tags: ['VIP'] })]);
+      fixture.detectChanges();
+
+      fixture.componentInstance.setTag('VIP');
+
+      const req = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+      expect(req.request.params.get('tag')).toBe('VIP');
+      req.flush({ items: [], page: 1, pageSize: 25, totalCount: 0 });
+    });
+
+    it('debounces free-text tag input and sends it as the tag query param', fakeAsync(() => {
+      fixture.detectChanges();
+      flushMasterData();
+      flushList([]);
+      fixture.detectChanges();
+
+      fixture.componentInstance.onTagInput('vip');
+      tick(350);
+
+      const req = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+      expect(req.request.params.get('tag')).toBe('vip');
+      req.flush({ items: [], page: 1, pageSize: 25, totalCount: 0 });
+    }));
+
+    it('clears the tag filter and refetches without it', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      flushList([]);
+      fixture.detectChanges();
+
+      fixture.componentInstance.setTag('VIP');
+      httpMock.expectOne((r) => r.url === '/api/v1/customers').flush({ items: [], page: 1, pageSize: 25, totalCount: 0 });
+
+      fixture.componentInstance.clearTag();
+
+      const req = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+      expect(req.request.params.has('tag')).toBeFalse();
+      req.flush({ items: [], page: 1, pageSize: 25, totalCount: 0 });
+    });
+  });
 });

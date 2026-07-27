@@ -23,6 +23,7 @@ interface CustomerRow {
   stFg: string;
   categoriesLabel: string;
   owner: string;
+  tags: string[];
 }
 
 const PAGE_SIZE = 25;
@@ -65,6 +66,7 @@ export class CustomersComponent {
   readonly serviceTypeId = signal(ALL);
   readonly statusId = signal(ALL);
   readonly categoryId = signal(ALL);
+  readonly tag = signal(ALL);
   readonly page = signal(1);
 
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.totalCount() / PAGE_SIZE)));
@@ -77,6 +79,7 @@ export class CustomersComponent {
   readonly noResults = computed(() => !this.loading() && !this.error() && this.rows().length === 0);
 
   private readonly search$ = new Subject<string>();
+  private readonly tag$ = new Subject<string>();
 
   constructor() {
     this.masterDataService.ensureLoaded().subscribe({ error: () => {} });
@@ -89,11 +92,34 @@ export class CustomersComponent {
         this.fetch();
       });
 
+    this.tag$
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
+      .subscribe((value) => {
+        this.tag.set(value);
+        this.page.set(1);
+        this.fetch();
+      });
+
     this.fetch();
   }
 
   onSearchInput(value: string): void {
     this.search$.next(value);
+  }
+
+  onTagInput(value: string): void {
+    this.tag$.next(value);
+  }
+
+  /** Set directly (no debounce) — used when the user clicks a tag chip on a row, per E4-11. */
+  setTag(value: string): void {
+    this.tag.set(value);
+    this.page.set(1);
+    this.fetch();
+  }
+
+  clearTag(): void {
+    this.setTag(ALL);
   }
 
   setServiceType(value: string): void {
@@ -119,6 +145,7 @@ export class CustomersComponent {
     this.serviceTypeId.set(ALL);
     this.statusId.set(ALL);
     this.categoryId.set(ALL);
+    this.tag.set(ALL);
     this.page.set(1);
     this.fetch();
   }
@@ -149,7 +176,8 @@ export class CustomersComponent {
         pageSize: PAGE_SIZE,
         serviceTypeId: this.serviceTypeId() || undefined,
         statusId: this.statusId() || undefined,
-        categoryId: this.categoryId() || undefined
+        categoryId: this.categoryId() || undefined,
+        tag: this.tag() || undefined
       })
       .subscribe({
         next: (res) => {
@@ -186,7 +214,8 @@ export class CustomersComponent {
       stBg: st.bg,
       stFg: st.fg,
       categoriesLabel: catNames.length ? catNames.join(', ') : '—',
-      owner: item.ownerName ?? 'Unassigned'
+      owner: item.ownerName ?? 'Unassigned',
+      tags: item.tags
     };
   }
 }

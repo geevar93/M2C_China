@@ -11,6 +11,11 @@
   margin-bottom: var(--space-9);
 }
 
+.cust-header-actions {
+  display: flex;
+  gap: var(--space-6);
+}
+
 .filter-bar {
   display: flex;
   gap: var(--space-6);
@@ -26,6 +31,26 @@
 .filter-search {
   flex: 1 1 220px;
   min-width: 180px;
+}
+
+.filter-tag {
+  flex: 1 1 180px;
+  min-width: 160px;
+}
+
+.filter-tag-row {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.tag-chip {
+  display: inline-block;
+  margin: 0 var(--space-4) var(--space-2) 0;
+  border: none;
+  background: var(--color-neutral-chip-bg);
+  color: var(--color-text-strong-muted);
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .filter-spacer {

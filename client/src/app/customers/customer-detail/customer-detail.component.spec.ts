@@ -141,6 +141,19 @@ describe('CustomerDetailComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Customer not found');
   });
 
+  it('renders the customer\'s tags in the profile card (E4-11)', () => {
+    configure();
+    fixture.detectChanges();
+    httpMock.expectOne((r) => r.url === '/api/v1/master-data').flush(MASTER_DATA);
+    httpMock.expectOne((r) => r.url === '/api/v1/customers/cust-1').flush({ ...detail, tags: ['VIP', 'Repeat Buyer'] });
+    httpMock.expectOne((r) => r.url === '/api/v1/customers/cust-1/timeline').flush(timeline);
+    fixture.detectChanges();
+
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('Tags');
+    expect(text).toContain('VIP, Repeat Buyer');
+  });
+
   it('posts a note and reloads the timeline on save', () => {
     configure();
     fixture.detectChanges();

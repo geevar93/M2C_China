@@ -162,4 +162,71 @@ describe('CustomerIntakeComponent', () => {
     expect(req.request.body.externalOrderRef).toBeNull();
     req.flush(savedDetail, { status: 201, statusText: 'Created' });
   });
+
+  describe('tag editor (E4-11)', () => {
+    it('adds a trimmed tag and clears the input', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      fixture.detectChanges();
+
+      fixture.componentInstance.tagInput.set('  Repeat Buyer  ');
+      fixture.componentInstance.addTag();
+
+      expect(fixture.componentInstance.tags()).toEqual(['Repeat Buyer']);
+      expect(fixture.componentInstance.tagInput()).toBe('');
+    });
+
+    it('ignores an empty or whitespace-only tag', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      fixture.detectChanges();
+
+      fixture.componentInstance.tagInput.set('   ');
+      fixture.componentInstance.addTag();
+
+      expect(fixture.componentInstance.tags()).toEqual([]);
+    });
+
+    it('rejects a case-insensitive duplicate of a tag already added', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      fixture.detectChanges();
+
+      fixture.componentInstance.tagInput.set('VIP');
+      fixture.componentInstance.addTag();
+      fixture.componentInstance.tagInput.set('vip');
+      fixture.componentInstance.addTag();
+
+      expect(fixture.componentInstance.tags()).toEqual(['VIP']);
+    });
+
+    it('removes a tag', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      fixture.detectChanges();
+
+      fixture.componentInstance.tagInput.set('VIP');
+      fixture.componentInstance.addTag();
+      fixture.componentInstance.tagInput.set('Repeat Buyer');
+      fixture.componentInstance.addTag();
+      fixture.componentInstance.removeTag('VIP');
+
+      expect(fixture.componentInstance.tags()).toEqual(['Repeat Buyer']);
+    });
+
+    it('sends the added tags on save', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      fixture.detectChanges();
+      fillRequiredFields();
+      fixture.componentInstance.tagInput.set('VIP');
+      fixture.componentInstance.addTag();
+
+      fixture.componentInstance.save();
+
+      const req = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+      expect(req.request.body.tags).toEqual(['VIP']);
+      req.flush(savedDetail, { status: 201, statusText: 'Created' });
+    });
+  });
 });

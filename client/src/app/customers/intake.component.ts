@@ -100,6 +100,8 @@ export class CustomerIntakeComponent {
   readonly serviceTypeId = signal('');
   readonly statusId = signal('');
   readonly selectedCategoryIds = signal<string[]>([]);
+  readonly tags = signal<string[]>([]);
+  readonly tagInput = signal('');
 
   readonly saving = signal(false);
   readonly submitError = signal<string | null>(null);
@@ -200,6 +202,25 @@ export class CustomerIntakeComponent {
     this.selectedCategoryIds.update((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
   }
 
+  /**
+   * Mirrors the backend's tag normalization (E4-11: trim, drop empties,
+   * de-duplicate case-insensitively) client-side so what the user sees in
+   * the chip list is exactly what gets persisted — no surprise merges after
+   * save.
+   */
+  addTag(): void {
+    const raw = this.tagInput().trim();
+    this.tagInput.set('');
+    if (!raw) return;
+    const isDuplicate = this.tags().some((t) => t.toLowerCase() === raw.toLowerCase());
+    if (isDuplicate) return;
+    this.tags.update((list) => [...list, raw]);
+  }
+
+  removeTag(tag: string): void {
+    this.tags.update((list) => list.filter((t) => t !== tag));
+  }
+
   save(): void {
     if (this.saving()) return;
     this.submitError.set(null);
@@ -267,6 +288,7 @@ export class CustomerIntakeComponent {
       statusId: this.statusId(),
       categoryIds: this.selectedCategoryIds(),
       ownerUserId: this.currentUser()?.id ?? null,
+      tags: this.tags(),
       notes: raw.notes.trim() || null,
       externalMarketplace: isFreight ? raw.externalMarketplace.trim() || null : null,
       externalOrderRef: isFreight ? raw.externalOrderRef.trim() || null : null,

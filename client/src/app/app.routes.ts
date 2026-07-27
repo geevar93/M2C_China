@@ -47,6 +47,16 @@ export const routes: Routes = [
         loadComponent: () => import('./customers/intake.component').then((m) => m.CustomerIntakeComponent)
       },
       {
+        // Must stay above 'customers/:id' — a literal segment declared after
+        // the param route would never be reached, since ':id' matches first
+        // and the follow-ups screen would 404 trying to load customer id
+        // "follow-ups" (ACTION_PLAN E4-08).
+        path: 'customers/follow-ups',
+        canActivate: [permissionGuard],
+        data: { title: 'Due Follow-ups', permission: 'Customers.View' },
+        loadComponent: () => import('./customers/follow-ups/follow-ups.component').then((m) => m.FollowUpsComponent)
+      },
+      {
         path: 'customers/:id',
         canActivate: [permissionGuard],
         data: { title: 'Customer', permission: 'Customers.View' },

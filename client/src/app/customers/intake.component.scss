@@ -143,6 +143,32 @@
   color: var(--color-accent);
 }
 
+.tag-input-row {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  max-width: 420px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--color-neutral-chip-bg);
+  color: var(--color-text-strong-muted);
+}
+
+.tag-remove {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1;
+  color: inherit;
+  cursor: pointer;
+}
+
 .intake-actions {
   display: flex;
   align-items: center;

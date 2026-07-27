@@ -613,16 +613,20 @@ M1's two real defects were both wiring between components that each passed their
 | E4-05 | **Done** | Status from the configurable lookup; each change lands on the timeline with user and timestamp. |
 | E4-06 | **Done** | List with `search`/`page`/`pageSize` and all five filters. Needed a migration: `ServiceTypeId`/`StatusId`/`OwnerUserId` already had FK-derived indexes, but `Region` and `Tags` did not. `Tags` gets **GIN** because the filter is array containment, which a btree index would not serve. |
 | E4-07 | **Done** | `POST /{id}/interactions` plus the merged chronological timeline feed. |
-| E4-08 | **Backend done, UI pending** | `GET /customers/follow-ups/due` returns interactions earliest-due first; `CustomersService.dueFollowUps()` exists client-side. **The screen and route are the gap** — see §11.3. This is the story that answers FSD Q2, so it is not optional. |
+| E4-08 | **Done** | `GET /customers/follow-ups/due` returns interactions earliest-due first. The reminder screen and its route now exist, so FSD Q2's "active reminders, not a passive log" is actually satisfied rather than merely supported. Overdue vs. due-today is computed on **local calendar days, not raw milliseconds**, so a follow-up due earlier today reads "Due today" rather than "Overdue by 0 days". Reachable from a button on the customers list, not only by URL. Route is declared **before** `customers/:id`, or the `:id` route would swallow it and try to load a customer with the id "follow-ups". |
 | E4-09 | **Done** | `PUT /{id}/owner`; change is audit-logged and appears on the timeline. |
 | E4-10 | **Done** | Duplicate phone returns 409 with the existing customer in the ProblemDetails body, requiring explicit confirmation. Deliberately **not** a hard block: a shared family or office line is real, so the collision is made visible rather than the second customer made unrepresentable. |
-| E4-11 | **Backend done, UI pending** | `?tag=` filter, GIN index, and `Tags` accepted on create/update with trim / drop-empty / case-insensitive de-dup normalisation. **The UI is the gap** — see §11.3. |
+| E4-11 | **Done** | `?tag=` filter, GIN index, and `Tags` accepted on create/update with trim / drop-empty / case-insensitive de-dup normalisation. The client interface was silently missing `tags` on the create request even though the API accepted it; added. Tag editor on intake **mirrors the backend normalisation client-side**, so the chips a user sees are exactly what gets stored rather than a set the server will quietly alter on save. Tags render on the list (click-to-filter) and on the detail profile. |
 | E4-12 | **Done** | Minimum the prototype shows, per FSD Q1 as answered. |
 | E4-13 | **Done** | Intake screen; all dropdowns resolve through `MasterDataService`, not local constants. |
 | E4-14 | **Done** | Customers list screen against the E4-06 endpoint. |
 | E4-15 | **Done** | Customer detail screen — profile, timeline, note entry. WhatsApp dispatch launch point is E9. |
 
-Committed as `3acdbac` (backend) and `ed04a76` (frontend), split so the migration and API surface are reviewable independently of the screens.
+Committed as `3acdbac` (backend) and `ed04a76` (frontend), split so the migration and API surface are reviewable independently of the screens. E4-08 and E4-11's UI followed in a third commit once the two gaps were closed.
+
+**E4 is now complete — all 15 stories.** Frontend suite 38 → **57 passing**, `ng build` clean.
+
+One open interaction question, not a blocker: tags are free text rather than master data, so the list screen offers **both** a text filter and click-to-filter chips. If only one is wanted, say which — the other is a small deletion.
 
 ### 11.3 Open items after M3
 

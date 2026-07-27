@@ -100,6 +100,7 @@ export class CustomerDetailComponent {
       { k: 'Source Channel', v: c.sourceChannel },
       { k: 'Categories', v: catNames.length ? catNames.join(', ') : '—' },
       { k: 'Owner', v: c.ownerName ?? 'Unassigned' },
+      { k: 'Tags', v: c.tags.length ? c.tags.join(', ') : '—' },
       { k: 'Notes', v: c.notes ?? '—' }
     ];
 

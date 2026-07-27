@@ -1,7 +1,10 @@
 <div>
   <div class="cust-header">
     <h1 class="page-title">Customers</h1>
-    <a class="btn btn-primary" routerLink="/customers/intake">+ New Lead</a>
+    <div class="cust-header-actions">
+      <a class="btn btn-secondary" routerLink="/customers/follow-ups">Due Follow-ups</a>
+      <a class="btn btn-primary" routerLink="/customers/intake">+ New Lead</a>
+    </div>
   </div>
 
   <div class="card filter-bar">
@@ -42,6 +45,21 @@
         }
       </select>
     </div>
+    <div class="field filter-tag">
+      <label for="cust-tag">Tag</label>
+      <div class="filter-tag-row">
+        <input
+          id="cust-tag"
+          class="field-input"
+          [value]="tag()"
+          (input)="onTagInput($any($event.target).value)"
+          placeholder="Filter by tag"
+        />
+        @if (tag()) {
+          <button type="button" class="btn btn-secondary btn-sm" (click)="clearTag()" title="Clear tag filter" aria-label="Clear tag filter">✕</button>
+        }
+      </div>
+    </div>
     <div class="filter-spacer"></div>
     <button type="button" class="btn btn-secondary" (click)="clearFilters()">Clear</button>
   </div>
@@ -58,6 +76,7 @@
           <th>Categories</th>
           <th>Status</th>
           <th>Owner</th>
+          <th>Tags</th>
           <th class="align-right">Actions</th>
         </tr>
       </thead>
@@ -73,6 +92,14 @@
             <td class="muted">{{ c.categoriesLabel }}</td>
             <td><span class="chip" [style.background]="c.stBg" [style.color]="c.stFg">{{ c.statusLabel }}</span></td>
             <td class="muted">{{ c.owner }}</td>
+            <td>
+              @for (t of c.tags; track t) {
+                <button type="button" class="chip tag-chip" (click)="setTag(t)" [title]="'Filter by ' + t">{{ t }}</button>
+              }
+              @if (c.tags.length === 0) {
+                <span class="muted">—</span>
+              }
+            </td>
             <td class="align-right nowrap">
               <button type="button" class="btn btn-secondary btn-sm" disabled title="Wired in E9 (WhatsApp dispatch)">Send Catalog</button>
               <a class="btn btn-secondary btn-sm" [routerLink]="['/customers', c.id]">Open →</a>

@@ -147,6 +147,30 @@
         }
       </div>
 
+      <div class="section-title">Tags</div>
+      <div class="section-hint">Free-form labels for search and follow-up segmentation. Press Enter or click Add.</div>
+      <div class="tag-input-row">
+        <input
+          class="field-input"
+          [value]="tagInput()"
+          (input)="tagInput.set($any($event.target).value)"
+          (keydown.enter)="$event.preventDefault(); addTag()"
+          placeholder="e.g. Repeat Buyer"
+        />
+        <button type="button" class="btn btn-secondary btn-sm" (click)="addTag()">Add</button>
+      </div>
+      <div class="chip-row">
+        @for (t of tags(); track t) {
+          <span class="chip tag-chip">
+            {{ t }}
+            <button type="button" class="tag-remove" (click)="removeTag(t)" [attr.aria-label]="'Remove tag ' + t">✕</button>
+          </span>
+        }
+        @if (tags().length === 0) {
+          <span class="label-hint">No tags added yet.</span>
+        }
+      </div>
+
       <div class="grid-2">
         <div class="field">
           <label>Assigned Owner</label>

@@ -1,0 +1,55 @@
+<div>
+  <a routerLink="/customers" class="back-link">← Back to customers</a>
+  <div class="fu-header">
+    <h1 class="page-title">Due Follow-ups</h1>
+    <div class="fu-sub">Reminders logged against a customer note, earliest due first. Open one to act on it.</div>
+  </div>
+
+  <div class="table-wrap">
+    @if (loading()) {
+      <div class="state-panel">
+        <div class="spinner"></div>
+        <span>Loading follow-ups…</span>
+      </div>
+    } @else if (error()) {
+      <div class="state-panel">
+        <span>{{ error() }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+      </div>
+    } @else if (empty()) {
+      <div class="state-panel">Nothing due right now. New reminders appear here as soon as a follow-up date arrives.</div>
+    } @else {
+      <table>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Note</th>
+            <th>Logged by</th>
+            <th>Follow-up date</th>
+            <th class="align-right">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of rows(); track r.interactionId) {
+            <tr
+              class="fu-row"
+              tabindex="0"
+              role="link"
+              [attr.aria-label]="'Open ' + r.customerName"
+              (click)="openCustomer(r.customerId)"
+              (keydown.enter)="openCustomer(r.customerId)"
+            >
+              <td class="row-link">{{ r.customerName }}</td>
+              <td class="fu-text">{{ r.text }}</td>
+              <td class="muted">{{ r.authorName }}</td>
+              <td class="muted">{{ r.followUpDate | timelineDate }}</td>
+              <td class="align-right">
+                <span class="chip" [style.background]="r.chipBg" [style.color]="r.chipFg">{{ r.dueLabel }}</span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+</div>

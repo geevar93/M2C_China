@@ -79,6 +79,8 @@ export interface CreateCustomerRequest {
   statusId: string;
   categoryIds: string[];
   ownerUserId?: string | null;
+  /** Free-form labels; the backend trims, drops empties, and de-duplicates case-insensitively (E4-11) — the UI mirrors that so what the user sees is what gets stored. */
+  tags?: string[];
   notes?: string | null;
   externalMarketplace?: string | null;
   externalOrderRef?: string | null;
