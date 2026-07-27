@@ -10,7 +10,7 @@ namespace SourcingOps.Api.Tests.TestSupport;
 /// Postgres instance. Runs real migrations and real startup seeding against a disposable
 /// container per test class — this is the "real" auth/DB path, not a mock.
 /// </summary>
-public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
+public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
         .WithImage("postgres:16-alpine")
@@ -22,6 +22,16 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public string BootstrapAdminEmail { get; } = "bootstrap-admin@test.local";
     public string BootstrapAdminPassword { get; } = "Initial-Passw0rd!";
     public string JwtSigningKey { get; } = new('t', 40);
+
+    /// <summary>
+    /// Matches the production default exactly (appsettings.json's "RateLimiting" section) —
+    /// overridden ONLY by <see cref="RelaxedRateLimitApiFactory"/>, which M2's
+    /// AdminSeededFixture-based suites use because they legitimately call /auth/login many
+    /// times across many test methods sharing one WebApplicationFactory. Auth/RateLimitAndCorsTests
+    /// keeps using the base (unmodified) value so it keeps proving the real limit trips.
+    /// </summary>
+    protected virtual int LoginRateLimitPermitLimit => 10;
+    protected virtual int LoginRateLimitWindowSeconds => 60;
 
     public async Task InitializeAsync()
     {
@@ -58,5 +68,20 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Bootstrap:AdminPassword", BootstrapAdminPassword);
         builder.UseSetting("Cors:FrontendOrigin", "http://localhost:4200");
         builder.UseSetting("Caching:Provider", "InMemory");
+        builder.UseSetting("RateLimiting:LoginPermitLimit", LoginRateLimitPermitLimit.ToString());
+        builder.UseSetting("RateLimiting:LoginWindowSeconds", LoginRateLimitWindowSeconds.ToString());
     }
+}
+
+/// <summary>
+/// Used only by M2's AdminSeededFixture (MasterData/AdminUsers/Authorization integration
+/// test classes) — those provision several accounts and log in repeatedly across many test
+/// methods sharing one class fixture, which would otherwise trip the same 10/minute/IP limit
+/// Auth/RateLimitAndCorsTests exists to prove is real. A very high limit keeps those suites
+/// deterministic without touching the production-matching default every other ApiFactory
+/// consumer still gets.
+/// </summary>
+public sealed class RelaxedRateLimitApiFactory : ApiFactory
+{
+    protected override int LoginRateLimitPermitLimit => 100_000;
 }
