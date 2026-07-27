@@ -1,0 +1,246 @@
+<div>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        @if (isGenerateMode()) {
+          Generate Invoice
+        } @else if (invoice()) {
+          {{ invoice()!.invoiceNumber }}
+        } @else {
+          Invoice
+        }
+      </h1>
+      @if (!isGenerateMode() && invoice()) {
+        <div class="detail-sub">
+          <span class="chip" [style.background]="statusChip().bg" [style.color]="statusChip().fg">{{ statusChip().label }}</span>
+          <span class="muted">Issued {{ dateLabel() }}</span>
+        </div>
+      }
+    </div>
+
+    @if (!isGenerateMode() && invoice()) {
+      <div class="toolbar">
+        <!-- Inert: rendering an invoice PDF is FR-BIL-03, and no PDF approach has
+             even been chosen yet (DR-3). Disabled with an explanatory title rather
+             than silently doing nothing. -->
+        <button type="button" class="btn btn-secondary" disabled title="Needs the invoicing backend and a PDF renderer (E8-03, DR-3).">
+          Download PDF
+        </button>
+        <!-- Inert: reuses the WhatsApp click-to-chat dispatch dialog, which is E9 and not built. -->
+        <button type="button" class="btn btn-secondary" disabled title="Needs the WhatsApp dispatch flow (E9, not built yet).">
+          Send via WhatsApp
+        </button>
+        @if (markPaidAvailability() === 'enabled') {
+          <button type="button" class="btn btn-primary" (click)="openMarkPaid()">Mark Paid</button>
+        } @else if (markPaidAvailability() === 'disabled') {
+          <button type="button" class="btn btn-primary" disabled [title]="markPaidDisabledReason()">Mark Paid</button>
+        }
+        <button type="button" class="btn btn-secondary" disabled title="Needs the invoicing backend (E8-02).">Cancel</button>
+      </div>
+    }
+  </div>
+
+  <div class="banner-warning invoices-banner">
+    Design preview on sample data — there is no invoicing backend yet (epic E8 has not started). Nothing on this
+    screen is real; it exists so the business owner has a concrete screen to review. See ACTION_PLAN.md §12.3.
+  </div>
+
+  @if (masterDataLoading()) {
+    <div class="state-panel">
+      <div class="spinner"></div>
+      <span>Loading invoice statuses…</span>
+    </div>
+  } @else if (masterDataError() && !hasMasterData()) {
+    <div class="state-panel">
+      <span>{{ masterDataError() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="retryMasterData()">Retry</button>
+    </div>
+  } @else if (invoiceNotFound()) {
+    <div class="state-panel">
+      <span>No sample invoice with that reference exists.</span>
+      <a class="btn btn-secondary btn-sm" routerLink="/invoices">Back to invoices</a>
+    </div>
+  } @else {
+    @if (markPaidPreviewMessage()) {
+      <div class="banner-warning preview-message" role="status">{{ markPaidPreviewMessage() }}</div>
+    }
+
+    <!-- Numbering placeholder. Deliberately NOT a real format: E8-08 is blocked
+         on FSD Q9c, and inventing one here would quietly become the decision. -->
+    <div class="card number-card">
+      <div class="field-label-ish">Invoice number</div>
+      <div class="number-value">
+        @if (isGenerateMode()) {
+          Not yet assigned
+        } @else {
+          {{ invoice()!.invoiceNumber }}
+        }
+      </div>
+      <div class="field-hint">
+        Placeholder only — the invoice numbering format is not decided yet (E8-08, blocked on FSD Q9c).
+      </div>
+    </div>
+
+    <div class="party-grid">
+      <!-- "From" renders the not-configured empty state on purpose. company_settings
+           genuinely exists and is genuinely empty, and Q9c is unanswered. Showing the
+           gap is the point — inventing a plausible GSTIN would hide the question. -->
+      <div class="card party-card">
+        <div class="party-heading">From</div>
+        <div class="not-configured">
+          <div class="not-configured__title">Company billing details not configured</div>
+          <div class="not-configured__body">
+            The legal entity name, GSTIN, registered address and bank details have not been provided yet
+            (FSD Q9c). No invoice can be issued until they exist.
+          </div>
+        </div>
+      </div>
+
+      <div class="card party-card">
+        <div class="party-heading">Bill to</div>
+        @if (isGenerateMode()) {
+          <div class="field">
+            <label for="inv-billto">Customer</label>
+            <select
+              id="inv-billto"
+              class="field-input"
+              [value]="selectedCustomerId()"
+              (change)="selectedCustomerId.set($any($event.target).value)"
+            >
+              <option value="">Select a customer…</option>
+              @for (c of customerDirectory; track c.id) {
+                <option [value]="c.id">{{ c.businessName }}</option>
+              }
+            </select>
+            <div class="field-hint">Sample directory — not the real customer list.</div>
+          </div>
+        }
+        @if (billToCustomer(); as cust) {
+          <div class="party-name">{{ cust.businessName }}</div>
+          <div class="party-line muted">{{ cust.contactName }}</div>
+          <div class="party-line muted">{{ cust.phone }}</div>
+          <div class="party-line muted">{{ cust.address }}</div>
+        } @else if (isGenerateMode()) {
+          <div class="party-line muted">No customer selected.</div>
+        }
+      </div>
+    </div>
+
+    @if (!isGenerateMode() && invoice(); as inv) {
+      <div class="status-trail card">
+        <div class="party-heading">Status</div>
+        @if (isCancelled()) {
+          <div class="trail-cancelled">
+            <span class="chip" [style.background]="cancelledChip().bg" [style.color]="cancelledChip().fg">CANCELLED</span>
+            <span class="muted">This invoice was cancelled and is off the Draft → Issued → Paid path.</span>
+          </div>
+        } @else {
+          <div class="trail">
+            @for (step of trailSteps(); track step.code; let last = $last) {
+              <div class="trail-step" [class.trail-step--reached]="step.reached">
+                <span class="trail-dot" [style.background]="step.dotColor"></span>
+                <span class="trail-label">{{ step.label }}</span>
+              </div>
+              @if (!last) {
+                <span class="trail-line"></span>
+              }
+            }
+          </div>
+        }
+        @if (inv.paidDate) {
+          <div class="paid-note muted">
+            Marked paid on {{ inv.paidDate }}@if (inv.paidReference) {<span> · reference {{ inv.paidReference }}</span>}
+          </div>
+        }
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th class="align-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (line of inv.lines; track line.description) {
+              <tr>
+                <td>{{ line.description }}</td>
+                <td class="align-right nowrap">{{ formatInr(line.amount) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="totals">
+        <div class="totals-row">
+          <span class="muted">Subtotal</span>
+          <span class="nowrap">{{ subtotalLabel() }}</span>
+        </div>
+        <div class="totals-row">
+          <span class="muted">Tax ({{ taxRatePct() }}%)</span>
+          <span class="nowrap">{{ taxLabel() }}</span>
+        </div>
+        <div class="totals-row totals-row--grand">
+          <span>Total</span>
+          <span class="nowrap">{{ totalLabel() }}</span>
+        </div>
+      </div>
+
+      <div class="timeline-note muted">
+        Once built, invoice creation and status changes will appear on the customer's activity timeline (E8-04,
+        reusing the existing customer timeline feed).
+      </div>
+    }
+
+    @if (isGenerateMode()) {
+      <div class="state-panel">
+        <span>Line items, totals and the status trail appear once an invoice exists.</span>
+        <span class="muted">Generating one needs the invoicing backend (E8-01), which is not built.</span>
+        <a class="btn btn-secondary btn-sm" routerLink="/invoices">Back to invoices</a>
+      </div>
+    }
+  }
+
+  @if (markPaidOpen()) {
+    <div class="dialog-backdrop">
+      <div class="dialog-panel markpaid-dialog" role="dialog" aria-modal="true" aria-labelledby="markpaid-title">
+        <h2 id="markpaid-title" class="dialog-title">Mark invoice paid</h2>
+        <p class="muted dialog-intro">
+          Records a payment date and an optional reference. No gateway, no reconciliation (FSD A9).
+        </p>
+
+        <div class="field">
+          <label for="paid-date">Paid date</label>
+          <input
+            id="paid-date"
+            class="field-input"
+            type="date"
+            [value]="paidDateInput()"
+            (input)="paidDateInput.set($any($event.target).value)"
+          />
+          @if (paidDateError()) {
+            <div class="field-error">{{ paidDateError() }}</div>
+          }
+        </div>
+
+        <div class="field">
+          <label for="paid-ref">Reference (optional)</label>
+          <input
+            id="paid-ref"
+            class="field-input"
+            [value]="paidReferenceInput()"
+            (input)="paidReferenceInput.set($any($event.target).value)"
+            placeholder="e.g. bank transfer note"
+          />
+        </div>
+
+        <div class="toolbar dialog-actions">
+          <button type="button" class="btn btn-secondary" (click)="cancelMarkPaid()">Cancel</button>
+          <button type="button" class="btn btn-primary" (click)="confirmMarkPaid()">Confirm</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>
