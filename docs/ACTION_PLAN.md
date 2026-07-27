@@ -8,6 +8,8 @@ Source documents (authoritative — this plan invents no scope beyond them):
 
 > **Source-of-truth note.** The readable mirror at `C:\work\DevZone\Hermes\China_M2C\Source\uploads\spec.txt` (and `spec_document.xml`) were found stale during this planning pass — they predated the invoicing addition. Both have since been regenerated from the current `.docx` and now include §6.8/FR-BIL-*/A9/Q9. Re-run the same regeneration after any future edit to the `.docx` so the mirrors don't drift again (see DR-13).
 
+> **Delivery status is tracked in §9 (added 2026-07-27).** This document is now a living tracker, not only a plan. §9 records per-story status with what was actually verified and how. Statuses there are set from executed commands, never from intent.
+
 ## 1. Scope framing
 
 This plan covers **FSD Phase 1 only**: an internal-only operations tool for the business owner and her staff, with no customer or vendor logins (FSD A1). In scope: structured lead intake and CRM, vendor roster management, vendor catalog sections with versioned PDF documents, inventory and outbound shipment tracking, **lightweight document-based invoicing** (FSD §6.8 — generate, issue, track status, mark paid; no GST engine, no payment gateway, no reconciliation, per A9), WhatsApp **click-to-chat** catalog/invoice dispatch (deep link only, not the Business API — A2), operational dashboards, and RBAC with configurable master data.
@@ -418,3 +420,92 @@ Every Phase 1 FR from the FSD maps to at least one story. Nothing in this backlo
 | FSD §8 NFRs | 9 areas | E12-01…E12-04, E12-06, plus DoD line items and TECH_SPEC §9 traceability |
 
 Requirements deliberately **not** built in Phase 1 are listed in FSD §3.2 and TECH_SPEC §11 and are absent from this backlog by design.
+
+---
+
+## 9. Delivery status tracker
+
+**Legend** — `Done` = acceptance criteria met **and** verified by an executed command. `Draft` = written but not executable in this environment. `Partial` = built, with a named residual gap. `Not started` = untouched.
+
+**Last updated:** 2026-07-27, end of the M1 implementation pass.
+
+### M1 pass result: Done, with three carried gaps
+
+Verified on this machine: `dotnet build` (0 warnings, 0 errors), `dotnet test` (**75 passing** — 53 unit + 22 integration against a real Testcontainers Postgres), `NODE_OPTIONS= npx ng build` (production, within budgets, output at `client/dist/browser`), and a `docker compose --profile prod up` smoke test of the combined `caddy`+`api`+`db` stack serving the real Angular bundle, with a full login → forced password change → refresh-rotation cycle exercised over HTTP through Caddy.
+
+### E0 — Design pass
+
+| ID | Status | Verification / note |
+| --- | --- | --- |
+| E0-01 | **Done** | Tokens extracted from the approved prototype into `docs/DESIGN_TOKENS.md` and implemented as `client/src/app/shared/styles/_tokens.scss`. Spot-checked: every documented hex occurs in the prototype, and the `SVC`/`ST` maps are byte-identical to prototype lines 1233-1250. |
+| E0-02…E0-05 | **Not started** | Needs business input; deliberately out of scope this pass. |
+| E0-06 | **Not started** | **Still an open gate.** E1-13/E1-14 were built without it under the §5 M1 fallback — they need sign-off, and a restyle if it diverges. Still gates E8-09/E8-10 and E11-07/E11-08. |
+| E0-07 | **Done** | Closes TECH_SPEC OI-3 in `DESIGN_TOKENS.md` §11, from direct inspection of `Source/_ds/industry-…` — an unrelated steel-blue/Barlow-Condensed theme, referenced by nothing in the approved prototype, excluded from the port. |
+
+### E1 — Foundation, Infrastructure & Auth
+
+| ID | Status | Verification / note |
+| --- | --- | --- |
+| E1-01 | **Done** | Four projects + two test projects build clean. `Domain` confirmed framework-free: zero `PackageReference`, no `Microsoft.*` usings. |
+| E1-02 | **Done** | One `InitialCreate` migration; 27 tables live in Postgres (26 entity + `__EFMigrationsHistory`). `Application` depends only on `IAppDbContext`; no generic repository. **Addition:** `vendor_statuses` lookup — see §9.1. |
+| E1-03 | **Done** | Verified in-database: 17 permissions, 2 roles, 6 categories, 2 service types, 6 lead / 4 shipment / 4 invoice / 3 vendor statuses. Values match the prototype verbatim (`Jewellery`, `IN TRANSIT` with a space). Idempotency unit-tested. **Addition:** bootstrap Super Admin — see §9.1. |
+| E1-04 | **Done** | Default `MemoryCacheService`; `Caching:Provider=Redis` verified to swap implementation with no code change, API healthy on the Redis path and Redis showing a live connection. Nothing outside the two implementations touches `IMemoryCache`/`IDistributedCache`. No cache consumers exist yet (first are E3-09, E10-10). |
+| E1-05 | **Done** | Content-type + `%PDF` magic-byte + size-cap validation, plus a path-traversal guard. 11 unit tests including a spoofed-content-type case. |
+| E1-06 | **Done** | `ProblemDetails` on unhandled errors; stdout structured logs that deliberately exclude headers so bearer tokens cannot leak; CORS locked to one origin; login rate limiting verified live — 9th rapid attempt returns 429. |
+| E1-07 | **Done** | Verified live through Caddy: JWT carries `sub`/`email`/`name`/`role`/`permissions`/`must_change_password`; `permissions` is a real JSON array of 17. Refresh rotates and the replayed old token returns 401. Unknown email and wrong password are both 401 — no account-existence hint. |
+| E1-08 | **Partial** | Flag enforcement, the change-password endpoint, flag clearing and full-scope reissue all verified live. **Gap:** the 403 path is unit-tested only — no permission-gated feature endpoint exists yet to exercise it over HTTP (a live attempt returns 404, since `/admin/users` is M2). Re-verify at E3-01/E11. |
+| E1-09 | **Done** | `audit_logs` verified in Postgres with real rows for `LoginSucceeded`/`LoginFailed`/`RefreshSucceeded`/`RefreshFailed`/`PasswordChanged`, tracing the exact smoke-test sequence. |
+| E1-10 | **Done** | Angular 19.2.x (CLI 19.2.27, core 19.2.25) on Node v20.12.2; standalone throughout, zero `NgModule`; production build clean. Budgets set now, pulling E12-06 forward — see §9.1 for the threshold deviation. |
+| E1-11 | **Done** | `ApiService` + interceptor with 401 → `/login`; `ProblemDetails` surfaced via title/detail. Defensive claim parsing tolerates both array and scalar. |
+| E1-12 | **Done** | `canActivate` guards read `permissions` from the token; claim names match the live JWT confirmed above. Server remains the authority. |
+| E1-13 | **Done** (unsigned-off) | Built from the E0-01 reference under the §5 M1 fallback. **Needs E0-06.** |
+| E1-14 | **Done** (unsigned-off) | Same as E1-13. **Needs E0-06.** |
+| E1-15 | **Done** | Navy sidebar/topbar ported 1:1; permission-filtered nav; lazy stub routes for the six M3+ features. Nav uses `<a routerLink>` rather than the prototype's `<div onClick>` for accessibility — same visuals. |
+| E1-16 | **Done** | `SVC`/`ST` defined once in `StatusStyleService`, byte-identical to the prototype. Invoice statuses are net-new and flagged for E0-06. |
+| E1-17 | **Done** | `GET /api/v1/health` returns `{"status":"Healthy","checks":{"api":"Healthy","database":"Healthy"}}` with a real `CanConnectAsync`, verified both direct and proxied through Caddy. |
+
+### E2 — Deployment & Ops Skeleton
+
+| ID | Status | Verification / note |
+| --- | --- | --- |
+| E2-01 | **Done** | Multi-stage build, `aspnet:10.0-alpine` runtime, 191 MB, no `/usr/share/dotnet/sdk`, runs as non-root uid 1654. |
+| E2-02 | **Done** | Verified from a clean state: plain `docker compose up` creates **only** `api` + `db`; `redis` requires `--profile redis`. `uploads`/`pgdata` volumes present. |
+| E2-03 | **Done** | Caddy serves the real Angular production bundle (verified `<title>` and hashed `main-*.js` from `client/dist/browser`), not a placeholder root. No Node runtime in the serving image. |
+| E2-04 | **Done** (HTTP only) | SPA deep-link fallback returns 200 for `/login` and for nested routes; `encode` confirmed via `Content-Encoding: gzip`; `/api/*` proxies correctly. **Automatic HTTPS is unverifiable here** — no public DNS name for a certificate; verified over `:80`. |
+| E2-05 | **Not started** | **Out of scope** — needs real VPS access, domain and credentials. |
+| E2-06 | **Draft** | Written, never executed. No CI runner or registry in this environment. |
+| E2-07 | **Draft** | Written, never executed. Uses an EF migrations bundle because the runtime image has no SDK — the least-validated choice here. |
+| E2-08 | **Draft** | Written, never executed. Covers both `pg_dump` and the `uploads` volume per DR-12. No off-box target exists here. |
+| E2-09 | **Done** | `.env.example` is placeholders only; `.env` confirmed git-ignored. No secret in the repo or in an image layer. |
+| E2-10 | **Partial** | Limits confirmed applied via `docker inspect` (api 400 MiB, db 1200 MiB); live idle usage ~131 MB across all three containers, inside the §7.3 budget. **Cannot verify against the real 4 vCPU/8 GB box, and idle usage with no representative data is weak evidence** — recheck under E12-02 volumes. |
+
+### E3-E12
+
+All **Not started** — M2 onward, as sequenced in §5.
+
+### 9.1 Deviations and additions from this pass
+
+Recorded per the §7 DoD requirement that assumptions be surfaced, not absorbed.
+
+| # | Deviation | Rationale |
+| --- | --- | --- |
+| D-1 | **Bootstrap Super Admin seeded** with a generated password logged once. | M1's exit criterion is "a user logs in", but account creation (E11-01) is M2 — without this M1 is unverifiable by its own standard. Not in the written E1-03. No password is committed; config-supplied values are honoured. |
+| D-2 | **`vendor_statuses` lookup table added** (schema is 26 tables, not TECH_SPEC §6's 25). | §6 lists `vendors.status` as a plain column, contradicting both its own FK rule and FSD §3.3's configurable-master-data requirement. **TECH_SPEC §6 should be corrected**; this is a spec inconsistency, not a build decision. |
+| D-3 | **Bundle budgets are 150 kB warn / 250 kB error per chunk**, not §5.4's suggested 120/200. | Angular's own framework chunk is ~131 kB with zero app code, so 120 kB warns on day one for a reason the budget is not meant to catch. Every real feature chunk is under 9 kB, so 150 kB still catches a UI-kit/chart-library regression. §5.4 words these as examples. |
+| D-4 | **`mem_limit` used instead of `deploy.resources.limits`.** | `deploy.resources` is a Swarm construct and is not applied by plain `docker compose up`, which is exactly what E2-10 asks to verify. Confirmed applied via `docker inspect`. |
+| D-5 | **Docker build context is the repo root**, not `./src/SourcingOps.Api`. | A four-project solution needs sibling project folders inside the build context. |
+| D-6 | **`caddy` sits behind a `prod` profile.** | Lets one compose file serve both environments per §7's "single definition reused with overrides": local dev runs Angular via `ng serve` and never starts Caddy. |
+| D-7 | **Extra packages beyond §3's named stack**: `EFCore.NamingConventions`, some `Microsoft.Extensions.*`/`Microsoft.IdentityModel.*`. | Needed for snake_case mapping, DI/config in Application, and JWT issuance. All small and justified against C1; none is on §11's prohibited list. |
+| D-8 | **Sidebar nav uses `<a routerLink>`** rather than the prototype's `<div onClick>`. | Keyboard and screen-reader access; computed styling unchanged. Supports E12-01. |
+| D-9 | **Two compose wiring bugs found and fixed during the combined-stack smoke test.** | (1) `caddy` never received `CADDY_DOMAIN`, so `{$CADDY_DOMAIN}` expanded to empty and Caddy read the leading `{` as a global options block, failing with "unrecognized global option: encode". (2) `docker-compose.override.yml` hard-coded `Caching__Provider=InMemory`, and being auto-merged on every local `up` it beat the base file's variable, making the Redis switch untestable locally — contradicting E2-02 and constraint C2. Both were invisible to component-level testing and only surfaced when the stack ran together. |
+
+### 9.2 Open items this pass raised or could not close
+
+| # | Item |
+| --- | --- |
+| N-1 | **The Angular pin and staying on patched Angular are currently mutually exclusive.** `npm audit` reports moderate/high advisories in `@angular/core`/`@angular/compiler` <=19.2.25, fixed only in 22.x, which Node v20.12.2 cannot run. Not bumped, per the OI-7 pin. **TECH_SPEC OI-7 should be reopened** to record this consequence: it is a Node-upgrade decision, not an Angular one. Low immediate risk (internal-only tool behind auth), but it should not be discovered at launch. |
+| N-2 | **E1-08's 403 path is not yet verifiable end-to-end** — no permission-gated endpoint exists. Carry into E3-01. |
+| N-3 | **Automatic HTTPS is untested** — no public DNS name locally. First real exercise is E2-05. |
+| N-4 | **`redis` was never exercised as a real cache**, only as a reachable provider, because M1 has no cache consumers. First genuine test is E3-09. |
+| N-5 | **Changing `DB_PASSWORD` after first `docker compose up` silently breaks auth**, because Postgres only applies `POSTGRES_PASSWORD` when initialising an empty data directory; an existing `pgdata` volume keeps the old credential. Cost real debugging time this pass. Worth a line in the E12-09 operating guide. |
+| N-6 | E0-06 remains unsigned, and E1-13/E1-14 shipped under the §5 fallback. Unchanged gate for E8-09/E8-10 and E11-07/E11-08. |
