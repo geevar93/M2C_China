@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SourcingOps.Application.Auth;
 using SourcingOps.Application.Common;
 using SourcingOps.Application.Interfaces;
 using SourcingOps.Domain.Constants;
@@ -20,12 +21,14 @@ public sealed class AdminUserService : IAdminUserService
     private readonly IAppDbContext _db;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IAuditLogger _audit;
+    private readonly ITokenRevocationService _tokenRevocation;
 
-    public AdminUserService(IAppDbContext db, IPasswordHasher passwordHasher, IAuditLogger audit)
+    public AdminUserService(IAppDbContext db, IPasswordHasher passwordHasher, IAuditLogger audit, ITokenRevocationService tokenRevocation)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _audit = audit;
+        _tokenRevocation = tokenRevocation;
     }
 
     public async Task<PagedResult<AdminUserDto>> ListAsync(string? search, int page, int pageSize, bool includeInactive, CancellationToken ct = default)
@@ -160,6 +163,11 @@ public sealed class AdminUserService : IAdminUserService
         await RevokeActiveRefreshTokensAsync(userId, ct);
         await _db.SaveChangesAsync(ct);
 
+        // N-7: refresh tokens above only closed half the gap — an already-issued ACCESS
+        // token would otherwise keep working for up to its full ~8h lifetime. This closes
+        // that window via the ICacheService deny-list rather than a per-request DB read.
+        await _tokenRevocation.RevokeAllIssuedBeforeNowAsync(userId, ct);
+
         await _audit.LogAsync(actorUserId, "UserDeactivated", "User", user.Id.ToString(), null, ct);
         return true;
     }
@@ -219,6 +227,11 @@ public sealed class AdminUserService : IAdminUserService
 
         await RevokeActiveRefreshTokensAsync(userId, ct);
         await _db.SaveChangesAsync(ct);
+
+        // N-7: same reasoning as DeactivateAsync — E11-05 already revoked refresh tokens for
+        // promptness (DR-10); this closes the matching gap for an already-issued access token
+        // carrying the pre-change permission set.
+        await _tokenRevocation.RevokeAllIssuedBeforeNowAsync(userId, ct);
 
         var roleNames = roles.Select(r => r.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
         await _audit.LogAsync(actorUserId, "UserRolesChanged", "User", user.Id.ToString(), new { Roles = roleNames }, ct);

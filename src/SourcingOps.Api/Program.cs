@@ -154,6 +154,11 @@ using (var scope = app.Services.CreateScope())
 app.UseCors("Frontend");
 app.UseRateLimiter();
 app.UseAuthentication();
+
+// N-7: must run after authentication (needs context.User populated from a validated token)
+// and before authorization/MVC (a revoked token must never reach a controller action).
+app.UseMiddleware<TokenRevocationMiddleware>();
+
 app.UseAuthorization();
 app.MapControllers();
 

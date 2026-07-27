@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IMasterDataService, MasterDataService>();
         services.AddScoped<IAdminUserService, AdminUserService>();
+        services.AddScoped<ITokenRevocationService, TokenRevocationService>();
 
         return services;
     }
