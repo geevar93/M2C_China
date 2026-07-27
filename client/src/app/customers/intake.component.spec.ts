@@ -1,0 +1,165 @@
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
+import { CustomerIntakeComponent } from './intake.component';
+import { MasterDataResponse } from '../core/models/master-data.models';
+import { CustomerDetail, CustomerListItem } from './models/customer.models';
+
+const MASTER_DATA: MasterDataResponse = {
+  categories: [
+    { id: 'cat-jewellery', name: 'Jewellery', sortOrder: 1, isActive: true },
+    { id: 'cat-retired', name: 'Legacy Category', sortOrder: 2, isActive: false }
+  ],
+  serviceTypes: [
+    { id: 'svc-cif', code: 'CIF', label: 'CIF', sortOrder: 1, isActive: true },
+    { id: 'svc-freight', code: 'Freight-only', label: 'Freight-only', sortOrder: 2, isActive: true }
+  ],
+  leadStatuses: [
+    { id: 'lead-new', code: 'NEW', label: 'New', sortOrder: 1, isActive: true },
+    { id: 'lead-qualified', code: 'QUALIFIED', label: 'Qualified', sortOrder: 2, isActive: true }
+  ],
+  shipmentStatuses: [],
+  invoiceStatuses: [],
+  vendorStatuses: []
+};
+
+const existingCustomer: CustomerListItem = {
+  id: 'cust-existing',
+  name: 'Existing Person',
+  businessName: 'Existing Traders',
+  phone: '+91 9825041122',
+  city: 'Surat',
+  region: null,
+  sourceChannel: 'WhatsApp',
+  serviceTypeId: 'svc-cif',
+  statusId: 'lead-new',
+  categoryIds: [],
+  ownerUserId: 'user-1',
+  ownerName: 'Priya Sharma',
+  tags: [],
+  createdAt: '2026-02-11T00:00:00Z'
+};
+
+const savedDetail: CustomerDetail = {
+  ...existingCustomer,
+  id: 'cust-new',
+  email: null,
+  notes: null,
+  externalMarketplace: null,
+  externalOrderRef: null,
+  externalSupplierName: null,
+  externalOrderValue: null,
+  externalOrderCurrency: null,
+  externalOrderDate: null
+};
+
+describe('CustomerIntakeComponent', () => {
+  let fixture: ComponentFixture<CustomerIntakeComponent>;
+  let httpMock: HttpTestingController;
+  let router: Router;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [CustomerIntakeComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(CustomerIntakeComponent);
+    httpMock = TestBed.inject(HttpTestingController);
+    router = TestBed.inject(Router);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  function flushMasterData(): void {
+    httpMock.expectOne((r) => r.url === '/api/v1/master-data').flush(MASTER_DATA);
+  }
+
+  function fillRequiredFields(): void {
+    const c = fixture.componentInstance;
+    c.form.controls.name.setValue('Meena Shah');
+    c.form.controls.businessName.setValue('Meena Traders');
+    c.form.controls.phone.setValue('9825041122');
+    c.form.controls.sourceChannel.setValue('WhatsApp');
+  }
+
+  it('populates service-type, status and category options from MasterDataService, not a hard-coded list', () => {
+    fixture.detectChanges();
+    flushMasterData();
+    fixture.detectChanges();
+
+    const html: string = fixture.nativeElement.innerHTML;
+    expect(html).toContain('Jewellery');
+    expect(html).not.toContain('Legacy Category'); // retired — must not appear as a selectable chip
+    expect(html).toContain('CIF');
+    expect(html).toContain('FREIGHT-ONLY'); // StatusStyleService's pill label for the 'Freight-only' code
+    expect(html).toContain('Transport only'); // service-type card copy, keyed off the dynamically-listed code
+    expect(html).toContain('Qualified');
+  });
+
+  it('defaults the service type to CIF and hides the freight-only external fields', () => {
+    fixture.detectChanges();
+    flushMasterData();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.showExtRef).toBeFalse();
+  });
+
+  it('shows the external-purchase fields only once Freight-only is picked', () => {
+    fixture.detectChanges();
+    flushMasterData();
+    fixture.detectChanges();
+
+    fixture.componentInstance.pickServiceType('svc-freight');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.showExtRef).toBeTrue();
+    expect(fixture.nativeElement.textContent).toContain('External Marketplace');
+  });
+
+  it('shows a duplicate-confirmation dialog on 409 and retries with confirmDuplicate: true on confirm', () => {
+    fixture.detectChanges();
+    flushMasterData();
+    fixture.detectChanges();
+    fillRequiredFields();
+
+    fixture.componentInstance.save();
+
+    const firstReq = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+    expect(firstReq.request.body.confirmDuplicate).toBeUndefined();
+    firstReq.flush(
+      { title: 'Conflict', detail: 'Phone already in use', existingCustomer: existingCustomer },
+      { status: 409, statusText: 'Conflict' }
+    );
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.duplicate()).toBeTruthy();
+    expect(fixture.componentInstance.duplicate()?.businessName).toBe('Existing Traders');
+    expect(fixture.nativeElement.textContent).toContain('Possible duplicate');
+
+    fixture.componentInstance.confirmDuplicateSave();
+    const retryReq = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+    expect(retryReq.request.body.confirmDuplicate).toBeTrue();
+
+    const navigateSpy = spyOn(router, 'navigate');
+    retryReq.flush(savedDetail, { status: 201, statusText: 'Created' });
+
+    expect(fixture.componentInstance.duplicate()).toBeNull();
+    expect(navigateSpy).toHaveBeenCalledWith(['/customers', 'cust-new']);
+  });
+
+  it('does not send the freight-only external fields when the service type is CIF', () => {
+    fixture.detectChanges();
+    flushMasterData();
+    fixture.detectChanges();
+    fillRequiredFields();
+
+    fixture.componentInstance.save();
+
+    const req = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+    expect(req.request.body.externalMarketplace).toBeNull();
+    expect(req.request.body.externalOrderRef).toBeNull();
+    req.flush(savedDetail, { status: 201, statusText: 'Created' });
+  });
+});

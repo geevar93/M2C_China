@@ -1,17 +1,280 @@
-import { Component } from '@angular/core';
-import { ComingSoonComponent } from '../shared/components/coming-soon/coming-soon.component';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Component, computed, effect, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
+import { Router, RouterLink } from '@angular/router';
+import { AuthService } from '../core/services/auth.service';
+import { MasterDataService } from '../core/services/master-data.service';
+import { extractErrorMessage } from '../core/services/problem-details.util';
+import { StatusStyleService } from '../shared/services/status-style.service';
+import { CustomersService } from './services/customers.service';
+import { CreateCustomerRequest, DuplicateCustomerProblemDetails } from './models/customer.models';
 
-/** Placeholder — the real intake form ports in M3 (CRM vertical slice) per ACTION_PLAN. */
+interface ServiceTypeCardCopy {
+  headline: string;
+  description: string;
+}
+
+/** Descriptive copy ported verbatim from the prototype's two service-type cards
+ *  (Source/Sourcing Ops Platform.dc.html ~line 312-327). Keyed by lookup `code`
+ *  (not id) so it survives a relabel and degrades gracefully for any future
+ *  service type via DEFAULT_SERVICE_TYPE_COPY — the *set* of cards itself is
+ *  driven by MasterDataService.serviceTypeOptions(), never hard-coded (DR-6). */
+const SERVICE_TYPE_COPY: Record<string, ServiceTypeCardCopy> = {
+  CIF: {
+    headline: 'Full-service',
+    description:
+      'We source from our vendor roster and deliver landed goods. Platform holds product, vendor, pricing, insurance and landed cost.'
+  },
+  'Freight-only': {
+    headline: 'Transport only',
+    description: 'Customer already bought the goods elsewhere. Platform holds shipment details, external purchase reference and freight fee.'
+  }
+};
+const DEFAULT_SERVICE_TYPE_COPY: ServiceTypeCardCopy = {
+  headline: 'Service type',
+  description: 'Determines which downstream fields apply to this customer.'
+};
+
+/** Not master data — a fixed dial convenience list for a free-text phone field, not a category/status/service-type lookup (DR-6 doesn't apply). */
+const COUNTRY_CODES = ['+91', '+86', '+971'];
+/** Same reasoning — `sourceChannel` is a plain string on CustomerListItem, not an id into any MasterDataResponse collection. */
+const SOURCE_CHANNELS = ['WhatsApp', 'Call', 'Referral', 'Other'];
+
+function phoneDigitsValidator(control: AbstractControl): ValidationErrors | null {
+  const digits = String(control.value ?? '').replace(/\D/g, '');
+  return digits.length === 10 ? null : { phoneDigits: true };
+}
+
+interface DuplicateInfo {
+  businessName: string;
+  name: string;
+  phone: string;
+}
+
+/**
+ * New Lead Intake (ACTION_PLAN E4-13) — ported from Source/Sourcing Ops
+ * Platform.dc.html `showIntake` (~line 251). Deviations from the prototype's
+ * exact markup, all flagged in the E4-13 report:
+ *  - "Assigned Owner" is not an editable picker: the given API contract has
+ *    no user-listing endpoint an Associate can safely call (only
+ *    `GET /admin/users`, gated on Admin.ManageUsers). The lead is owned by
+ *    the creating user; full reassignment is E4-09, out of this pass's scope.
+ *  - The prototype's live "possible duplicate" banner (computed from an
+ *    in-memory customer list while typing) is replaced by the real, server-
+ *    authoritative 409 flow (E4-10): submit, and only on a genuine duplicate
+ *    does a confirm dialog appear.
+ *  - The "+ Other" custom-category affordance is dropped: adding a category
+ *    to the master list is admin-only functionality (E11-08), out of scope
+ *    and gated on an unsigned design; category chips are exactly
+ *    MasterDataService.categoryOptions(), no parallel local list (DR-6).
+ *  - The external-purchase-reference block is six discrete fields
+ *    (CustomerDetail's external* fields) instead of the prototype's one
+ *    combined free-text input — the binding contract requires each field
+ *    individually; only the show/hide-on-freight-only behaviour is 1:1.
+ */
 @Component({
   selector: 'app-customer-intake',
   standalone: true,
-  imports: [ComingSoonComponent],
-  template: `
-    <app-coming-soon
-      icon="📝"
-      title="New Lead Intake"
-      description="Log a WhatsApp or phone enquiry — ported from the prototype's intake screen in milestone M3 (CRM)."
-    ></app-coming-soon>
-  `
+  imports: [ReactiveFormsModule, RouterLink],
+  templateUrl: './intake.component.html',
+  styleUrl: './intake.component.scss'
 })
-export class CustomerIntakeComponent {}
+export class CustomerIntakeComponent {
+  private readonly fb = inject(FormBuilder);
+  private readonly customersService = inject(CustomersService);
+  private readonly masterDataService = inject(MasterDataService);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+
+  readonly styles = inject(StatusStyleService);
+  readonly countryCodes = COUNTRY_CODES;
+  readonly sourceChannels = SOURCE_CHANNELS;
+
+  readonly serviceTypeOptions = toSignal(this.masterDataService.serviceTypeOptions(), { initialValue: [] });
+  readonly leadStatusOptions = toSignal(this.masterDataService.leadStatusOptions(), { initialValue: [] });
+  readonly categoryOptions = toSignal(this.masterDataService.categoryOptions(), { initialValue: [] });
+  readonly masterDataError = toSignal(this.masterDataService.error$, { initialValue: null });
+  readonly currentUser = toSignal(this.auth.currentUser$, { initialValue: null });
+
+  readonly serviceTypeId = signal('');
+  readonly statusId = signal('');
+  readonly selectedCategoryIds = signal<string[]>([]);
+
+  readonly saving = signal(false);
+  readonly submitError = signal<string | null>(null);
+  readonly duplicate = signal<DuplicateInfo | null>(null);
+
+  readonly form = this.fb.nonNullable.group({
+    name: ['', Validators.required],
+    businessName: ['', Validators.required],
+    cc: ['+91', Validators.required],
+    phone: ['', [Validators.required, phoneDigitsValidator]],
+    email: ['', Validators.email],
+    city: [''],
+    sourceChannel: ['WhatsApp', Validators.required],
+    notes: [''],
+    externalMarketplace: [''],
+    externalOrderRef: [''],
+    externalSupplierName: [''],
+    externalOrderValue: [''],
+    externalOrderCurrency: [''],
+    externalOrderDate: ['']
+  });
+
+  private readonly selectedServiceTypeRow = computed(() => this.serviceTypeOptions().find((o) => o.id === this.serviceTypeId()));
+
+  readonly categoryChips = computed(() =>
+    this.categoryOptions().map((c) => ({ id: c.id, name: c.name, selected: this.selectedCategoryIds().includes(c.id) }))
+  );
+
+  constructor() {
+    this.masterDataService.ensureLoaded().subscribe({ error: () => {} });
+
+    // Default the service-type/status pickers to a sane first choice once
+    // master data has loaded — the prototype defaults form.svc to 'CIF' and
+    // form.status to 'NEW'; here that's "the CIF row if present, else the
+    // first active row" / "the first active lead status by sortOrder".
+    effect(
+      () => {
+        const opts = this.serviceTypeOptions();
+        if (opts.length && !this.serviceTypeId()) {
+          const cif = opts.find((o) => o.code === 'CIF');
+          this.serviceTypeId.set((cif ?? opts[0]).id);
+        }
+      },
+      { allowSignalWrites: true }
+    );
+    effect(
+      () => {
+        const opts = this.leadStatusOptions();
+        if (opts.length && !this.statusId()) {
+          this.statusId.set(opts[0].id);
+        }
+      },
+      { allowSignalWrites: true }
+    );
+  }
+
+  get phoneDigits(): string {
+    return (this.form.controls.phone.value ?? '').replace(/\D/g, '');
+  }
+
+  get phoneOk(): boolean {
+    return this.phoneDigits.length === 10;
+  }
+
+  get phoneBorderColor(): string {
+    return this.phoneDigits.length > 0 && !this.phoneOk ? '#e53935' : '#e5e7eb';
+  }
+
+  get phoneMsg(): string {
+    const cc = this.form.controls.cc.value;
+    if (this.phoneDigits.length === 0) return `Stored as ${cc} + 10 digits for click-to-chat.`;
+    return this.phoneOk ? `Valid · ${cc} ${this.phoneDigits}` : `Needs 10 digits — ${this.phoneDigits.length} entered.`;
+  }
+
+  get phoneMsgColor(): string {
+    return this.phoneDigits.length > 0 && !this.phoneOk ? '#e53935' : '#6b7280';
+  }
+
+  get showExtRef(): boolean {
+    return this.selectedServiceTypeRow()?.code === 'Freight-only';
+  }
+
+  get formMeta(): string {
+    const statusLabel = this.leadStatusOptions().find((o) => o.id === this.statusId())?.label ?? '—';
+    const svcLabel = this.selectedServiceTypeRow()?.label ?? '—';
+    return `Will be logged as ${statusLabel} · ${svcLabel} · source ${this.form.controls.sourceChannel.value}`;
+  }
+
+  serviceTypeCopy(code: string): ServiceTypeCardCopy {
+    return SERVICE_TYPE_COPY[code] ?? DEFAULT_SERVICE_TYPE_COPY;
+  }
+
+  pickServiceType(id: string): void {
+    this.serviceTypeId.set(id);
+  }
+
+  toggleCategory(id: string): void {
+    this.selectedCategoryIds.update((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  }
+
+  save(): void {
+    if (this.saving()) return;
+    this.submitError.set(null);
+    this.form.markAllAsTouched();
+    if (this.form.invalid || !this.serviceTypeId() || !this.statusId()) {
+      if (!this.phoneOk) this.submitError.set('Enter a valid 10-digit WhatsApp/phone number.');
+      return;
+    }
+    this.saving.set(true);
+    this.submit(false);
+  }
+
+  confirmDuplicateSave(): void {
+    this.saving.set(true);
+    this.submit(true);
+  }
+
+  cancelDuplicate(): void {
+    this.duplicate.set(null);
+  }
+
+  private submit(confirmDuplicate: boolean): void {
+    const payload = this.buildPayload(confirmDuplicate);
+    this.customersService.create(payload).subscribe({
+      next: (customer) => {
+        this.saving.set(false);
+        this.duplicate.set(null);
+        this.router.navigate(['/customers', customer.id]);
+      },
+      error: (err: unknown) => {
+        this.saving.set(false);
+        if (err instanceof HttpErrorResponse && err.status === 409) {
+          const body = err.error as DuplicateCustomerProblemDetails | null;
+          const existing = body?.existingCustomer;
+          this.duplicate.set({
+            businessName: existing?.businessName ?? body?.detail ?? 'An existing customer',
+            name: existing?.name ?? '',
+            phone: existing?.phone ?? this.rawPhone()
+          });
+          return;
+        }
+        this.submitError.set(extractErrorMessage(err, 'Could not save this lead. Please try again.'));
+      }
+    });
+  }
+
+  private rawPhone(): string {
+    const { cc } = this.form.getRawValue();
+    return `${cc} ${this.phoneDigits}`.trim();
+  }
+
+  private buildPayload(confirmDuplicate: boolean): CreateCustomerRequest {
+    const raw = this.form.getRawValue();
+    const isFreight = this.showExtRef;
+    const orderValue = raw.externalOrderValue ? Number(raw.externalOrderValue) : NaN;
+
+    return {
+      name: raw.name.trim(),
+      businessName: raw.businessName.trim(),
+      phone: this.rawPhone(),
+      email: raw.email.trim() || null,
+      city: raw.city.trim() || null,
+      sourceChannel: raw.sourceChannel,
+      serviceTypeId: this.serviceTypeId(),
+      statusId: this.statusId(),
+      categoryIds: this.selectedCategoryIds(),
+      ownerUserId: this.currentUser()?.id ?? null,
+      notes: raw.notes.trim() || null,
+      externalMarketplace: isFreight ? raw.externalMarketplace.trim() || null : null,
+      externalOrderRef: isFreight ? raw.externalOrderRef.trim() || null : null,
+      externalSupplierName: isFreight ? raw.externalSupplierName.trim() || null : null,
+      externalOrderValue: isFreight && !Number.isNaN(orderValue) ? orderValue : null,
+      externalOrderCurrency: isFreight ? raw.externalOrderCurrency.trim() || null : null,
+      externalOrderDate: isFreight ? raw.externalOrderDate || null : null,
+      ...(confirmDuplicate ? { confirmDuplicate: true } : {})
+    };
+  }
+}

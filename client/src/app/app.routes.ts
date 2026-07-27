@@ -47,6 +47,13 @@ export const routes: Routes = [
         loadComponent: () => import('./customers/intake.component').then((m) => m.CustomerIntakeComponent)
       },
       {
+        path: 'customers/:id',
+        canActivate: [permissionGuard],
+        data: { title: 'Customer', permission: 'Customers.View' },
+        loadComponent: () =>
+          import('./customers/customer-detail/customer-detail.component').then((m) => m.CustomerDetailComponent)
+      },
+      {
         path: 'vendors',
         canActivate: [permissionGuard],
         data: { title: 'Vendors', permission: 'Vendors.View' },

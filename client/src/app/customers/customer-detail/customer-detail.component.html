@@ -1,0 +1,94 @@
+<div>
+  <a routerLink="/customers" class="back-link">← Back to customers</a>
+
+  @if (loading()) {
+    <div class="state-panel">
+      <div class="spinner"></div>
+      <span>Loading customer…</span>
+    </div>
+  } @else if (error()) {
+    <div class="state-panel">
+      <span>{{ error() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+    </div>
+  } @else {
+    @if (customer(); as c) {
+    <div class="detail-head">
+      <div>
+        <h1 class="detail-title">
+          {{ c.businessName }}
+          <span class="chip" [style.background]="svcChip().bg" [style.color]="svcChip().fg">{{ svcChip().label }}</span>
+          <span class="chip" [style.background]="statusChip().bg" [style.color]="statusChip().fg">{{ statusChip().label }}</span>
+        </h1>
+        <div class="detail-sub">{{ c.name }} · {{ c.city ?? '—' }} · {{ c.phone }} · owner {{ c.ownerName ?? 'Unassigned' }}</div>
+      </div>
+      <div class="detail-actions">
+        <button type="button" class="btn btn-primary" disabled title="Wired in E9 (WhatsApp dispatch)">Send Catalog via WhatsApp</button>
+        <button type="button" class="btn btn-secondary" disabled title="Edit is a later CRM story">Edit</button>
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <div class="detail-col">
+        <div class="card">
+          <div class="section-title">Profile</div>
+          @for (f of profileFields(); track f.k) {
+            <div class="profile-row">
+              <span class="muted">{{ f.k }}</span><span class="profile-val">{{ f.v }}</span>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="detail-col">
+        <div class="card">
+          <div class="timeline-head">
+            <div class="section-title">Activity Timeline</div>
+            <button type="button" class="btn btn-secondary btn-sm" (click)="openNote()">+ Add Note</button>
+          </div>
+
+          @if (noteOpen()) {
+            <div class="note-editor">
+              @if (noteError()) {
+                <div class="field-error">{{ noteError() }}</div>
+              }
+              <textarea
+                class="field-input"
+                rows="2"
+                placeholder="What happened on the call?"
+                [value]="noteText()"
+                (input)="noteText.set($any($event.target).value)"
+              ></textarea>
+              <div class="note-actions">
+                <button type="button" class="btn btn-primary btn-sm" [disabled]="savingNote()" (click)="saveNote()">
+                  {{ savingNote() ? 'Saving…' : 'Save Note' }}
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" (click)="cancelNote()">Cancel</button>
+              </div>
+            </div>
+          }
+
+          @for (t of timeline(); track $index) {
+            <div class="timeline-row">
+              <div class="timeline-rail">
+                <span class="timeline-dot" [style.background]="t.dot"></span>
+                <span class="timeline-line"></span>
+              </div>
+              <div class="timeline-body">
+                <div class="timeline-top">
+                  <span class="timeline-title">{{ t.title }}</span>
+                  <span class="timeline-when">{{ t.occurredAtUtc | timelineDate }}</span>
+                </div>
+                <div class="timeline-desc">{{ t.body }}</div>
+              </div>
+            </div>
+          }
+          @if (timeline().length === 0) {
+            <div class="muted">No activity recorded yet.</div>
+          }
+        </div>
+      </div>
+    </div>
+    }
+  }
+</div>

@@ -1,0 +1,107 @@
+<div>
+  <div class="cust-header">
+    <h1 class="page-title">Customers</h1>
+    <a class="btn btn-primary" routerLink="/customers/intake">+ New Lead</a>
+  </div>
+
+  <div class="card filter-bar">
+    <div class="field filter-search">
+      <label for="cust-search">Search</label>
+      <input
+        id="cust-search"
+        class="field-input"
+        [value]="search()"
+        (input)="onSearchInput($any($event.target).value)"
+        placeholder="Name, business, or number"
+      />
+    </div>
+    <div class="field">
+      <label for="cust-service">Service Type</label>
+      <select id="cust-service" class="field-input" [value]="serviceTypeId()" (change)="setServiceType($any($event.target).value)">
+        <option value="">All service types</option>
+        @for (opt of serviceTypeOptions(); track opt.id) {
+          <option [value]="opt.id">{{ opt.label }}</option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="cust-status">Status</label>
+      <select id="cust-status" class="field-input" [value]="statusId()" (change)="setStatus($any($event.target).value)">
+        <option value="">All statuses</option>
+        @for (opt of leadStatusOptions(); track opt.id) {
+          <option [value]="opt.id">{{ opt.label }}</option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="cust-cat">Category</label>
+      <select id="cust-cat" class="field-input" [value]="categoryId()" (change)="setCategory($any($event.target).value)">
+        <option value="">All categories</option>
+        @for (opt of categoryOptions(); track opt.id) {
+          <option [value]="opt.id">{{ opt.name }}</option>
+        }
+      </select>
+    </div>
+    <div class="filter-spacer"></div>
+    <button type="button" class="btn btn-secondary" (click)="clearFilters()">Clear</button>
+  </div>
+
+  <div class="cust-summary">{{ totalCount() }} customers</div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Customer</th>
+          <th>WhatsApp</th>
+          <th>Service Type</th>
+          <th>Categories</th>
+          <th>Status</th>
+          <th>Owner</th>
+          <th class="align-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (c of rows(); track c.id) {
+          <tr>
+            <td>
+              <a [routerLink]="['/customers', c.id]" class="row-link">{{ c.business }}</a>
+              <div class="row-sub">{{ c.name }} · {{ c.city }}</div>
+            </td>
+            <td class="muted">{{ c.phone }}</td>
+            <td><span class="chip" [style.background]="c.svcBg" [style.color]="c.svcFg">{{ c.svcLabel }}</span></td>
+            <td class="muted">{{ c.categoriesLabel }}</td>
+            <td><span class="chip" [style.background]="c.stBg" [style.color]="c.stFg">{{ c.statusLabel }}</span></td>
+            <td class="muted">{{ c.owner }}</td>
+            <td class="align-right nowrap">
+              <button type="button" class="btn btn-secondary btn-sm" disabled title="Wired in E9 (WhatsApp dispatch)">Send Catalog</button>
+              <a class="btn btn-secondary btn-sm" [routerLink]="['/customers', c.id]">Open →</a>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (loading()) {
+      <div class="state-panel">
+        <div class="spinner"></div>
+        <span>Loading customers…</span>
+      </div>
+    } @else if (error()) {
+      <div class="state-panel">
+        <span>{{ error() }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+      </div>
+    } @else if (noResults()) {
+      <div class="state-panel">No customers match these filters. Clear the filters or add a lead manually.</div>
+    }
+  </div>
+
+  @if (!loading() && !error() && totalCount() > 0) {
+    <div class="pager">
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() <= 1" (click)="prevPage()">← Prev</button>
+      <span class="muted">Page {{ page() }} of {{ totalPages() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() >= totalPages()" (click)="nextPage()">Next →</button>
+    </div>
+  }
+</div>

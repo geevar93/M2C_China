@@ -1,0 +1,203 @@
+<div class="intake-page">
+  <div class="intake-lead">
+    <a routerLink="/customers" class="back-link">← Back to customers</a>
+    <h1 class="page-title">New Lead Intake</h1>
+    <div class="page-sub">Log an enquiry that arrived over WhatsApp or a call. Service type drives which fields apply downstream.</div>
+  </div>
+
+  @if (masterDataError()) {
+    <div class="banner-warning intake-banner">Could not load dropdown options: {{ masterDataError() }}</div>
+  }
+  @if (submitError()) {
+    <div class="banner-warning intake-banner" role="alert">{{ submitError() }}</div>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="save()" novalidate>
+    <div class="card intake-card">
+      <div class="section-title">Contact</div>
+      <div class="grid-2">
+        <div class="field">
+          <label for="in-name">Contact Name</label>
+          <input id="in-name" class="field-input" formControlName="name" placeholder="e.g. Meena Shah" />
+          @if (form.controls.name.touched && form.controls.name.invalid) {
+            <div class="field-error">Contact name is required.</div>
+          }
+        </div>
+        <div class="field">
+          <label for="in-business">Business Name</label>
+          <input id="in-business" class="field-input" formControlName="businessName" placeholder="e.g. Meena Traders" />
+          @if (form.controls.businessName.touched && form.controls.businessName.invalid) {
+            <div class="field-error">Business name is required.</div>
+          }
+        </div>
+      </div>
+      <div class="grid-cc">
+        <div class="field">
+          <label for="in-cc">Country Code</label>
+          <select id="in-cc" class="field-input" formControlName="cc">
+            @for (cc of countryCodes; track cc) {
+              <option [value]="cc">{{ cc }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label for="in-phone">WhatsApp / Phone <span class="label-hint">(used for click-to-chat)</span></label>
+          <input
+            id="in-phone"
+            class="field-input"
+            formControlName="phone"
+            placeholder="98250 41122"
+            [style.border-color]="phoneBorderColor"
+          />
+          <div class="field-hint" [style.color]="phoneMsgColor">{{ phoneMsg }}</div>
+        </div>
+        <div class="field">
+          <label for="in-email">Email <span class="label-hint">(optional)</span></label>
+          <input id="in-email" class="field-input" type="email" formControlName="email" placeholder="name@company.in" />
+          @if (form.controls.email.touched && form.controls.email.invalid) {
+            <div class="field-error">Enter a valid email address.</div>
+          }
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label for="in-city">City / Region</label>
+          <input id="in-city" class="field-input" formControlName="city" placeholder="e.g. Surat, Gujarat" />
+        </div>
+        <div class="field">
+          <label for="in-source">Source Channel</label>
+          <select id="in-source" class="field-input" formControlName="sourceChannel">
+            @for (src of sourceChannels; track src) {
+              <option [value]="src">{{ src }}</option>
+            }
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card intake-card">
+      <div class="section-title">Service Type <span class="required">*</span></div>
+      <div class="section-hint">Mandatory. Determines whether the platform tracks product cost and insurance, or freight only.</div>
+      <div class="grid-2">
+        @for (opt of serviceTypeOptions(); track opt.id) {
+          <div
+            class="svc-card"
+            [class.svc-card--active]="serviceTypeId() === opt.id"
+            (click)="pickServiceType(opt.id)"
+          >
+            <div class="svc-card__head">
+              <span class="svc-dot" [class.svc-dot--active]="serviceTypeId() === opt.id"></span>
+              <span class="chip" [style.background]="styles.serviceType(opt.code).bg" [style.color]="styles.serviceType(opt.code).fg">{{ styles.serviceType(opt.code).label }}</span>
+              <span class="svc-headline">{{ serviceTypeCopy(opt.code).headline }}</span>
+            </div>
+            <div class="svc-desc">{{ serviceTypeCopy(opt.code).description }}</div>
+          </div>
+        }
+      </div>
+
+      @if (showExtRef) {
+        <div class="ext-ref">
+          <div class="grid-2">
+            <div class="field">
+              <label for="in-ext-marketplace">External Marketplace</label>
+              <input id="in-ext-marketplace" class="field-input" formControlName="externalMarketplace" placeholder="e.g. IndiaMART" />
+            </div>
+            <div class="field">
+              <label for="in-ext-orderref">External Order Reference</label>
+              <input id="in-ext-orderref" class="field-input" formControlName="externalOrderRef" placeholder="e.g. order 8842-119" />
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="in-ext-supplier">External Supplier Name</label>
+              <input id="in-ext-supplier" class="field-input" formControlName="externalSupplierName" placeholder="e.g. Guangzhou supplier" />
+            </div>
+            <div class="field">
+              <label for="in-ext-date">External Order Date</label>
+              <input id="in-ext-date" class="field-input" type="date" formControlName="externalOrderDate" />
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="in-ext-value">External Order Value</label>
+              <input id="in-ext-value" class="field-input" type="number" min="0" formControlName="externalOrderValue" placeholder="0.00" />
+            </div>
+            <div class="field">
+              <label for="in-ext-currency">External Order Currency</label>
+              <input id="in-ext-currency" class="field-input" formControlName="externalOrderCurrency" placeholder="e.g. CNY" />
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="card intake-card">
+      <div class="section-title">Category Interest</div>
+      <div class="section-hint">Select one or more. Pulled from the category master — add or retire in Settings.</div>
+      <div class="chip-row">
+        @for (ch of categoryChips(); track ch.id) {
+          <div
+            class="cat-chip"
+            [class.cat-chip--active]="ch.selected"
+            (click)="toggleCategory(ch.id)"
+          >{{ ch.selected ? '✓ ' : '' }}{{ ch.name }}</div>
+        }
+        @if (categoryChips().length === 0) {
+          <span class="label-hint">No active categories configured yet.</span>
+        }
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label>Assigned Owner</label>
+          <div class="field-input field-readonly">{{ currentUser()?.name ?? 'You' }}</div>
+          <div class="field-hint">Owned by you at creation. Reassignment is managed separately.</div>
+        </div>
+        <div class="field">
+          <label for="in-status">Initial Status</label>
+          <select id="in-status" class="field-input" [value]="statusId()" (change)="statusId.set($any($event.target).value)">
+            @for (opt of leadStatusOptions(); track opt.id) {
+              <option [value]="opt.id">{{ opt.label }}</option>
+            }
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="in-notes">Enquiry Notes</label>
+        <textarea
+          id="in-notes"
+          class="field-input"
+          formControlName="notes"
+          rows="3"
+          placeholder="e.g. Wants 500 pcs imitation jewellery sets, asked for Yiwu catalog and CIF price to Surat"
+        ></textarea>
+      </div>
+    </div>
+
+    <div class="intake-actions">
+      <button type="submit" class="btn btn-primary" [disabled]="saving()">{{ saving() ? 'Saving…' : 'Save Lead' }}</button>
+      <button type="button" class="btn btn-secondary" disabled title="Wired in E9 (WhatsApp dispatch)">Save &amp; Send Catalog</button>
+      <div class="filter-spacer"></div>
+      <div class="form-meta">{{ formMeta }}</div>
+    </div>
+  </form>
+
+  @if (duplicate(); as dup) {
+    <div class="dialog-backdrop">
+      <div class="dialog-panel dup-dialog">
+        <div class="section-title">Possible duplicate</div>
+        <p>
+          <strong>{{ dup.businessName }}</strong>
+          @if (dup.name) { ({{ dup.name }}) }
+          already exists with the phone number {{ dup.phone }}. Save this lead anyway?
+        </p>
+        <div class="dup-actions">
+          <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="confirmDuplicateSave()">
+            {{ saving() ? 'Saving…' : 'Save Anyway' }}
+          </button>
+          <button type="button" class="btn btn-secondary" (click)="cancelDuplicate()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>
