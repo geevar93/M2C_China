@@ -1,0 +1,28 @@
+# .NET
+src/**/bin/
+src/**/obj/
+tests/**/bin/
+tests/**/obj/
+*.user
+
+# Angular / Node
+client/node_modules/
+client/dist/
+client/.angular/
+npm-debug.log*
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Docker / data volumes
+**/pgdata/
+**/uploads/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vs/
+.vscode/
+*.swp

@@ -1,0 +1,1838 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;padding:0}
+  body{background:#f8f9fb;color:#1a2332;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.4;-webkit-font-smoothing:antialiased}
+  *{box-sizing:border-box}
+  a{color:#2d5be3;text-decoration:none}
+  a:hover{color:#2449b5;text-decoration:underline}
+  table{border-collapse:collapse;width:100%}
+  input,select,textarea,button{font-family:inherit}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div style="display:flex;height:100vh;overflow:hidden;background:#f8f9fb">
+
+  <div style="width:{{sbW}}px;flex:0 0 auto;background:#1a2332;color:#fff;display:flex;flex-direction:column;overflow:hidden">
+    <div style="height:56px;flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.08)">
+      <div style="font-size:18px;font-weight:700;white-space:nowrap">Meridian<span style="color:#2d5be3">.</span></div>
+      <div style="font-size:11px;color:rgba(255,255,255,.35);letter-spacing:.06em;white-space:nowrap;display:{{labelDisp}}">SOURCING OPS</div>
+    </div>
+    <div style="flex:1 1 auto;overflow-y:auto;padding:12px 8px">
+      <sc-for list="{{navGroups}}" as="g" hint-placeholder-count="4">
+        <div style="margin-bottom:14px">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.35);padding:6px 12px;white-space:nowrap;display:{{labelDisp}}">{{ g.label }}</div>
+          <sc-for list="{{g.items}}" as="it" hint-placeholder-count="3">
+            <div onClick="{{ it.go }}" title="{{ it.label }}" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;background:{{it.bg}};color:{{it.fg}};margin-bottom:2px;transition:background .15s" style-hover="background:{{it.hoverBg}}">
+              <span style="font-size:16px;flex:0 0 16px;line-height:1">{{ it.icon }}</span>
+              <span style="font-size:14px;white-space:nowrap;display:{{labelDisp}}">{{ it.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+    <div onClick="{{ toggleSb }}" style="flex:0 0 auto;padding:12px 20px;border-top:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.55);font-size:13px;cursor:pointer;white-space:nowrap" style-hover="color:#fff">{{ collapseLabel }}</div>
+  </div>
+
+  <div style="flex:1 1 auto;display:flex;flex-direction:column;min-width:0">
+    <div style="height:56px;flex:0 0 auto;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:16px;padding:0 24px">
+      <div style="font-size:16px;font-weight:600;white-space:nowrap">{{ pageTitle }}</div>
+      <div onClick="{{ openPalette }}" style="flex:1 1 auto;max-width:420px;display:flex;align-items:center;gap:8px;border:1px solid #e5e7eb;border-radius:8px;padding:7px 12px;color:#6b7280;font-size:13px;cursor:pointer;transition:border-color .15s" style-hover="border-color:#2d5be3">
+        <span>⌕</span><span style="flex:1 1 auto">Search customers, vendors, catalogs</span><span style="font-size:11px;border:1px solid #e5e7eb;border-radius:4px;padding:1px 5px">⌘K</span>
+      </div>
+      <div style="flex:1 1 auto"></div>
+      <div onClick="{{ refresh }}" style="font-size:13px;color:#6b7280;cursor:pointer">↻ Refresh</div>
+      <div style="width:1px;height:24px;background:#e5e7eb"></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:28px;height:28px;border-radius:14px;background:#e3f2fd;color:#1565c0;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ userInitials }}</div>
+        <div style="font-size:13px">{{ userName }} <span style="color:#6b7280">· Owner</span></div>
+      </div>
+    </div>
+
+    <div style="flex:1 1 auto;overflow-y:auto;padding:24px">
+
+      <sc-if value="{{loading}}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:120px 0;color:#6b7280">
+          <div style="width:20px;height:20px;border:2px solid #e5e7eb;border-top-color:#2d5be3;border-radius:50%;animation:spin .6s linear infinite"></div>
+          <div style="font-size:13px">Loading</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showDash}}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px">
+            <div>
+              <h1 style="font-size:20px;font-weight:700;margin:0">Operations Dashboard</h1>
+              <div style="font-size:13px;color:#6b7280;margin-top:4px">Last 30 days · all categories · all service types</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <select value="{{dateRange}}" onChange="{{ setRange }}" style="padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;color:#1a2332">
+                <option>Last 7 days</option><option>Last 30 days</option><option>This quarter</option>
+              </select>
+              <button onClick="{{ goIntake }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">+ New Lead</button>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:16px">
+            <sc-for list="{{kpis}}" as="k" hint-placeholder-count="6">
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+                <div style="font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">{{ k.label }}</div>
+                <div style="font-size:28px;font-weight:700;margin-top:8px">{{ k.value }}</div>
+                <div style="font-size:12px;color:{{k.subColor}};margin-top:4px">{{ k.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px">
+                <div style="font-size:14px;font-weight:600">New Leads Over Time</div>
+                <div style="font-size:12px;color:#6b7280">12 weeks · WhatsApp, calls, referrals</div>
+              </div>
+              <svg viewBox="0 0 640 180" style="width:100%;height:180px;display:block" preserveAspectRatio="none">
+                <line x1="0" y1="45" x2="640" y2="45" stroke="#f1f3f6" stroke-width="1"></line>
+                <line x1="0" y1="90" x2="640" y2="90" stroke="#f1f3f6" stroke-width="1"></line>
+                <line x1="0" y1="135" x2="640" y2="135" stroke="#f1f3f6" stroke-width="1"></line>
+                <line x1="0" y1="179" x2="640" y2="179" stroke="#e5e7eb" stroke-width="1"></line>
+                <polyline points="{{linePts}}" fill="none" stroke="#2d5be3" stroke-width="2"></polyline>
+              </svg>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:#6b7280;margin-top:8px">
+                <span>W18</span><span>W21</span><span>W24</span><span>W27</span><span>W30</span>
+              </div>
+            </div>
+
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+              <div style="font-size:14px;font-weight:600;margin-bottom:16px">Service Type Split</div>
+              <div style="display:flex;align-items:center;gap:20px">
+                <svg viewBox="0 0 120 120" style="width:120px;height:120px;flex:0 0 120px">
+                  <circle cx="60" cy="60" r="46" fill="none" stroke="#f57f17" stroke-width="16"></circle>
+                  <circle cx="60" cy="60" r="46" fill="none" stroke="#2d5be3" stroke-width="16" stroke-dasharray="{{donutDash}}" transform="rotate(-90 60 60)"></circle>
+                  <text x="60" y="58" text-anchor="middle" font-size="20" font-weight="700" fill="#1a2332">96</text>
+                  <text x="60" y="74" text-anchor="middle" font-size="9" fill="#6b7280">CUSTOMERS</text>
+                </svg>
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:2px;background:#2d5be3"></span><span style="font-size:13px">CIF (full-service)</span></div>
+                    <div style="font-size:18px;font-weight:700;margin-top:2px;padding-left:18px">60 <span style="font-size:12px;font-weight:400;color:#6b7280">· 62%</span></div>
+                  </div>
+                  <div>
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:2px;background:#f57f17"></span><span style="font-size:13px">Freight-only</span></div>
+                    <div style="font-size:18px;font-weight:700;margin-top:2px;padding-left:18px">36 <span style="font-size:12px;font-weight:400;color:#6b7280">· 38%</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+              <div style="font-size:14px;font-weight:600;margin-bottom:16px">Lead Funnel</div>
+              <sc-for list="{{funnel}}" as="f" hint-placeholder-count="4">
+                <div style="margin-bottom:12px">
+                  <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px"><span>{{ f.label }}</span><span style="color:#6b7280">{{ f.n }} · {{ f.pct }}</span></div>
+                  <div style="height:8px;background:#f1f3f6;border-radius:4px;overflow:hidden"><div style="height:8px;background:#2d5be3;border-radius:4px;width:{{f.w}}%"></div></div>
+                </div>
+              </sc-for>
+              <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:4px;font-size:13px;color:#6b7280">Lead → Won conversion <strong style="color:#1a2332">18.0%</strong></div>
+            </div>
+
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+              <div style="font-size:14px;font-weight:600;margin-bottom:16px">Category Mix</div>
+              <sc-for list="{{catMix}}" as="c" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <div style="width:74px;font-size:13px;color:#6b7280">{{ c.label }}</div>
+                  <div style="flex:1 1 auto;height:8px;background:#f1f3f6;border-radius:4px;overflow:hidden"><div style="height:8px;background:#1a2332;border-radius:4px;width:{{c.w}}%"></div></div>
+                  <div style="width:24px;text-align:right;font-size:13px;font-weight:600">{{ c.n }}</div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+              <div style="font-size:14px;font-weight:600;margin-bottom:16px">Shipments by Status</div>
+              <sc-for list="{{shipStat}}" as="s" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <div style="width:78px"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{s.bg}};color:{{s.fg}}">{{ s.label }}</span></div>
+                  <div style="flex:1 1 auto;height:8px;background:#f1f3f6;border-radius:4px;overflow:hidden"><div style="height:8px;background:{{s.fg}};border-radius:4px;width:{{s.w}}%"></div></div>
+                  <div style="width:28px;text-align:right;font-size:13px;font-weight:600">{{ s.n }}</div>
+                </div>
+              </sc-for>
+              <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:4px;font-size:13px;color:#6b7280">2 shipments overdue on ETA</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showCustomers}}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+            <h1 style="font-size:20px;font-weight:700;margin:0">Customers</h1>
+            <button onClick="{{ goIntake }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">+ New Lead</button>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+            <div style="flex:1 1 220px;min-width:180px">
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Search</label>
+              <input value="{{fSearch}}" onChange="{{ setSearch }}" placeholder="Name, business, or number" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;transition:border-color .15s" style-focus="border-color:#2d5be3;outline:none" />
+            </div>
+            <div>
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Service Type</label>
+              <select value="{{fService}}" onChange="{{ setService }}" style="padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;min-width:150px">
+                <option>All service types</option><option>CIF</option><option>Freight-only</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Status</label>
+              <select value="{{fStatus}}" onChange="{{ setStatus }}" style="padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;min-width:130px">
+                <option>All statuses</option><option>NEW</option><option>QUALIFIED</option><option>ACTIVE</option><option>WON</option><option>LOST</option><option>DORMANT</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Category</label>
+              <select value="{{fCat}}" onChange="{{ setCat }}" style="padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;min-width:140px">
+                <option>All categories</option><option>Jewellery</option><option>Furniture</option><option>Stationery</option><option>Handbags</option><option>Electronics</option><option>Tools</option>
+              </select>
+            </div>
+            <div style="flex:1 1 auto"></div>
+            <button onClick="{{ clearFilters }}" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer;color:#1a2332">Clear</button>
+          </div>
+
+          <div style="display:flex;gap:16px;margin-bottom:12px;font-size:13px;color:#6b7280">
+            <span>{{ custCount }} customers</span><span>·</span><span>{{ custCif }} CIF</span><span>·</span><span>{{ custFreight }} freight-only</span>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+            <table>
+              <thead>
+                <tr>
+                  <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Customer</th>
+                  <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">WhatsApp</th>
+                  <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Service Type</th>
+                  <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Categories</th>
+                  <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Status</th>
+                  <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Owner</th>
+                  <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:right;border-bottom:1px solid #e5e7eb">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{customers}}" as="c" hint-placeholder-count="8">
+                  <tr style="background:#fff;transition:background .15s" style-hover="background:#f9fafb">
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb">
+                      <a href="#" onClick="{{ c.open }}" style="font-weight:600;color:#2d5be3">{{ c.business }}</a>
+                      <div style="font-size:12px;color:#6b7280;margin-top:2px">{{ c.name }} · {{ c.city }}</div>
+                    </td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ c.phone }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{c.svcBg}};color:{{c.svcFg}}">{{ c.svcLabel }}</span></td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ c.cats }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{c.stBg}};color:{{c.stFg}}">{{ c.status }}</span></td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ c.owner }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap">
+                      <button onClick="{{ c.dispatch }}" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:500;cursor:pointer;color:#1a2332;margin-right:6px" style-hover="background:#f8f9fb">Send Catalog</button>
+                      <button onClick="{{ c.open }}" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:500;cursor:pointer;color:#1a2332" style-hover="background:#f8f9fb">Open →</button>
+                    </td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+            <sc-if value="{{noCustomers}}" hint-placeholder-val="{{ false }}">
+              <div style="padding:48px 20px;text-align:center;color:#6b7280;font-size:13px">No customers match these filters. Clear the filters or add a lead manually.</div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showIntake}}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:880px">
+          <div style="margin-bottom:20px">
+            <a href="#" onClick="{{ goCustomers }}" style="font-size:13px;color:#6b7280">← Back to customers</a>
+            <h1 style="font-size:20px;font-weight:700;margin:6px 0 4px">New Lead Intake</h1>
+            <div style="font-size:13px;color:#6b7280">Log an enquiry that arrived over WhatsApp or a call. Service type drives which fields apply downstream.</div>
+          </div>
+
+          <sc-if value="{{dupWarn}}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:12px 16px;font-size:13px;color:#f57f17;margin-bottom:16px">
+              <strong>Possible duplicate.</strong> {{ dupWarn }} already exists with this WhatsApp number. Review before saving.
+            </div>
+          </sc-if>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px">
+            <div style="font-size:14px;font-weight:600;margin-bottom:16px">Contact</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+              <div>
+                <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Contact Name</label>
+                <input value="{{form.name}}" onChange="{{ setF.name }}" placeholder="e.g. Meena Shah" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;transition:border-color .15s" style-focus="border-color:#2d5be3;outline:none" />
+              </div>
+              <div>
+                <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Business Name</label>
+                <input value="{{form.business}}" onChange="{{ setF.business }}" placeholder="e.g. Meena Traders" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;transition:border-color .15s" style-focus="border-color:#2d5be3;outline:none" />
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:120px 1fr 1fr;gap:16px;margin-bottom:16px">
+              <div>
+                <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Country Code</label>
+                <select value="{{form.cc}}" onChange="{{ setF.cc }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff">
+                  <option>+91</option><option>+86</option><option>+971</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">WhatsApp / Phone <span style="color:#6b7280;font-weight:400">(used for click-to-chat)</span></label>
+                <input value="{{form.phone}}" onChange="{{ setF.phone }}" placeholder="98250 41122" style="width:100%;padding:9px 12px;border:1px solid {{phoneBorder}};border-radius:8px;font-size:14px;transition:border-color .15s" style-focus="border-color:#2d5be3;outline:none" />
+                <div style="font-size:12px;color:{{phoneMsgColor}};margin-top:5px">{{ phoneMsg }}</div>
+              </div>
+              <div>
+                <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Email <span style="color:#6b7280;font-weight:400">(optional)</span></label>
+                <input value="{{form.email}}" onChange="{{ setF.email }}" placeholder="name@company.in" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;transition:border-color .15s" style-focus="border-color:#2d5be3;outline:none" />
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+              <div>
+                <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">City / Region</label>
+                <input value="{{form.city}}" onChange="{{ setF.city }}" placeholder="e.g. Surat, Gujarat" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;transition:border-color .15s" style-focus="border-color:#2d5be3;outline:none" />
+              </div>
+              <div>
+                <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Source Channel</label>
+                <select value="{{form.source}}" onChange="{{ setF.source }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff">
+                  <option>WhatsApp</option><option>Call</option><option>Referral</option><option>Other</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px">
+            <div style="font-size:14px;font-weight:600;margin-bottom:6px">Service Type <span style="color:#e53935">*</span></div>
+            <div style="font-size:13px;color:#6b7280;margin-bottom:16px">Mandatory. Determines whether the platform tracks product cost and insurance, or freight only.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+              <div onClick="{{ pickCif }}" style="border:1px solid {{cifBorder}};border-radius:8px;padding:16px;cursor:pointer;background:{{cifBg}}">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                  <span style="width:14px;height:14px;border-radius:7px;border:1px solid {{cifBorder}};background:{{cifDot}};flex:0 0 14px"></span>
+                  <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#e3f2fd;color:#1565c0">CIF</span>
+                  <span style="font-size:14px;font-weight:600">Full-service</span>
+                </div>
+                <div style="font-size:13px;color:#6b7280">We source from our vendor roster and deliver landed goods. Platform holds product, vendor, pricing, insurance and landed cost.</div>
+              </div>
+              <div onClick="{{ pickFreight }}" style="border:1px solid {{frBorder}};border-radius:8px;padding:16px;cursor:pointer;background:{{frBg}}">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                  <span style="width:14px;height:14px;border-radius:7px;border:1px solid {{frBorder}};background:{{frDot}};flex:0 0 14px"></span>
+                  <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#fff3e0;color:#f57f17">FREIGHT-ONLY</span>
+                  <span style="font-size:14px;font-weight:600">Transport only</span>
+                </div>
+                <div style="font-size:13px;color:#6b7280">Customer already bought the goods elsewhere. Platform holds shipment details, external purchase reference and freight fee.</div>
+              </div>
+            </div>
+            <sc-if value="{{showExtRef}}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:16px;border-top:1px solid #e5e7eb;padding-top:16px">
+                <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">External Purchase Reference <span style="color:#6b7280;font-weight:400">(marketplace order ID, supplier name)</span></label>
+                <input value="{{form.extRef}}" onChange="{{ setF.extRef }}" placeholder="e.g. marketplace order 8842-119, Guangzhou supplier" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px" style-focus="border-color:#2d5be3;outline:none" />
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px">
+            <div style="font-size:14px;font-weight:600;margin-bottom:6px">Category Interest</div>
+            <div style="font-size:13px;color:#6b7280;margin-bottom:16px">Select one or more. Pulled from the category master — add or retire in Settings.</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+              <sc-for list="{{catChips}}" as="ch" hint-placeholder-count="6">
+                <div onClick="{{ ch.toggle }}" style="border:1px solid {{ch.border}};background:{{ch.bg}};color:{{ch.fg}};border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;transition:background .15s">{{ ch.mark }}{{ ch.label }}</div>
+              </sc-for>
+              <div onClick="{{ openOther }}" style="border:1px dashed {{otherBorder}};background:{{otherBg}};color:{{otherFg}};border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer">+ Other</div>
+            </div>
+            <sc-if value="{{otherOpen}}" hint-placeholder-val="{{ false }}">
+              <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:16px">
+                <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Other category <span style="color:#6b7280;font-weight:400">(added to the category master on save)</span></label>
+                <div style="display:flex;gap:8px">
+                  <input value="{{otherText}}" onChange="{{ setOtherText }}" placeholder="e.g. Home decor" style="flex:1 1 auto;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px" style-focus="border-color:#2d5be3;outline:none" />
+                  <button onClick="{{ addOther }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Add</button>
+                  <button onClick="{{ cancelOther }}" style="background:#fff;color:#1a2332;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Cancel</button>
+                </div>
+                <div style="font-size:12px;color:#6b7280;margin-top:8px">{{ otherHint }}</div>
+              </div>
+            </sc-if>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+              <div>
+                <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Assigned Owner</label>
+                <select value="{{form.owner}}" onChange="{{ setF.owner }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff">
+                  <option>Priya Sharma (Owner)</option><option>Rohit Menon (Sales)</option><option>Aditi Rane (Sales)</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Initial Status</label>
+                <select value="{{form.status}}" onChange="{{ setF.status }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff">
+                  <option>NEW</option><option>QUALIFIED</option>
+                </select>
+              </div>
+            </div>
+            <div style="margin-top:16px">
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Enquiry Notes</label>
+              <textarea value="{{form.notes}}" onChange="{{ setF.notes }}" rows="3" placeholder="e.g. Wants 500 pcs imitation jewellery sets, asked for Yiwu catalog and CIF price to Surat" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;resize:vertical" style-focus="border-color:#2d5be3;outline:none"></textarea>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:12px">
+            <button onClick="{{ saveLead }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Save Lead</button>
+            <button onClick="{{ saveAndDispatch }}" style="background:#fff;color:#1a2332;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Save & Send Catalog</button>
+            <div style="flex:1 1 auto"></div>
+            <div style="font-size:12px;color:#6b7280">{{ formMeta }}</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showCustDetail}}" hint-placeholder-val="{{ false }}">
+        <div>
+          <a href="#" onClick="{{ goCustomers }}" style="font-size:13px;color:#6b7280">← Back to customers</a>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin:6px 0 20px">
+            <div>
+              <h1 style="font-size:20px;font-weight:700;margin:0;display:flex;align-items:center;gap:10px">
+                {{ cust.business }}
+                <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{cust.svcBg}};color:{{cust.svcFg}}">{{ cust.svcLabel }}</span>
+                <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{cust.stBg}};color:{{cust.stFg}}">{{ cust.status }}</span>
+              </h1>
+              <div style="font-size:13px;color:#6b7280;margin-top:4px">{{ cust.name }} · {{ cust.city }} · {{ cust.phone }} · owner {{ cust.owner }}</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button onClick="{{ openDispatchCurrent }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Send Catalog via WhatsApp</button>
+              <button style="background:#fff;color:#1a2332;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Edit</button>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1.35fr;gap:16px">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+                <div style="font-size:14px;font-weight:600;margin-bottom:16px">Profile</div>
+                <sc-for list="{{cust.fields}}" as="f" hint-placeholder-count="7">
+                  <div style="display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:1px solid #f1f3f6;font-size:13px">
+                    <span style="color:#6b7280">{{ f.k }}</span><span style="font-weight:500;text-align:right">{{ f.v }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+                <div style="font-size:14px;font-weight:600;margin-bottom:16px">Catalog Dispatch Log</div>
+                <sc-for list="{{cust.dispatches}}" as="d" hint-placeholder-count="3">
+                  <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #f1f3f6">
+                    <span style="font-size:16px;flex:0 0 16px">📄</span>
+                    <div style="flex:1 1 auto;min-width:0">
+                      <div style="font-size:13px;font-weight:500">{{ d.file }}</div>
+                      <div style="font-size:12px;color:#6b7280;margin-top:2px">{{ d.meta }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+                <div style="font-size:12px;color:#6b7280;margin-top:12px">Phase 1 logs the dispatch when staff confirm the send. Delivery receipts arrive with the Business API in Phase 2.</div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                  <div style="font-size:14px;font-weight:600">Activity Timeline</div>
+                  <button onClick="{{ addNote }}" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:500;cursor:pointer">+ Add Note</button>
+                </div>
+                <sc-if value="{{noteOpen}}" hint-placeholder-val="{{ false }}">
+                  <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:16px">
+                    <textarea value="{{noteText}}" onChange="{{ setNote }}" rows="2" placeholder="What happened on the call?" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;resize:vertical;margin-bottom:10px"></textarea>
+                    <div style="display:flex;gap:8px">
+                      <button onClick="{{ saveNote }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:500;cursor:pointer">Save Note</button>
+                      <button onClick="{{ cancelNote }}" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:500;cursor:pointer">Cancel</button>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-for list="{{cust.timeline}}" as="t" hint-placeholder-count="6">
+                  <div style="display:flex;gap:12px;padding-bottom:16px">
+                    <div style="flex:0 0 8px;display:flex;flex-direction:column;align-items:center">
+                      <span style="width:8px;height:8px;border-radius:4px;background:{{t.dot}};margin-top:5px"></span>
+                      <span style="flex:1 1 auto;width:1px;background:#e5e7eb;margin-top:4px"></span>
+                    </div>
+                    <div style="flex:1 1 auto;min-width:0">
+                      <div style="display:flex;justify-content:space-between;gap:12px">
+                        <span style="font-size:13px;font-weight:600">{{ t.title }}</span>
+                        <span style="font-size:12px;color:#6b7280;white-space:nowrap">{{ t.when }}</span>
+                      </div>
+                      <div style="font-size:13px;color:#6b7280;margin-top:3px">{{ t.body }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+                <div style="font-size:14px;font-weight:600;margin-bottom:16px">Shipments</div>
+                <table>
+                  <thead><tr>
+                    <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:left;border-bottom:1px solid #e5e7eb">Ref</th>
+                    <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:left;border-bottom:1px solid #e5e7eb">Dispatched</th>
+                    <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:left;border-bottom:1px solid #e5e7eb">Status</th>
+                    <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:right;border-bottom:1px solid #e5e7eb">Value</th>
+                  </tr></thead>
+                  <tbody>
+                    <sc-for list="{{cust.shipments}}" as="s" hint-placeholder-count="2">
+                      <tr style-hover="background:#f9fafb">
+                        <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb"><a href="#" onClick="{{ s.open }}">{{ s.ref }}</a></td>
+                        <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ s.date }}</td>
+                        <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{s.bg}};color:{{s.fg}}">{{ s.status }}</span></td>
+                        <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb;text-align:right"><strong>{{ s.value }}</strong></td>
+                      </tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showVendors}}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+            <h1 style="font-size:20px;font-weight:700;margin:0">Vendors</h1>
+            <button style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">+ Add Vendor</button>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+            <div style="flex:1 1 220px">
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Search</label>
+              <input value="{{vSearch}}" onChange="{{ setVSearch }}" placeholder="Vendor or contact name" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px" style-focus="border-color:#2d5be3;outline:none" />
+            </div>
+            <div>
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Category</label>
+              <select value="{{vCat}}" onChange="{{ setVCat }}" style="padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;min-width:150px">
+                <option>All categories</option><option>Jewellery</option><option>Furniture</option><option>Stationery</option><option>Handbags</option><option>Electronics</option><option>Tools</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Status</label>
+              <select value="{{vStatus}}" onChange="{{ setVStatus }}" style="padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;min-width:140px">
+                <option>All statuses</option><option>ACTIVE</option><option>ON-HOLD</option><option>INACTIVE</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+            <table>
+              <thead><tr>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Vendor</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Region</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Categories</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">MOQ / Lead Time</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Catalogs</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Status</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:right;border-bottom:1px solid #e5e7eb">Actions</th>
+              </tr></thead>
+              <tbody>
+                <sc-for list="{{vendors}}" as="v" hint-placeholder-count="8">
+                  <tr style-hover="background:#f9fafb">
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb">
+                      <a href="#" onClick="{{ v.open }}" style="font-weight:600">{{ v.name }}</a>
+                      <div style="font-size:12px;color:#6b7280;margin-top:2px">{{ v.contact }} · {{ v.phone }}</div>
+                    </td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ v.region }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ v.cats }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ v.terms }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb">{{ v.catalogs }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{v.bg}};color:{{v.fg}}">{{ v.status }}</span></td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;text-align:right"><button onClick="{{ v.open }}" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:500;cursor:pointer">Open →</button></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showVendorDetail}}" hint-placeholder-val="{{ false }}">
+        <div>
+          <a href="#" onClick="{{ goVendors }}" style="font-size:13px;color:#6b7280">← Back to vendors</a>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin:6px 0 20px">
+            <div>
+              <h1 style="font-size:20px;font-weight:700;margin:0;display:flex;align-items:center;gap:10px">{{ vend.name }}
+                <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{vend.bg}};color:{{vend.fg}}">{{ vend.status }}</span>
+              </h1>
+              <div style="font-size:13px;color:#6b7280;margin-top:4px">{{ vend.contact }} · {{ vend.region }} · {{ vend.phone }} · {{ vend.cats }}</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button onClick="{{ openUpload }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">+ Upload Catalog PDF</button>
+              <button onClick="{{ openVendorEdit }}" style="background:#fff;color:#1a2332;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Edit Vendor</button>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:16px">
+            <sc-for list="{{vend.stats}}" as="s" hint-placeholder-count="4">
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+                <div style="font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">{{ s.label }}</div>
+                <div style="font-size:28px;font-weight:700;margin-top:8px">{{ s.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-size:14px;font-weight:600;margin-bottom:12px">Catalog Sections</div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <sc-for list="{{vend.sections}}" as="sec" hint-placeholder-count="3">
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px">
+                  <div>
+                    <div style="font-size:14px;font-weight:600">{{ sec.title }}</div>
+                    <div style="font-size:12px;color:#6b7280;margin-top:3px">{{ sec.meta }}</div>
+                  </div>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <sc-for list="{{sec.tags}}" as="t" hint-placeholder-count="2">
+                      <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#f1f3f6;color:#6b7280">{{ t }}</span>
+                    </sc-for>
+                  </div>
+                </div>
+                <table>
+                  <thead><tr>
+                    <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:left;border-bottom:1px solid #e5e7eb">Document</th>
+                    <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:left;border-bottom:1px solid #e5e7eb">Version</th>
+                    <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:left;border-bottom:1px solid #e5e7eb">Size</th>
+                    <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:left;border-bottom:1px solid #e5e7eb">Uploaded</th>
+                    <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:right;border-bottom:1px solid #e5e7eb">Actions</th>
+                  </tr></thead>
+                  <tbody>
+                    <sc-for list="{{sec.docs}}" as="d" hint-placeholder-count="2">
+                      <tr style-hover="background:#f9fafb">
+                        <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb;color:{{d.nameColor}}">📄 {{ d.file }}</td>
+                        <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{d.vBg}};color:{{d.vFg}}">{{ d.version }}</span></td>
+                        <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ d.size }}</td>
+                        <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ d.uploaded }}</td>
+                        <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap">
+                          <button style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:500;cursor:pointer;margin-right:6px">Preview</button>
+                          <button onClick="{{ d.send }}" title="Send via WhatsApp" aria-label="Send via WhatsApp" style="width:30px;height:30px;background:#2e7d32;color:#fff;border:1px solid #2e7d32;border-radius:15px;font-size:13px;cursor:pointer;padding:0;vertical-align:middle;transition:background .15s" style-hover="background:#256428">➤</button>
+                        </td>
+                      </tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showCatalogs}}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+            <div>
+              <h1 style="font-size:20px;font-weight:700;margin:0">Catalogs</h1>
+              <div style="font-size:13px;color:#6b7280;margin-top:4px">Every vendor catalog section across the roster. Pick a PDF and dispatch it to a customer.</div>
+            </div>
+            <button onClick="{{ openUpload }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">+ Upload Catalog PDF</button>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+            <div style="flex:1 1 220px">
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Search</label>
+              <input value="{{cSearch}}" onChange="{{ setCSearch }}" placeholder="Catalog title or vendor" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px" style-focus="border-color:#2d5be3;outline:none" />
+            </div>
+            <div>
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Category</label>
+              <select value="{{cCat}}" onChange="{{ setCCat }}" style="padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;min-width:150px">
+                <option>All categories</option><option>Jewellery</option><option>Furniture</option><option>Stationery</option><option>Handbags</option><option>Electronics</option><option>Tools</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">
+            <sc-for list="{{catalogCards}}" as="k" hint-placeholder-count="6">
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px">
+                <div style="height:140px;border:1px solid #e5e7eb;border-radius:8px;background:#f1f3f6;overflow:hidden">
+                  <img src="{{ k.coverImg }}" alt="{{ k.category }} catalog cover" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" />
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+                  <div>
+                    <div style="font-size:14px;font-weight:600">{{ k.title }}</div>
+                    <div style="font-size:12px;color:#6b7280;margin-top:3px">{{ k.vendor }} · {{ k.category }}</div>
+                  </div>
+                  <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#e3f2fd;color:#1565c0;white-space:nowrap">{{ k.docCount }}</span>
+                </div>
+                <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;display:flex;align-items:center;gap:10px">
+                  <span style="font-size:18px">📄</span>
+                  <div style="flex:1 1 auto;min-width:0">
+                    <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ k.latestFile }}</div>
+                    <div style="font-size:12px;color:#6b7280">{{ k.latestMeta }}</div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button onClick="{{ k.send }}" title="Send via WhatsApp" aria-label="Send via WhatsApp" style="width:38px;height:38px;flex:0 0 38px;background:#2e7d32;color:#fff;border:1px solid #2e7d32;border-radius:19px;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .15s" style-hover="background:#256428">➤</button>
+                  <button style="flex:1 1 auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Preview</button>
+                  <button onClick="{{ k.edit }}" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Edit</button>
+                </div>
+                <div style="font-size:12px;color:#6b7280;border-top:1px solid #f1f3f6;padding-top:10px;margin-top:auto">{{ k.sentMeta }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showInventory}}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+            <h1 style="font-size:20px;font-weight:700;margin:0">Inventory</h1>
+            <div style="display:flex;gap:8px">
+              <button style="background:#fff;color:#1a2332;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">+ Record Inbound Stock</button>
+              <button onClick="{{ goShipments }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">+ Record Shipment</button>
+            </div>
+          </div>
+
+          <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:12px 16px;font-size:13px;color:#f57f17;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+            <strong>3 items below reorder threshold.</strong> Ballpoint Pen Bulk Pack is oversold by 40 units — an outbound shipment took on-hand negative.
+            <div style="flex:1 1 auto"></div>
+            <span onClick="{{ filterLowStock }}" style="cursor:pointer;text-decoration:underline;white-space:nowrap">Show only low stock</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:16px">
+            <sc-for list="{{invStats}}" as="s" hint-placeholder-count="4">
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+                <div style="font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">{{ s.label }}</div>
+                <div style="font-size:28px;font-weight:700;margin-top:8px;color:{{s.color}}">{{ s.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+            <div style="flex:1 1 200px">
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Search</label>
+              <input value="{{iSearch}}" onChange="{{ setISearch }}" placeholder="Item or SKU" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px" style-focus="border-color:#2d5be3;outline:none" />
+            </div>
+            <div>
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Category</label>
+              <select value="{{iCat}}" onChange="{{ setICat }}" style="padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;min-width:150px">
+                <option>All categories</option><option>Jewellery</option><option>Furniture</option><option>Stationery</option><option>Handbags</option><option>Electronics</option><option>Tools</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Stock Level</label>
+              <select value="{{iLevel}}" onChange="{{ setILevel }}" style="padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;min-width:160px">
+                <option>All stock levels</option><option>Low or negative</option><option>Healthy</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+            <table>
+              <thead><tr>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Item</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Category</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Source Vendor</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:right;border-bottom:1px solid #e5e7eb">On Hand</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:right;border-bottom:1px solid #e5e7eb">Reorder At</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Level</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:right;border-bottom:1px solid #e5e7eb">Stock Value</th>
+              </tr></thead>
+              <tbody>
+                <sc-for list="{{inventory}}" as="i" hint-placeholder-count="9">
+                  <tr style="background:{{i.rowBg}}" style-hover="background:#f9fafb">
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb">
+                      <div style="font-weight:500">{{ i.name }}</div>
+                      <div style="font-size:12px;color:#6b7280;margin-top:2px">{{ i.sku }} · per {{ i.unit }}</div>
+                    </td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ i.category }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ i.vendor }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;text-align:right"><strong style="color:{{i.qtyColor}}">{{ i.qty }}</strong></td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;text-align:right;color:#6b7280">{{ i.reorder }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <div style="width:40px;height:6px;border-radius:3px;background:#e5e7eb;overflow:hidden"><div style="height:6px;border-radius:3px;background:{{i.barColor}};width:{{i.barW}}%"></div></div>
+                        <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{i.bg}};color:{{i.fg}}">{{ i.level }}</span>
+                      </div>
+                    </td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;text-align:right"><strong>{{ i.value }}</strong></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showShipments}}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+            <h1 style="font-size:20px;font-weight:700;margin:0">Shipments</h1>
+            <button style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">+ Record Outbound Shipment</button>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+            <sc-for list="{{shipTabs}}" as="t" hint-placeholder-count="5">
+              <div onClick="{{ t.pick }}" style="border:1px solid {{t.border}};background:{{t.bg}};color:{{t.fg}};border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s">{{ t.label }} <span style="color:#6b7280">{{ t.n }}</span></div>
+            </sc-for>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+            <table>
+              <thead><tr>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Ref</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Customer</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Service Type</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Stock Impact</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Destination</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Dispatched</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:left;border-bottom:1px solid #e5e7eb">Status</th>
+                <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 16px;text-align:right;border-bottom:1px solid #e5e7eb">Value</th>
+              </tr></thead>
+              <tbody>
+                <sc-for list="{{shipments}}" as="s" hint-placeholder-count="7">
+                  <tr style-hover="background:#f9fafb">
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb"><a href="#" onClick="{{ s.open }}" style="font-weight:600">{{ s.ref }}</a></td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb">{{ s.customer }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{s.svcBg}};color:{{s.svcFg}}">{{ s.svcLabel }}</span></td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ s.stockImpact }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ s.destination }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280">{{ s.date }}</td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{s.bg}};color:{{s.fg}}">{{ s.status }}</span></td>
+                    <td style="font-size:14px;padding:12px 16px;border-bottom:1px solid #e5e7eb;text-align:right"><strong>{{ s.value }}</strong></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showShipDetail}}" hint-placeholder-val="{{ false }}">
+        <div>
+          <a href="#" onClick="{{ goShipments }}" style="font-size:13px;color:#6b7280">← Back to shipments</a>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin:6px 0 20px">
+            <div>
+              <h1 style="font-size:20px;font-weight:700;margin:0;display:flex;align-items:center;gap:10px">{{ ship.ref }}
+                <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{ship.svcBg}};color:{{ship.svcFg}}">{{ ship.svcLabel }}</span>
+                <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{ship.bg}};color:{{ship.fg}}">{{ ship.status }}</span>
+              </h1>
+              <div style="font-size:13px;color:#6b7280;margin-top:4px">{{ ship.customer }} · {{ ship.destination }} · dispatched {{ ship.date }}</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button onClick="{{ advanceStatus }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">{{ ship.nextAction }}</button>
+              <button style="background:#fff;color:#1a2332;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Attach Document</button>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px">
+            <div style="display:flex;align-items:flex-start">
+              <sc-for list="{{ship.steps}}" as="st" hint-placeholder-count="4">
+                <div style="flex:1 1 0;min-width:0">
+                  <div style="display:flex;align-items:center">
+                    <span style="width:22px;height:22px;flex:0 0 22px;border-radius:11px;background:{{st.dotBg}};color:{{st.dotFg}};border:1px solid {{st.dotBorder}};font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ st.mark }}</span>
+                    <span style="flex:1 1 auto;height:2px;background:{{st.lineColor}}"></span>
+                  </div>
+                  <div style="font-size:13px;font-weight:600;margin-top:8px;color:{{st.labelColor}}">{{ st.label }}</div>
+                  <div style="font-size:12px;color:#6b7280;margin-top:2px">{{ st.when }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px">
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+              <div style="font-size:14px;font-weight:600;margin-bottom:16px">Shipment Lines</div>
+              <table>
+                <thead><tr>
+                  <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:left;border-bottom:1px solid #e5e7eb">Item</th>
+                  <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:right;border-bottom:1px solid #e5e7eb">Qty</th>
+                  <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:right;border-bottom:1px solid #e5e7eb">Unit Cost</th>
+                  <th style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;background:#f8f9fb;padding:10px 12px;text-align:right;border-bottom:1px solid #e5e7eb">Line Total</th>
+                </tr></thead>
+                <tbody>
+                  <sc-for list="{{ship.lines}}" as="l" hint-placeholder-count="3">
+                    <tr style-hover="background:#f9fafb">
+                      <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb">
+                        <div style="font-weight:500">{{ l.name }}</div>
+                        <div style="font-size:12px;color:#6b7280;margin-top:2px">{{ l.meta }}</div>
+                      </td>
+                      <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb;text-align:right">{{ l.qty }}</td>
+                      <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#6b7280">{{ l.unit }}</td>
+                      <td style="font-size:14px;padding:12px;border-bottom:1px solid #e5e7eb;text-align:right"><strong>{{ l.total }}</strong></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+              <div style="display:flex;justify-content:flex-end;gap:32px;padding-top:16px;font-size:14px">
+                <span style="color:#6b7280">Freight & handling <strong style="color:#1a2332">{{ ship.freight }}</strong></span>
+                <span style="color:#6b7280">Shipment value <strong style="color:#1a2332;font-size:16px">{{ ship.value }}</strong></span>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+                <div style="font-size:14px;font-weight:600;margin-bottom:16px">Details</div>
+                <sc-for list="{{ship.fields}}" as="f" hint-placeholder-count="6">
+                  <div style="display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:1px solid #f1f3f6;font-size:13px">
+                    <span style="color:#6b7280">{{ f.k }}</span><span style="font-weight:500;text-align:right">{{ f.v }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+                <div style="font-size:14px;font-weight:600;margin-bottom:16px">Reference Documents</div>
+                <sc-for list="{{ship.docs}}" as="d" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f1f3f6">
+                    <span style="font-size:16px">📄</span>
+                    <div style="flex:1 1 auto;min-width:0"><div style="font-size:13px;font-weight:500">{{ d.file }}</div><div style="font-size:12px;color:#6b7280">{{ d.meta }}</div></div>
+                    <span style="font-size:13px;color:#2d5be3;cursor:pointer">Open</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showMobile}}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="margin-bottom:20px">
+            <h1 style="font-size:20px;font-weight:700;margin:0">Mobile Views</h1>
+            <div style="font-size:13px;color:#6b7280;margin-top:4px">The two tasks staff do from a phone while WhatsApp is open: log an enquiry and dispatch a catalog.</div>
+          </div>
+          <div style="display:flex;gap:32px;flex-wrap:wrap">
+
+            <div>
+              <div style="font-size:13px;font-weight:600;margin-bottom:10px">Lead intake — 390px</div>
+              <div style="width:390px;height:760px;border:1px solid #e5e7eb;border-radius:24px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.08);overflow:hidden;display:flex;flex-direction:column">
+                <div style="height:34px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:12px;font-weight:600;color:#1a2332;flex:0 0 34px"><span>9:41</span><span>▬ ▲ ▮</span></div>
+                <div style="height:52px;flex:0 0 52px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:12px;padding:0 16px">
+                  <span style="font-size:18px;color:#6b7280">☰</span>
+                  <span style="font-size:15px;font-weight:600">New Lead</span>
+                  <div style="flex:1 1 auto"></div>
+                  <span style="font-size:13px;color:#6b7280">Cancel</span>
+                </div>
+                <div style="flex:1 1 auto;overflow-y:auto;padding:16px;background:#f8f9fb">
+                  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:12px">
+                    <div style="font-size:13px;font-weight:500;margin-bottom:6px">Contact Name</div>
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:11px 12px;font-size:14px;margin-bottom:14px">Kiran Deshmukh</div>
+                    <div style="font-size:13px;font-weight:500;margin-bottom:6px">Business Name</div>
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:11px 12px;font-size:14px;margin-bottom:14px">Kiran Imports</div>
+                    <div style="font-size:13px;font-weight:500;margin-bottom:6px">WhatsApp</div>
+                    <div style="display:flex;gap:8px">
+                      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:11px 12px;font-size:14px;flex:0 0 68px">+91</div>
+                      <div style="border:1px solid #2d5be3;border-radius:8px;padding:11px 12px;font-size:14px;flex:1 1 auto">98220 77315</div>
+                    </div>
+                  </div>
+                  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:12px">
+                    <div style="font-size:13px;font-weight:500;margin-bottom:10px">Service Type <span style="color:#e53935">*</span></div>
+                    <div style="border:1px solid #2d5be3;background:#f5f8ff;border-radius:8px;padding:12px;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+                      <span style="width:14px;height:14px;border-radius:7px;border:4px solid #2d5be3;flex:0 0 14px"></span>
+                      <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#e3f2fd;color:#1565c0">CIF</span>
+                      <span style="font-size:14px;font-weight:600">Full-service</span>
+                    </div>
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;display:flex;align-items:center;gap:8px">
+                      <span style="width:14px;height:14px;border-radius:7px;border:1px solid #e5e7eb;flex:0 0 14px"></span>
+                      <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#fff3e0;color:#f57f17">FREIGHT-ONLY</span>
+                      <span style="font-size:14px;font-weight:600">Transport only</span>
+                    </div>
+                  </div>
+                  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:12px">
+                    <div style="font-size:13px;font-weight:500;margin-bottom:10px">Category Interest</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px">
+                      <span style="border:1px solid #2d5be3;background:#f5f8ff;color:#2d5be3;border-radius:8px;padding:8px 12px;font-size:13px">✓ Handbags</span>
+                      <span style="border:1px solid #2d5be3;background:#f5f8ff;color:#2d5be3;border-radius:8px;padding:8px 12px;font-size:13px">✓ Jewellery</span>
+                      <span style="border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;font-size:13px;color:#6b7280">Tools</span>
+                      <span style="border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;font-size:13px;color:#6b7280">Electronics</span>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:0 0 auto;border-top:1px solid #e5e7eb;background:#fff;padding:12px 16px;display:flex;gap:8px">
+                  <button style="flex:1 1 auto;background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:12px;font-size:15px;font-weight:500">Save Lead</button>
+                  <button style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;font-size:15px;font-weight:500">Send</button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size:13px;font-weight:600;margin-bottom:10px">Catalog dispatch — 390px</div>
+              <div style="width:390px;height:760px;border:1px solid #e5e7eb;border-radius:24px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.08);overflow:hidden;display:flex;flex-direction:column">
+                <div style="height:34px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:12px;font-weight:600;flex:0 0 34px"><span>9:44</span><span>▬ ▲ ▮</span></div>
+                <div style="height:52px;flex:0 0 52px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:12px;padding:0 16px">
+                  <span style="font-size:16px;color:#6b7280">←</span>
+                  <span style="font-size:15px;font-weight:600">Send Catalog</span>
+                </div>
+                <div style="flex:1 1 auto;overflow-y:auto;padding:16px;background:#f8f9fb">
+                  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:12px">
+                    <div style="font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">To</div>
+                    <div style="font-size:15px;font-weight:600">Meena Traders</div>
+                    <div style="font-size:13px;color:#6b7280;margin-top:2px">Meena Shah · +91 98250 41122</div>
+                    <div style="margin-top:8px"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#e3f2fd;color:#1565c0">CIF</span></div>
+                  </div>
+                  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:12px">
+                    <div style="font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Catalog</div>
+                    <div style="display:flex;gap:10px;align-items:center;border:1px solid #e5e7eb;border-radius:8px;padding:12px">
+                      <span style="font-size:20px">📄</span>
+                      <div style="flex:1 1 auto;min-width:0">
+                        <div style="font-size:13px;font-weight:500">yiwu-jewel-craft-aw26-v3.pdf</div>
+                        <div style="font-size:12px;color:#6b7280">v3 · 8.4 MB · Yiwu Jewel Craft</div>
+                      </div>
+                    </div>
+                    <button style="width:100%;margin-top:10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:11px;font-size:14px;font-weight:500">1 · Download PDF</button>
+                  </div>
+                  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:12px">
+                    <div style="font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Message</div>
+                    <div style="background:#dbeafe;border-radius:10px;padding:8px 12px;font-size:13px;max-width:85%;margin-left:auto">Hi Meena, sharing the Yiwu Jewel Craft AW26 catalog. CIF pricing to Surat on request.</div>
+                    <button style="width:100%;margin-top:12px;background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:12px;font-size:15px;font-weight:500">2 · Open WhatsApp ↗</button>
+                    <div style="font-size:12px;color:#6b7280;margin-top:8px">Chat opens pre-addressed with this text. Attach the downloaded PDF and send.</div>
+                  </div>
+                </div>
+                <div style="flex:0 0 auto;border-top:1px solid #e5e7eb;background:#fff;padding:12px 16px">
+                  <button style="width:100%;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;font-size:15px;font-weight:500">3 · Mark as Sent</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+
+  <sc-if value="{{waOpen}}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;padding:64px 24px;overflow-y:auto;z-index:50">
+      <div style="background:#fff;border-radius:8px;padding:24px;width:100%;max-width:720px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+          <div>
+            <div style="font-size:18px;font-weight:600">Send Catalog via WhatsApp</div>
+            <div style="font-size:13px;color:#6b7280;margin-top:4px">Click-to-chat cannot attach a file. Download the PDF, then open the chat and attach it.</div>
+          </div>
+          <div onClick="{{ closeWa }}" style="font-size:16px;color:#6b7280;cursor:pointer;padding:0 4px">✕</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px">
+            <div style="font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Recipient</div>
+            <select value="{{waCustomer}}" onChange="{{ setWaCustomer }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;margin-bottom:10px">
+              <option>Meena Traders</option>
+              <option>Anand Bags House</option>
+              <option>Suresh Electronics</option>
+              <option>Nova Furnishings</option>
+              <option>Gupta Stationers</option>
+              <option>Sri Balaji Hardware</option>
+              <option>Kiran Imports</option>
+              <option>Dhanraj Jewels</option>
+              <option>Metro Office Supplies</option>
+              <option>Vertex Gadgets</option>
+            </select>
+            <div style="font-size:13px;color:#6b7280">{{ waPhone }}</div>
+            <div style="margin-top:8px"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:{{waSvcBg}};color:{{waSvcFg}}">{{ waSvcLabel }}</span></div>
+          </div>
+          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px">
+            <div style="font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Catalog PDF</div>
+            <select value="{{waCatalog}}" onChange="{{ setWaCatalog }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;margin-bottom:10px">
+              <option>Yiwu Jewel Craft — Jewellery — AW26 Catalog</option>
+              <option>Yiwu Jewel Craft — Bridal Sets — 2026</option>
+              <option>Shenzhen Boyu — Electronics — Q3 Catalog</option>
+              <option>Foshan Mingde — Furniture — Living Range</option>
+              <option>Yiwu Sunrise — Stationery — School 2026-27</option>
+              <option>Guangzhou Leather — Handbags — Premium PU</option>
+              <option>Ningbo Tools — Hand Tools — 2026</option>
+            </select>
+            <div style="display:flex;align-items:center;gap:10px;border:1px solid #e5e7eb;border-radius:8px;padding:10px">
+              <span style="font-size:18px">📄</span>
+              <div style="flex:1 1 auto;min-width:0"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ waFile }}</div><div style="font-size:12px;color:#6b7280">{{ waFileMeta }}</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Pre-filled Message</div>
+            <div style="font-size:12px;color:#6b7280">Template: Catalog share (default)</div>
+          </div>
+          <textarea value="{{waMsg}}" onChange="{{ setWaMsg }}" rows="3" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;resize:vertical;margin-bottom:12px" style-focus="border-color:#2d5be3;outline:none"></textarea>
+          <div style="background:#f8f9fb;border-radius:8px;padding:12px">
+            <div style="font-size:11px;color:#6b7280;margin-bottom:6px">PREVIEW</div>
+            <div style="background:#dbeafe;border-radius:10px;padding:8px 12px;font-size:13px;max-width:80%;margin-left:auto">{{ waMsg }}</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
+          <div onClick="{{ waStep1 }}" style="border:1px solid {{waS1.border}};background:{{waS1.bg}};border-radius:8px;padding:14px;cursor:pointer">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:20px;height:20px;border-radius:10px;background:{{waS1.dotBg}};color:{{waS1.dotFg}};font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ waS1.mark }}</span><span style="font-size:13px;font-weight:600">Download PDF</span></div>
+            <div style="font-size:12px;color:#6b7280">Saves to this device so it can be attached.</div>
+          </div>
+          <div onClick="{{ waStep2 }}" style="border:1px solid {{waS2.border}};background:{{waS2.bg}};border-radius:8px;padding:14px;cursor:pointer">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:20px;height:20px;border-radius:10px;background:{{waS2.dotBg}};color:{{waS2.dotFg}};font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ waS2.mark }}</span><span style="font-size:13px;font-weight:600">Open WhatsApp ↗</span></div>
+            <div style="font-size:12px;color:#6b7280">wa.me deep link, pre-addressed and pre-filled.</div>
+          </div>
+          <div onClick="{{ waStep3 }}" style="border:1px solid {{waS3.border}};background:{{waS3.bg}};border-radius:8px;padding:14px;cursor:pointer">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:20px;height:20px;border-radius:10px;background:{{waS3.dotBg}};color:{{waS3.dotFg}};font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ waS3.mark }}</span><span style="font-size:13px;font-weight:600">Attach & send in chat</span></div>
+            <div style="font-size:12px;color:#6b7280">Manual in Phase 1. Automated with the Business API.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;border-top:1px solid #e5e7eb;padding-top:16px">
+          <div style="font-size:12px;color:#6b7280;flex:1 1 auto">{{ waStatus }}</div>
+          <button onClick="{{ closeWa }}" style="background:#fff;color:#1a2332;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Cancel</button>
+          <button onClick="{{ logDispatch }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Log Dispatch</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{uploadOpen}}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;padding:80px 24px;z-index:50">
+      <div style="background:#fff;border-radius:8px;padding:24px;width:100%;max-width:560px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <div style="font-size:18px;font-weight:600">{{ uploadTitle }}</div>
+          <div onClick="{{ closeUpload }}" style="font-size:16px;color:#6b7280;cursor:pointer">✕</div>
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Catalog Section</label>
+          <select value="{{upSection}}" onChange="{{ setUpSection }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff">
+            <option>Yiwu Jewel Craft — Jewellery — AW26 Catalog</option>
+            <option>Yiwu Jewel Craft — Bridal Sets — 2026</option>
+            <option>Shenzhen Boyu — Electronics — Q3 Catalog</option>
+            <option>Foshan Mingde — Furniture — Living Range</option>
+            <option>Yiwu Sunrise — Stationery — School 2026-27</option>
+            <option>Guangzhou Leather — Handbags — Premium PU</option>
+            <option>Ningbo Tools — Hand Tools — 2026</option>
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Vendor <span style="color:#6b7280;font-weight:400">(optional — editable later)</span></label>
+            <select value="{{upVendor}}" onChange="{{ setUpVendor }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff">
+              <option>Unassigned</option>
+              <option>Yiwu Jewel Craft Co.</option>
+              <option>Guangzhou Leather Works</option>
+              <option>Shenzhen Boyu Electronics</option>
+              <option>Foshan Mingde Furniture</option>
+              <option>Yiwu Sunrise Trading</option>
+              <option>Ningbo Tools &amp; Hardware</option>
+              <option>Dongguan Cases Mfg.</option>
+              <option>Shantou Paper Works</option>
+            </select>
+            <div style="font-size:12px;color:#6b7280;margin-top:5px">{{ upVendorHint }}</div>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Category</label>
+            <select value="{{upCategory}}" onChange="{{ setUpCategory }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff">
+              <option>Jewellery</option><option>Furniture</option><option>Stationery</option><option>Handbags</option><option>Electronics</option><option>Tools</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:20px;text-align:center">
+            <div style="font-size:22px">📄</div>
+            <div style="font-size:14px;font-weight:500;margin-top:8px">Drop a PDF here or browse</div>
+            <div style="font-size:12px;color:#6b7280;margin-top:4px">PDF only · maximum 25 MB</div>
+          </div>
+          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:20px;text-align:center">
+            <div style="height:44px;border-radius:8px;background:#f1f3f6;display:flex;align-items:center;justify-content:center;margin-bottom:8px">
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:#6b7280">catalog cover image</span>
+            </div>
+            <div style="font-size:14px;font-weight:500">Drop a cover image or browse</div>
+            <div style="font-size:12px;color:#6b7280;margin-top:4px">JPG or PNG · optional · shown on the catalog card</div>
+          </div>
+        </div>
+        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <span style="font-size:18px">📄</span>
+          <div style="flex:1 1 auto;min-width:0">
+            <div style="font-size:13px;font-weight:500">yiwu-jewel-craft-aw26.pdf</div>
+            <div style="font-size:12px;color:#6b7280">8.4 MB · will be saved as v4 · supersedes v3</div>
+          </div>
+          <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#e8f5e9;color:#2e7d32">READY</span>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onClick="{{ closeUpload }}" style="background:#fff;color:#1a2332;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Cancel</button>
+          <button onClick="{{ saveUpload }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">{{ uploadCta }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{vendorEditOpen}}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;padding:64px 24px;overflow-y:auto;z-index:50">
+      <div style="background:#fff;border-radius:8px;padding:24px;width:100%;max-width:720px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+          <div>
+            <div style="font-size:18px;font-weight:600">Edit Vendor</div>
+            <div style="font-size:13px;color:#6b7280;margin-top:4px">Changes are attributed to {{ userName }} and time-stamped in the audit trail.</div>
+          </div>
+          <div onClick="{{ closeVendorEdit }}" style="font-size:16px;color:#6b7280;cursor:pointer;padding:0 4px">✕</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Vendor Name</label>
+            <input value="{{vf.name}}" onChange="{{ setVF.name }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px" style-focus="border-color:#2d5be3;outline:none" />
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Contact Person</label>
+            <input value="{{vf.contact}}" onChange="{{ setVF.contact }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px" style-focus="border-color:#2d5be3;outline:none" />
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Phone / WhatsApp</label>
+            <input value="{{vf.phone}}" onChange="{{ setVF.phone }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px" style-focus="border-color:#2d5be3;outline:none" />
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Region <span style="color:#6b7280;font-weight:400">(city, province)</span></label>
+            <input value="{{vf.region}}" onChange="{{ setVF.region }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px" style-focus="border-color:#2d5be3;outline:none" />
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Product Categories</label>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{vendorCatChips}}" as="ch" hint-placeholder-count="6">
+              <div onClick="{{ ch.toggle }}" style="border:1px solid {{ch.border}};background:{{ch.bg}};color:{{ch.fg}};border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer">{{ ch.mark }}{{ ch.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Status</label>
+            <select value="{{vf.status}}" onChange="{{ setVF.status }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff">
+              <option>ACTIVE</option><option>ON-HOLD</option><option>INACTIVE</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">MOQ</label>
+            <input value="{{vf.moq}}" onChange="{{ setVF.moq }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px" style-focus="border-color:#2d5be3;outline:none" />
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Lead Time</label>
+            <input value="{{vf.lead}}" onChange="{{ setVF.lead }}" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px" style-focus="border-color:#2d5be3;outline:none" />
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;border-top:1px solid #e5e7eb;padding-top:16px">
+          <div style="font-size:12px;color:#6b7280;flex:1 1 auto">{{ vendorEditMeta }}</div>
+          <button onClick="{{ closeVendorEdit }}" style="background:#fff;color:#1a2332;border:1px solid #e5e7eb;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Cancel</button>
+          <button onClick="{{ saveVendor }}" style="background:#2d5be3;color:#fff;border:1px solid #2d5be3;border-radius:8px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer">Save Vendor</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{paletteOpen}}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closePalette }}" style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;padding:96px 24px;z-index:60">
+      <div style="background:#fff;border-radius:8px;width:100%;max-width:560px;box-shadow:0 8px 32px rgba(0,0,0,.2);overflow:hidden">
+        <input value="{{pQuery}}" onChange="{{ setPQuery }}" autofocus="{{ true }}" placeholder="Jump to a customer, vendor, catalog, or screen" style="width:100%;border:none;border-bottom:1px solid #e5e7eb;padding:16px;font-size:15px;outline:none" />
+        <div style="max-height:340px;overflow-y:auto">
+          <sc-for list="{{paletteResults}}" as="r" hint-placeholder-count="6">
+            <div onClick="{{ r.go }}" style="display:flex;align-items:center;gap:12px;padding:11px 16px;cursor:pointer;border-bottom:1px solid #f1f3f6" style-hover="background:#f9fafb">
+              <span style="font-size:15px;flex:0 0 16px">{{ r.icon }}</span>
+              <div style="flex:1 1 auto;min-width:0"><div style="font-size:14px;font-weight:500">{{ r.label }}</div><div style="font-size:12px;color:#6b7280">{{ r.sub }}</div></div>
+              <span style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">{{ r.kind }}</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{noPaletteResults}}" hint-placeholder-val="{{ false }}">
+            <div style="padding:32px;text-align:center;font-size:13px;color:#6b7280">No matches.</div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dash&quot;,&quot;customers&quot;,&quot;intake&quot;,&quot;custdetail&quot;,&quot;vendors&quot;,&quot;vendordetail&quot;,&quot;catalogs&quot;,&quot;inventory&quot;,&quot;shipments&quot;,&quot;shipdetail&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;customers&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;sidebarCollapsed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;signedInAs&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Jane Doe&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;}}">
+const SVC = {
+  CIF: { label: 'CIF', bg: '#e3f2fd', fg: '#1565c0' },
+  'Freight-only': { label: 'FREIGHT-ONLY', bg: '#fff3e0', fg: '#f57f17' }
+};
+const ST = {
+  NEW: { bg: '#e5e7eb', fg: '#374151' },
+  QUALIFIED: { bg: '#e3f2fd', fg: '#1565c0' },
+  ACTIVE: { bg: '#e8f5e9', fg: '#2e7d32' },
+  WON: { bg: '#e8f5e9', fg: '#2e7d32' },
+  LOST: { bg: '#ffebee', fg: '#e53935' },
+  DORMANT: { bg: '#e5e7eb', fg: '#6b7280' },
+  'ON-HOLD': { bg: '#fff3e0', fg: '#f57f17' },
+  INACTIVE: { bg: '#e5e7eb', fg: '#6b7280' },
+  PACKED: { bg: '#e5e7eb', fg: '#374151' },
+  DISPATCHED: { bg: '#e3f2fd', fg: '#1565c0' },
+  'IN TRANSIT': { bg: '#fff3e0', fg: '#f57f17' },
+  DELIVERED: { bg: '#e8f5e9', fg: '#2e7d32' }
+};
+const CATS = ['Jewellery', 'Furniture', 'Stationery', 'Handbags', 'Electronics', 'Tools'];
+
+const CUSTOMERS = [
+  { id: 1, name: 'Meena Shah', business: 'Meena Traders', city: 'Surat', phone: '+91 98250 41122', svc: 'CIF', cats: ['Jewellery'], status: 'ACTIVE', owner: 'Priya Sharma', since: '11 Feb 2026', source: 'WhatsApp' },
+  { id: 2, name: 'Anand Kulkarni', business: 'Anand Bags House', city: 'Pune', phone: '+91 98600 23417', svc: 'Freight-only', cats: ['Handbags'], status: 'QUALIFIED', owner: 'Rohit Menon', since: '02 Jun 2026', source: 'Referral' },
+  { id: 3, name: 'Suresh Iyer', business: 'Suresh Electronics', city: 'Coimbatore', phone: '+91 94430 78810', svc: 'CIF', cats: ['Electronics', 'Tools'], status: 'ACTIVE', owner: 'Priya Sharma', since: '19 Nov 2025', source: 'WhatsApp' },
+  { id: 4, name: 'Farhan Qureshi', business: 'Nova Furnishings', city: 'Mumbai', phone: '+91 98190 55204', svc: 'Freight-only', cats: ['Furniture'], status: 'NEW', owner: 'Aditi Rane', since: '21 Jul 2026', source: 'WhatsApp' },
+  { id: 5, name: 'Vinod Gupta', business: 'Gupta Stationers', city: 'Delhi', phone: '+91 98110 60093', svc: 'CIF', cats: ['Stationery'], status: 'WON', owner: 'Rohit Menon', since: '08 Jan 2026', source: 'Call' },
+  { id: 6, name: 'Lakshmi Narayanan', business: 'Sri Balaji Hardware', city: 'Chennai', phone: '+91 90030 11748', svc: 'CIF', cats: ['Tools'], status: 'NEW', owner: 'Aditi Rane', since: '23 Jul 2026', source: 'Call' },
+  { id: 7, name: 'Kiran Deshmukh', business: 'Kiran Imports', city: 'Nagpur', phone: '+91 98220 77315', svc: 'Freight-only', cats: ['Handbags', 'Jewellery'], status: 'ACTIVE', owner: 'Priya Sharma', since: '30 Mar 2026', source: 'WhatsApp' },
+  { id: 8, name: 'Dhanraj Soni', business: 'Dhanraj Jewels', city: 'Jaipur', phone: '+91 94140 32286', svc: 'CIF', cats: ['Jewellery'], status: 'DORMANT', owner: 'Rohit Menon', since: '14 Aug 2025', source: 'Referral' },
+  { id: 9, name: 'Aslam Shaikh', business: 'Metro Office Supplies', city: 'Hyderabad', phone: '+91 99490 84471', svc: 'Freight-only', cats: ['Stationery'], status: 'LOST', owner: 'Aditi Rane', since: '05 May 2026', source: 'Other' },
+  { id: 10, name: 'Neha Bansal', business: 'Vertex Gadgets', city: 'Bengaluru', phone: '+91 98450 29903', svc: 'CIF', cats: ['Electronics'], status: 'QUALIFIED', owner: 'Priya Sharma', since: '16 Jul 2026', source: 'WhatsApp' }
+];
+
+const VENDORS = [
+  { id: 1, name: 'Yiwu Jewel Craft Co.', contact: 'Li Wen', phone: '+86 137 5829 4410', region: 'Yiwu, Zhejiang', cats: ['Jewellery'], status: 'ACTIVE', moq: '300 sets', lead: '18 days', catalogs: 3, rating: '4.6' },
+  { id: 2, name: 'Guangzhou Leather Works', contact: 'Chen Hui', phone: '+86 138 2201 7783', region: 'Guangzhou, Guangdong', cats: ['Handbags'], status: 'ACTIVE', moq: '200 pcs', lead: '22 days', catalogs: 2, rating: '4.4' },
+  { id: 3, name: 'Shenzhen Boyu Electronics', contact: 'Zhang Ming', phone: '+86 139 0304 6612', region: 'Shenzhen, Guangdong', cats: ['Electronics'], status: 'ACTIVE', moq: '100 units', lead: '25 days', catalogs: 4, rating: '4.1' },
+  { id: 4, name: 'Foshan Mingde Furniture', contact: 'Wu Jie', phone: '+86 136 7719 2205', region: 'Foshan, Guangdong', cats: ['Furniture'], status: 'ACTIVE', moq: '1 x 20ft FCL', lead: '35 days', catalogs: 2, rating: '4.8' },
+  { id: 5, name: 'Yiwu Sunrise Trading', contact: 'Xu Fang', phone: '+86 135 8890 5514', region: 'Yiwu, Zhejiang', cats: ['Stationery', 'Handbags'], status: 'ACTIVE', moq: '500 pcs', lead: '15 days', catalogs: 3, rating: '4.2' },
+  { id: 6, name: 'Ningbo Tools & Hardware', contact: 'Gao Lei', phone: '+86 137 4402 8836', region: 'Ningbo, Zhejiang', cats: ['Tools'], status: 'ON-HOLD', moq: '250 kg', lead: '28 days', catalogs: 1, rating: '3.7' },
+  { id: 7, name: 'Dongguan Cases Mfg.', contact: 'Huang Rui', phone: '+86 138 6605 3391', region: 'Dongguan, Guangdong', cats: ['Handbags'], status: 'ACTIVE', moq: '400 pcs', lead: '20 days', catalogs: 1, rating: '4.0' },
+  { id: 8, name: 'Shantou Paper Works', contact: 'Lin Yu', phone: '+86 139 8812 4470', region: 'Shantou, Guangdong', cats: ['Stationery'], status: 'INACTIVE', moq: '1000 pcs', lead: '30 days', catalogs: 1, rating: '3.4' }
+];
+
+const SECTIONS = [
+  { id: 1, vendorId: 1, vendor: 'Yiwu Jewel Craft Co.', title: 'Yiwu Jewel Craft — Jewellery — AW26 Catalog', category: 'Jewellery', tags: ['NEW ARRIVALS'], docs: [
+    { file: 'yiwu-jewel-craft-aw26-v3.pdf', version: 'v3 · LATEST', size: '8.4 MB', uploaded: '14 Jul 2026 · Priya S.' },
+    { file: 'yiwu-jewel-craft-aw26-v2.pdf', version: 'v2', size: '8.1 MB', uploaded: '02 Jun 2026 · Priya S.' }
+  ], sent: 'Sent to 14 customers · last 18 Jul 2026' },
+  { id: 2, vendorId: 1, vendor: 'Yiwu Jewel Craft Co.', title: 'Yiwu Jewel Craft — Bridal Sets — 2026', category: 'Jewellery', tags: ['BEST SELLERS'], docs: [
+    { file: 'yjc-bridal-sets-2026-v1.pdf', version: 'v1 · LATEST', size: '12.2 MB', uploaded: '28 Apr 2026 · Rohit M.' }
+  ], sent: 'Sent to 9 customers · last 09 Jul 2026' },
+  { id: 3, vendorId: 3, vendor: 'Shenzhen Boyu Electronics', title: 'Shenzhen Boyu — Electronics — Q3 Catalog', category: 'Electronics', tags: ['NEW ARRIVALS'], docs: [
+    { file: 'boyu-electronics-q3-2026-v2.pdf', version: 'v2 · LATEST', size: '15.7 MB', uploaded: '09 Jul 2026 · Aditi R.' },
+    { file: 'boyu-electronics-q3-2026-v1.pdf', version: 'v1', size: '15.1 MB', uploaded: '27 Jun 2026 · Aditi R.' }
+  ], sent: 'Sent to 21 customers · last 22 Jul 2026' },
+  { id: 4, vendorId: 4, vendor: 'Foshan Mingde Furniture', title: 'Foshan Mingde — Furniture — Living Range', category: 'Furniture', tags: [], docs: [
+    { file: 'mingde-living-range-v4.pdf', version: 'v4 · LATEST', size: '22.8 MB', uploaded: '03 Jul 2026 · Priya S.' }
+  ], sent: 'Sent to 6 customers · last 12 Jul 2026' },
+  { id: 5, vendorId: 5, vendor: 'Yiwu Sunrise Trading', title: 'Yiwu Sunrise — Stationery — School 2026-27', category: 'Stationery', tags: ['BEST SELLERS'], docs: [
+    { file: 'sunrise-stationery-school-2627-v2.pdf', version: 'v2 · LATEST', size: '6.3 MB', uploaded: '21 Jun 2026 · Rohit M.' }
+  ], sent: 'Sent to 18 customers · last 20 Jul 2026' },
+  { id: 6, vendorId: 2, vendor: 'Guangzhou Leather Works', title: 'Guangzhou Leather — Handbags — Premium PU', category: 'Handbags', tags: [], docs: [
+    { file: 'gz-leather-premium-pu-v1.pdf', version: 'v1 · LATEST', size: '9.9 MB', uploaded: '30 May 2026 · Aditi R.' }
+  ], sent: 'Sent to 11 customers · last 15 Jul 2026' },
+  { id: 7, vendorId: 6, vendor: 'Ningbo Tools & Hardware', title: 'Ningbo Tools — Hand Tools — 2026', category: 'Tools', tags: [], docs: [
+    { file: 'ningbo-hand-tools-2026-v1.pdf', version: 'v1 · LATEST', size: '4.7 MB', uploaded: '16 Mar 2026 · Priya S.' }
+  ], sent: 'Sent to 4 customers · last 02 Jun 2026' }
+];
+
+// Placeholder cover photos per category — swap for real vendor product shots before client delivery.
+const CATEGORY_IMG = {
+  Jewellery: 'https://loremflickr.com/400/300/jewellery,gold?lock=11',
+  Electronics: 'https://loremflickr.com/400/300/electronics,gadgets?lock=22',
+  Furniture: 'https://loremflickr.com/400/300/furniture,sofa?lock=33',
+  Stationery: 'https://loremflickr.com/400/300/stationery,notebook?lock=44',
+  Handbags: 'https://loremflickr.com/400/300/handbag,leather?lock=55',
+  Tools: 'https://loremflickr.com/400/300/tools,hardware?lock=66',
+  Default: 'https://loremflickr.com/400/300/warehouse,shipping?lock=77'
+};
+
+const INVENTORY = [
+  { name: 'Imitation Kundan Set (Gold Tone)', sku: 'JWL-KUN-118', category: 'Jewellery', vendor: 'Yiwu Jewel Craft Co.', unit: 'set', qty: 1840, reorder: 600, value: '₹9,20,000' },
+  { name: 'Bluetooth Earbuds TWS-9', sku: 'ELE-TWS-009', category: 'Electronics', vendor: 'Shenzhen Boyu Electronics', qtyRaw: 0, unit: 'unit', qty: 260, reorder: 400, value: '₹3,64,000' },
+  { name: 'PU Tote Bag 14in', sku: 'HBG-TOT-441', category: 'Handbags', vendor: 'Guangzhou Leather Works', unit: 'pc', qty: 980, reorder: 300, value: '₹4,41,000' },
+  { name: 'Ballpoint Pen Bulk Pack (50s)', sku: 'STN-BPP-050', category: 'Stationery', vendor: 'Yiwu Sunrise Trading', unit: 'pack', qty: -40, reorder: 200, value: '₹0' },
+  { name: 'Fabric 3-Seater Sofa', sku: 'FUR-SOF-207', category: 'Furniture', vendor: 'Foshan Mingde Furniture', unit: 'pc', qty: 34, reorder: 10, value: '₹8,84,000' },
+  { name: 'Adjustable Wrench 10in', sku: 'TLS-WRN-310', category: 'Tools', vendor: 'Ningbo Tools & Hardware', unit: 'pc', qty: 145, reorder: 200, value: '₹1,01,500' },
+  { name: 'Spiral Notebook A5 (200pg)', sku: 'STN-NBK-205', category: 'Stationery', vendor: 'Yiwu Sunrise Trading', unit: 'pc', qty: 4200, reorder: 1000, value: '₹5,04,000' },
+  { name: 'Anti-Theft Backpack', sku: 'HBG-BPK-072', category: 'Handbags', vendor: 'Dongguan Cases Mfg.', unit: 'pc', qty: 612, reorder: 250, value: '₹3,67,200' },
+  { name: 'USB-C Fast Charger 33W', sku: 'ELE-CHG-033', category: 'Electronics', vendor: 'Shenzhen Boyu Electronics', unit: 'unit', qty: 1520, reorder: 500, value: '₹5,32,000' }
+];
+
+const SHIPMENTS = [
+  { ref: 'SHP-2607-014', customer: 'Meena Traders', svc: 'CIF', destination: 'Surat, Gujarat', date: '22 Jul 2026', status: 'IN TRANSIT', value: '₹6,42,000', freight: '₹48,000', mode: 'Sea LCL · Nhava Sheva', awb: 'BL SNKO4471192', eta: '04 Aug 2026' },
+  { ref: 'SHP-2607-013', customer: 'Suresh Electronics', svc: 'CIF', destination: 'Coimbatore, Tamil Nadu', date: '21 Jul 2026', status: 'DISPATCHED', value: '₹3,18,400', freight: '₹27,500', mode: 'Air · Chennai', awb: 'AWB 618-44029183', eta: '28 Jul 2026' },
+  { ref: 'SHP-2607-012', customer: 'Kiran Imports', svc: 'Freight-only', destination: 'Nagpur, Maharashtra', date: '20 Jul 2026', status: 'IN TRANSIT', value: '₹64,500', freight: '₹64,500', mode: 'Sea LCL · Nhava Sheva', awb: 'BL SNKO4470884', eta: '06 Aug 2026' },
+  { ref: 'SHP-2607-011', customer: 'Gupta Stationers', svc: 'CIF', destination: 'Delhi NCR', date: '18 Jul 2026', status: 'DELIVERED', value: '₹2,86,000', freight: '₹31,200', mode: 'Sea LCL · Mundra', awb: 'BL MUNL9920334', eta: '17 Jul 2026' },
+  { ref: 'SHP-2607-010', customer: 'Anand Bags House', svc: 'Freight-only', destination: 'Pune, Maharashtra', date: '17 Jul 2026', status: 'PACKED', value: '₹41,800', freight: '₹41,800', mode: 'Sea LCL · Nhava Sheva', awb: 'pending', eta: '09 Aug 2026' },
+  { ref: 'SHP-2607-009', customer: 'Vertex Gadgets', svc: 'CIF', destination: 'Bengaluru, Karnataka', date: '15 Jul 2026', status: 'DELIVERED', value: '₹5,74,600', freight: '₹52,000', mode: 'Air · Bengaluru', awb: 'AWB 618-44018827', eta: '19 Jul 2026' },
+  { ref: 'SHP-2607-008', customer: 'Nova Furnishings', svc: 'Freight-only', destination: 'Mumbai, Maharashtra', date: '12 Jul 2026', status: 'DELIVERED', value: '₹1,12,300', freight: '₹1,12,300', mode: 'Sea FCL · Nhava Sheva', awb: 'BL SNKO4469120', eta: '11 Jul 2026' }
+];
+
+const LEAD_SERIES = [9, 12, 8, 15, 14, 11, 18, 16, 21, 19, 24, 18];
+
+class Component extends DCLogic {
+  state = {
+    screen: null, sbOpen: null, loading: false, dateRange: 'Last 30 days',
+    fSearch: '', fService: 'All service types', fStatus: 'All statuses', fCat: 'All categories',
+    vSearch: '', vCat: 'All categories', vStatus: 'All statuses',
+    cSearch: '', cCat: 'All categories',
+    iSearch: '', iCat: 'All categories', iLevel: 'All stock levels',
+    shipTab: 'All',
+    custId: 1, vendorId: 1, shipRef: 'SHP-2607-014',
+    noteOpen: false, noteText: '', extraNotes: {},
+    waOpen: false, waCustomer: 'Meena Traders', waCatalog: SECTIONS[0].title, waMsg: '', waSteps: { 1: false, 2: false, 3: false },
+    uploadOpen: false, paletteOpen: false, pQuery: '',
+    customCats: [], otherOpen: false, otherText: '',
+    vendorEdits: {}, vendorEditOpen: false, vf: null,
+    upMode: 'upload', upSection: SECTIONS[0].title, upVendor: 'Yiwu Jewel Craft Co.', upCategory: 'Jewellery',
+    dispatchLog: {}, shipStatusOverride: {},
+    form: { name: '', business: '', cc: '+91', phone: '', email: '', city: '', source: 'WhatsApp', svc: 'CIF', cats: [], owner: 'Priya Sharma (Owner)', status: 'NEW', notes: '', extRef: '' }
+  };
+
+  componentDidMount() {
+    this._key = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.setState({ paletteOpen: true, pQuery: '' }); }
+      if (e.key === 'Escape') this.setState({ paletteOpen: false, waOpen: false, uploadOpen: false });
+    };
+    window.addEventListener('keydown', this._key);
+  }
+  componentWillUnmount() { window.removeEventListener('keydown', this._key); }
+
+  go(screen) { this.setState({ screen, loading: false }); }
+
+  vList() { return VENDORS.map(v => Object.assign({}, v, this.state.vendorEdits[v.id] || {})); }
+  vendorOf(id) { return this.vList().find(v => v.id === id) || this.vList()[0]; }
+  allCats() { return CATS.concat(this.state.customCats); }
+
+  svcOf(svc) { const s = SVC[svc]; return { svcLabel: s.label, svcBg: s.bg, svcFg: s.fg }; }
+  stOf(status) { const s = ST[status] || ST.NEW; return { stBg: s.bg, stFg: s.fg, bg: s.bg, fg: s.fg }; }
+
+  waMessage() {
+    const c = CUSTOMERS.find(x => x.business === this.state.waCustomer) || CUSTOMERS[0];
+    const sec = SECTIONS.find(s => s.title === this.state.waCatalog) || SECTIONS[0];
+    if (this.state.waMsg) return this.state.waMsg;
+    const first = c.name.split(' ')[0];
+    const short = sec.title.split(' — ').slice(0, 2).join(' ');
+    const tail = c.svc === 'CIF' ? 'CIF pricing to ' + c.city + ' on request.' : 'Freight quote to ' + c.city + ' on request.';
+    return 'Hi ' + first + ', sharing the ' + short + ' catalog. ' + tail;
+  }
+
+  openWa(customerBusiness, catalogTitle) {
+    this.setState({ waOpen: true, waCustomer: customerBusiness || this.state.waCustomer, waCatalog: catalogTitle || this.state.waCatalog, waMsg: '', waSteps: { 1: false, 2: false, 3: false } });
+  }
+
+  filteredCustomers() {
+    const s = this.state;
+    const q = s.fSearch.trim().toLowerCase();
+    return CUSTOMERS.filter(c => {
+      if (q && !(c.name + ' ' + c.business + ' ' + c.phone).toLowerCase().includes(q)) return false;
+      if (s.fService !== 'All service types' && c.svc !== s.fService) return false;
+      if (s.fStatus !== 'All statuses' && c.status !== s.fStatus) return false;
+      if (s.fCat !== 'All categories' && !c.cats.includes(s.fCat)) return false;
+      return true;
+    });
+  }
+
+  invRows() {
+    const s = this.state;
+    const q = s.iSearch.trim().toLowerCase();
+    return INVENTORY.filter(i => {
+      if (q && !(i.name + ' ' + i.sku).toLowerCase().includes(q)) return false;
+      if (s.iCat !== 'All categories' && i.category !== s.iCat) return false;
+      const low = i.qty < i.reorder;
+      if (s.iLevel === 'Low or negative' && !low) return false;
+      if (s.iLevel === 'Healthy' && low) return false;
+      return true;
+    }).map(i => {
+      const neg = i.qty < 0, low = i.qty >= 0 && i.qty < i.reorder;
+      const level = neg ? 'NEGATIVE' : low ? 'LOW' : 'HEALTHY';
+      const col = neg ? { bg: '#ffebee', fg: '#e53935' } : low ? { bg: '#fff3e0', fg: '#f57f17' } : { bg: '#e8f5e9', fg: '#2e7d32' };
+      const ratio = Math.max(0, Math.min(100, Math.round((i.qty / (i.reorder * 2.5)) * 100)));
+      return Object.assign({}, i, {
+        level, bg: col.bg, fg: col.fg, barColor: col.fg, barW: neg ? 100 : ratio,
+        qtyColor: neg ? '#e53935' : low ? '#f57f17' : '#1a2332',
+        rowBg: neg ? '#fff8f8' : '#fff',
+        qty: i.qty.toLocaleString('en-IN')
+      });
+    });
+  }
+
+  currentShip() {
+    const s = SHIPMENTS.find(x => x.ref === this.state.shipRef) || SHIPMENTS[0];
+    const status = this.state.shipStatusOverride[s.ref] || s.status;
+    return Object.assign({}, s, { status });
+  }
+
+  renderVals() {
+    const s = Object.assign({}, this.state, {
+      screen: this.state.screen || this.props.startScreen || 'dash',
+      sbOpen: this.state.sbOpen === null ? !this.props.sidebarCollapsed : this.state.sbOpen
+    });
+    const self = this;
+    const labelDisp = s.sbOpen ? 'block' : 'none';
+
+    const navDef = [
+      { label: 'MAIN', items: [{ id: 'dash', icon: '📊', label: 'Dashboard' }] },
+      { label: 'CRM', items: [
+        { id: 'customers', icon: '👥', label: 'Customers' },
+        { id: 'intake', icon: '📝', label: 'New Lead Intake' }
+      ] },
+      { label: 'SOURCING', items: [
+        { id: 'vendors', icon: '🏭', label: 'Vendors' },
+        { id: 'catalogs', icon: '📚', label: 'Catalogs' }
+      ] },
+      { label: 'OPERATIONS', items: [
+        { id: 'inventory', icon: '📦', label: 'Inventory' },
+        { id: 'shipments', icon: '🚚', label: 'Shipments' }
+      ] },
+      { label: 'REFERENCE', items: [{ id: 'mobile', icon: '📱', label: 'Mobile Views' }] }
+    ];
+    const activeMap = { custdetail: 'customers', vendordetail: 'vendors', shipdetail: 'shipments' };
+    const activeId = activeMap[s.screen] || s.screen;
+    const navGroups = navDef.map(g => ({
+      label: g.label,
+      items: g.items.map(it => ({
+        icon: it.icon, label: it.label,
+        bg: it.id === activeId ? '#2d5be3' : 'transparent',
+        hoverBg: it.id === activeId ? '#2d5be3' : '#243044',
+        fg: it.id === activeId ? '#fff' : 'rgba(255,255,255,.75)',
+        go: () => self.go(it.id)
+      }))
+    }));
+
+    const titles = { dash: 'Dashboard', customers: 'Customers', intake: 'New Lead Intake', custdetail: 'Customer', vendors: 'Vendors', vendordetail: 'Vendor', catalogs: 'Catalogs', inventory: 'Inventory', shipments: 'Shipments', shipdetail: 'Shipment', mobile: 'Mobile Views' };
+
+    // dashboard
+    const maxLead = Math.max.apply(null, LEAD_SERIES);
+    const lineDots = LEAD_SERIES.map((v, i) => ({ x: Math.round((i / (LEAD_SERIES.length - 1)) * 630) + 5, y: Math.round(175 - (v / maxLead) * 155) }));
+    const funnelRaw = [{ label: 'New', n: 128 }, { label: 'Qualified', n: 74 }, { label: 'Active', n: 41 }, { label: 'Won', n: 23 }];
+    const catMixRaw = [{ label: 'Electronics', n: 41 }, { label: 'Jewellery', n: 34 }, { label: 'Handbags', n: 26 }, { label: 'Furniture', n: 18 }, { label: 'Tools', n: 15 }, { label: 'Stationery', n: 12 }];
+    const shipStatRaw = [{ label: 'PACKED', n: 6 }, { label: 'DISPATCHED', n: 9 }, { label: 'IN TRANSIT', n: 14 }, { label: 'DELIVERED', n: 132 }];
+    const circ = 2 * Math.PI * 46;
+
+    const cust = CUSTOMERS.find(c => c.id === s.custId) || CUSTOMERS[0];
+    const logged = s.dispatchLog[cust.business] || [];
+    const custShipments = SHIPMENTS.filter(x => x.customer === cust.business).map(x => Object.assign({ open: () => self.setState({ screen: 'shipdetail', shipRef: x.ref }) }, x, self.stOf(self.state.shipStatusOverride[x.ref] || x.status), { status: self.state.shipStatusOverride[x.ref] || x.status }));
+    const baseTimeline = [
+      { title: 'Catalog dispatched', body: SECTIONS[0].docs[0].file + ' sent over WhatsApp by Priya Sharma', when: '18 Jul 2026 · 14:22', dot: '#2d5be3' },
+      { title: 'Note added', body: 'Asked for CIF price on 500 kundan sets to Surat. Wants sea LCL, not air.', when: '17 Jul 2026 · 11:05', dot: '#6b7280' },
+      { title: 'Status changed', body: 'QUALIFIED → ACTIVE by Priya Sharma', when: '02 Jun 2026 · 09:40', dot: '#2e7d32' },
+      { title: 'Shipment recorded', body: 'SHP-2607-014 · 4 lines · ₹6,42,000', when: '22 Jul 2026 · 16:10', dot: '#f57f17' },
+      { title: 'Enquiry captured', body: 'Inbound WhatsApp enquiry — jewellery, CIF. Logged by Priya Sharma.', when: '11 Feb 2026 · 10:18', dot: '#6b7280' }
+    ];
+    const extraNotes = (s.extraNotes[cust.id] || []).map(t => ({ title: 'Note added', body: t, when: 'Just now · Priya Sharma', dot: '#6b7280' }));
+
+    const vend = this.vendorOf(s.vendorId);
+    const vendSections = SECTIONS.filter(x => x.vendorId === vend.id);
+
+    const ship = this.currentShip();
+    const order = ['PACKED', 'DISPATCHED', 'IN TRANSIT', 'DELIVERED'];
+    const idx = order.indexOf(ship.status);
+    const stepWhen = ['21 Jul 2026', '22 Jul 2026', '23 Jul 2026', ship.eta + ' (ETA)'];
+    const steps = order.map((label, i) => ({
+      label: label === 'IN TRANSIT' ? 'In Transit' : label.charAt(0) + label.slice(1).toLowerCase(),
+      mark: i < idx ? '✓' : i === idx ? '●' : String(i + 1),
+      when: i <= idx ? stepWhen[i] : '—',
+      dotBg: i <= idx ? '#2d5be3' : '#fff', dotFg: i <= idx ? '#fff' : '#6b7280',
+      dotBorder: i <= idx ? '#2d5be3' : '#e5e7eb',
+      lineColor: i < idx ? '#2d5be3' : '#e5e7eb',
+      labelColor: i <= idx ? '#1a2332' : '#6b7280'
+    }));
+    const shipLines = ship.svc === 'CIF' ? [
+      { name: 'Imitation Kundan Set (Gold Tone)', meta: 'JWL-KUN-118 · Yiwu Jewel Craft Co.', qty: '500', unit: '₹500.00', total: '₹2,50,000' },
+      { name: 'Bridal Necklace Set (Ruby Tone)', meta: 'JWL-BRD-042 · Yiwu Jewel Craft Co.', qty: '180', unit: '₹1,420.00', total: '₹2,55,600' },
+      { name: 'Jhumka Pair Assorted', meta: 'JWL-JHU-091 · Yiwu Jewel Craft Co.', qty: '620', unit: '₹142.00', total: '₹88,040' }
+    ] : [
+      { name: 'Customer-owned goods — 3 cartons', meta: 'External purchase · no stock decrement', qty: '3', unit: '—', total: '—' }
+    ];
+
+    const paletteItems = [].concat(
+      CUSTOMERS.map(c => ({ icon: '👥', label: c.business, sub: c.name + ' · ' + c.city + ' · ' + c.svc, kind: 'Customer', go: () => self.setState({ screen: 'custdetail', custId: c.id, paletteOpen: false }) })),
+      this.vList().map(v => ({ icon: '🏭', label: v.name, sub: v.region + ' · ' + v.cats.join(', '), kind: 'Vendor', go: () => self.setState({ screen: 'vendordetail', vendorId: v.id, paletteOpen: false }) })),
+      SECTIONS.map(k => ({ icon: '📚', label: k.title, sub: k.docs[0].file, kind: 'Catalog', go: () => self.setState({ screen: 'catalogs', paletteOpen: false }) })),
+      SHIPMENTS.map(x => ({ icon: '🚚', label: x.ref, sub: x.customer + ' · ' + x.destination, kind: 'Shipment', go: () => self.setState({ screen: 'shipdetail', shipRef: x.ref, paletteOpen: false }) })),
+      [{ icon: '📊', label: 'Dashboard', sub: 'Leads, service split, shipments', kind: 'Screen', go: () => self.setState({ screen: 'dash', paletteOpen: false }) },
+       { icon: '📝', label: 'New Lead Intake', sub: 'Log a WhatsApp or phone enquiry', kind: 'Screen', go: () => self.setState({ screen: 'intake', paletteOpen: false }) }]
+    );
+    const pq = s.pQuery.trim().toLowerCase();
+    const paletteResults = (pq ? paletteItems.filter(i => (i.label + ' ' + i.sub).toLowerCase().includes(pq)) : paletteItems).slice(0, 8);
+
+    const dup = CUSTOMERS.find(c => c.phone.replace(/\D/g, '').endsWith(s.form.phone.replace(/\D/g, '')) && s.form.phone.replace(/\D/g, '').length >= 8);
+    const phoneDigits = s.form.phone.replace(/\D/g, '');
+    const phoneOk = phoneDigits.length === 10;
+
+    const shipTabs = ['All', 'PACKED', 'DISPATCHED', 'IN TRANSIT', 'DELIVERED'].map(t => {
+      const n = t === 'All' ? SHIPMENTS.length : SHIPMENTS.filter(x => (s.shipStatusOverride[x.ref] || x.status) === t).length;
+      const on = s.shipTab === t;
+      return { label: t === 'All' ? 'All shipments' : t, n: n, pick: () => self.setState({ shipTab: t }), border: on ? '#2d5be3' : '#e5e7eb', bg: on ? '#f5f8ff' : '#fff', fg: on ? '#2d5be3' : '#1a2332' };
+    });
+
+    const waCust = CUSTOMERS.find(c => c.business === s.waCustomer) || CUSTOMERS[0];
+    const waSec = SECTIONS.find(x => x.title === s.waCatalog) || SECTIONS[0];
+    const stepStyle = (n, mark) => ({ mark: s.waSteps[n] ? '✓' : mark, border: s.waSteps[n] ? '#2d5be3' : '#e5e7eb', bg: s.waSteps[n] ? '#f5f8ff' : '#fff', dotBg: s.waSteps[n] ? '#2d5be3' : '#f1f3f6', dotFg: s.waSteps[n] ? '#fff' : '#6b7280' });
+    const doneCount = [1, 2, 3].filter(n => s.waSteps[n]).length;
+
+    return {
+      sbW: s.sbOpen ? 220 : 64, labelDisp, navGroups, collapseLabel: s.sbOpen ? '« Collapse' : '»',
+      toggleSb: () => this.setState({ sbOpen: !s.sbOpen }),
+      pageTitle: titles[s.screen], loading: s.loading,
+      userName: this.props.signedInAs || 'Priya Sharma',
+      userInitials: (this.props.signedInAs || 'Priya Sharma').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+      refresh: () => { this.setState({ loading: true }); setTimeout(() => this.setState({ loading: false }), 800); },
+      openPalette: () => this.setState({ paletteOpen: true, pQuery: '' }),
+      closePalette: () => this.setState({ paletteOpen: false }),
+      paletteOpen: s.paletteOpen, pQuery: s.pQuery, setPQuery: e => this.setState({ pQuery: e.target.value }),
+      paletteResults, noPaletteResults: paletteResults.length === 0,
+
+      showDash: s.screen === 'dash' && !s.loading,
+      showCustomers: s.screen === 'customers' && !s.loading,
+      showIntake: s.screen === 'intake' && !s.loading,
+      showCustDetail: s.screen === 'custdetail' && !s.loading,
+      showVendors: s.screen === 'vendors' && !s.loading,
+      showVendorDetail: s.screen === 'vendordetail' && !s.loading,
+      showCatalogs: s.screen === 'catalogs' && !s.loading,
+      showInventory: s.screen === 'inventory' && !s.loading,
+      showShipments: s.screen === 'shipments' && !s.loading,
+      showShipDetail: s.screen === 'shipdetail' && !s.loading,
+      showMobile: s.screen === 'mobile' && !s.loading,
+
+      goIntake: () => this.go('intake'), goCustomers: () => this.go('customers'),
+      goVendors: () => this.go('vendors'), goShipments: () => this.go('shipments'),
+      dateRange: s.dateRange, setRange: e => this.setState({ dateRange: e.target.value }),
+
+      kpis: [
+        { label: 'New Leads · 7d', value: '18', sub: '+22% vs prior week', subColor: '#2e7d32' },
+        { label: 'Active Customers', value: '96', sub: '60 CIF · 36 freight-only', subColor: '#6b7280' },
+        { label: 'Catalogs Sent · 30d', value: '214', sub: 'across 7 catalog sections', subColor: '#6b7280' },
+        { label: 'On-Hand Value', value: '₹41.2 L', sub: '3 items below reorder', subColor: '#f57f17' },
+        { label: 'In Transit', value: '14', sub: '2 past ETA', subColor: '#e53935' },
+        { label: 'Lead Conversion', value: '18.0%', sub: '23 won of 128 leads', subColor: '#6b7280' }
+      ],
+      linePts: lineDots.map(d => d.x + ',' + d.y).join(' '), lineDots,
+      donutDash: Math.round(circ * 0.62) + ' ' + Math.round(circ),
+      funnel: funnelRaw.map(f => ({ label: f.label, n: f.n, pct: Math.round((f.n / funnelRaw[0].n) * 100) + '%', w: Math.round((f.n / funnelRaw[0].n) * 100) })),
+      catMix: catMixRaw.map(c => ({ label: c.label, n: c.n, w: Math.round((c.n / catMixRaw[0].n) * 100) })),
+      shipStat: shipStatRaw.map(x => Object.assign({ label: x.label, n: x.n, w: Math.round((x.n / 132) * 100) }, self.stOf(x.label))),
+
+      fSearch: s.fSearch, fService: s.fService, fStatus: s.fStatus, fCat: s.fCat,
+      setSearch: e => this.setState({ fSearch: e.target.value }),
+      setService: e => this.setState({ fService: e.target.value }),
+      setStatus: e => this.setState({ fStatus: e.target.value }),
+      setCat: e => this.setState({ fCat: e.target.value }),
+      clearFilters: () => this.setState({ fSearch: '', fService: 'All service types', fStatus: 'All statuses', fCat: 'All categories' }),
+      customers: this.filteredCustomers().map(c => Object.assign({}, c, self.svcOf(c.svc), self.stOf(c.status), {
+        cats: c.cats.join(', '),
+        open: () => self.setState({ screen: 'custdetail', custId: c.id }),
+        dispatch: () => self.openWa(c.business, null)
+      })),
+      custCount: this.filteredCustomers().length,
+      custCif: this.filteredCustomers().filter(c => c.svc === 'CIF').length,
+      custFreight: this.filteredCustomers().filter(c => c.svc === 'Freight-only').length,
+      noCustomers: this.filteredCustomers().length === 0,
+
+      form: s.form,
+      setF: {
+        name: e => this.setState({ form: Object.assign({}, s.form, { name: e.target.value }) }),
+        business: e => this.setState({ form: Object.assign({}, s.form, { business: e.target.value }) }),
+        cc: e => this.setState({ form: Object.assign({}, s.form, { cc: e.target.value }) }),
+        phone: e => this.setState({ form: Object.assign({}, s.form, { phone: e.target.value }) }),
+        email: e => this.setState({ form: Object.assign({}, s.form, { email: e.target.value }) }),
+        city: e => this.setState({ form: Object.assign({}, s.form, { city: e.target.value }) }),
+        source: e => this.setState({ form: Object.assign({}, s.form, { source: e.target.value }) }),
+        owner: e => this.setState({ form: Object.assign({}, s.form, { owner: e.target.value }) }),
+        status: e => this.setState({ form: Object.assign({}, s.form, { status: e.target.value }) }),
+        notes: e => this.setState({ form: Object.assign({}, s.form, { notes: e.target.value }) }),
+        extRef: e => this.setState({ form: Object.assign({}, s.form, { extRef: e.target.value }) })
+      },
+      dupWarn: dup ? dup.business : '',
+      phoneBorder: phoneDigits.length > 0 && !phoneOk ? '#e53935' : '#e5e7eb',
+      phoneMsg: phoneDigits.length === 0 ? 'Stored as ' + s.form.cc + ' + 10 digits for click-to-chat.' : phoneOk ? 'Valid · ' + s.form.cc + ' ' + phoneDigits : 'Needs 10 digits — ' + phoneDigits.length + ' entered.',
+      phoneMsgColor: phoneDigits.length > 0 && !phoneOk ? '#e53935' : '#6b7280',
+      pickCif: () => this.setState({ form: Object.assign({}, s.form, { svc: 'CIF' }) }),
+      pickFreight: () => this.setState({ form: Object.assign({}, s.form, { svc: 'Freight-only' }) }),
+      cifBorder: s.form.svc === 'CIF' ? '#2d5be3' : '#e5e7eb',
+      cifBg: s.form.svc === 'CIF' ? '#f5f8ff' : '#fff',
+      cifDot: s.form.svc === 'CIF' ? '#2d5be3' : '#fff',
+      frBorder: s.form.svc === 'Freight-only' ? '#2d5be3' : '#e5e7eb',
+      frBg: s.form.svc === 'Freight-only' ? '#f5f8ff' : '#fff',
+      frDot: s.form.svc === 'Freight-only' ? '#2d5be3' : '#fff',
+      showExtRef: s.form.svc === 'Freight-only',
+      catChips: this.allCats().map(c => {
+        const on = s.form.cats.includes(c);
+        return { label: c, mark: on ? '✓ ' : '', border: on ? '#2d5be3' : '#e5e7eb', bg: on ? '#f5f8ff' : '#fff', fg: on ? '#2d5be3' : '#6b7280',
+          toggle: () => self.setState({ form: Object.assign({}, s.form, { cats: on ? s.form.cats.filter(x => x !== c) : s.form.cats.concat([c]) }) }) };
+      }),
+      otherOpen: s.otherOpen, otherText: s.otherText,
+      otherBorder: s.otherOpen ? '#2d5be3' : '#e5e7eb',
+      otherBg: s.otherOpen ? '#f5f8ff' : '#fff',
+      otherFg: s.otherOpen ? '#2d5be3' : '#6b7280',
+      openOther: () => this.setState({ otherOpen: true }),
+      setOtherText: e => this.setState({ otherText: e.target.value }),
+      cancelOther: () => this.setState({ otherOpen: false, otherText: '' }),
+      addOther: () => {
+        const name = s.otherText.trim();
+        if (!name || self.allCats().indexOf(name) > -1) { this.setState({ otherOpen: false, otherText: '' }); return; }
+        this.setState({
+          customCats: s.customCats.concat([name]),
+          form: Object.assign({}, s.form, { cats: s.form.cats.concat([name]) }),
+          otherOpen: false, otherText: ''
+        });
+      },
+      otherHint: s.customCats.length ? 'Added this session: ' + s.customCats.join(', ') : 'Anything outside the six standard categories — it becomes selectable for every customer.',
+      formMeta: 'Will be logged as ' + s.form.status + ' · ' + s.form.svc + ' · source ' + s.form.source,
+      saveLead: () => this.go('customers'),
+      saveAndDispatch: () => { this.setState({ screen: 'customers' }); self.openWa(s.form.business || 'Meena Traders', null); },
+
+      cust: Object.assign({}, cust, self.svcOf(cust.svc), self.stOf(cust.status), {
+        fields: [
+          { k: 'Contact', v: cust.name }, { k: 'WhatsApp', v: cust.phone }, { k: 'City / Region', v: cust.city },
+          { k: 'Service type', v: cust.svc }, { k: 'Categories', v: cust.cats.join(', ') },
+          { k: 'Source channel', v: cust.source }, { k: 'Assigned owner', v: cust.owner }, { k: 'Customer since', v: cust.since }
+        ],
+        dispatches: logged.concat([
+          { file: SECTIONS[0].docs[0].file, meta: 'v3 · Priya Sharma · 18 Jul 2026 14:22' },
+          { file: SECTIONS[1].docs[0].file, meta: 'v1 · Rohit Menon · 09 Jul 2026 10:51' },
+          { file: SECTIONS[4].docs[0].file, meta: 'v2 · Priya Sharma · 21 Jun 2026 17:04' }
+        ]),
+        timeline: extraNotes.concat(baseTimeline),
+        shipments: custShipments
+      }),
+      openDispatchCurrent: () => self.openWa(cust.business, null),
+      noteOpen: s.noteOpen, noteText: s.noteText,
+      addNote: () => this.setState({ noteOpen: true }),
+      setNote: e => this.setState({ noteText: e.target.value }),
+      cancelNote: () => this.setState({ noteOpen: false, noteText: '' }),
+      saveNote: () => {
+        const list = (s.extraNotes[cust.id] || []).slice();
+        if (s.noteText.trim()) list.unshift(s.noteText.trim());
+        const next = Object.assign({}, s.extraNotes); next[cust.id] = list;
+        this.setState({ extraNotes: next, noteOpen: false, noteText: '' });
+      },
+
+      vSearch: s.vSearch, vCat: s.vCat, vStatus: s.vStatus,
+      setVSearch: e => this.setState({ vSearch: e.target.value }),
+      setVCat: e => this.setState({ vCat: e.target.value }),
+      setVStatus: e => this.setState({ vStatus: e.target.value }),
+      vendors: this.vList().filter(v => {
+        const q = s.vSearch.trim().toLowerCase();
+        if (q && !(v.name + ' ' + v.contact).toLowerCase().includes(q)) return false;
+        if (s.vCat !== 'All categories' && !v.cats.includes(s.vCat)) return false;
+        if (s.vStatus !== 'All statuses' && v.status !== s.vStatus) return false;
+        return true;
+      }).map(v => Object.assign({}, v, self.stOf(v.status), {
+        cats: v.cats.join(', '), terms: v.moq + ' · ' + v.lead,
+        open: () => self.setState({ screen: 'vendordetail', vendorId: v.id })
+      })),
+
+      vend: Object.assign({}, vend, self.stOf(vend.status), {
+        cats: vend.cats.join(', '),
+        stats: [
+          { label: 'Catalog Sections', value: String(vendSections.length) },
+          { label: 'PDFs On File', value: String(vendSections.reduce((a, x) => a + x.docs.length, 0)) },
+          { label: 'MOQ', value: vend.moq },
+          { label: 'Lead Time', value: vend.lead },
+          { label: 'Reliability', value: vend.rating + '/5' }
+        ],
+        sections: vendSections.map(sec => ({
+          title: sec.title, tags: sec.tags,
+          meta: sec.category + ' · ' + sec.docs.length + ' documents · ' + sec.sent,
+          docs: sec.docs.map((d, di) => Object.assign({}, d, {
+            nameColor: di === 0 ? '#1a2332' : '#6b7280',
+            vBg: di === 0 ? '#e8f5e9' : '#e5e7eb', vFg: di === 0 ? '#2e7d32' : '#6b7280',
+            send: () => self.openWa(null, sec.title)
+          }))
+        }))
+      }),
+      openUpload: () => this.setState({ uploadOpen: true, upMode: 'upload' }),
+      closeUpload: () => this.setState({ uploadOpen: false }),
+      uploadOpen: s.uploadOpen,
+      uploadTitle: s.upMode === 'edit' ? 'Edit Catalog Section' : 'Upload Catalog PDF',
+      uploadCta: s.upMode === 'edit' ? 'Save Changes' : 'Upload as v4',
+      saveUpload: () => this.setState({ uploadOpen: false }),
+      upSection: s.upSection, upVendor: s.upVendor, upCategory: s.upCategory,
+      setUpSection: e => this.setState({ upSection: e.target.value }),
+      setUpVendor: e => this.setState({ upVendor: e.target.value }),
+      setUpCategory: e => this.setState({ upCategory: e.target.value }),
+      upVendorHint: s.upVendor === 'Unassigned' ? 'Leave unassigned and map the vendor later from the catalog card.' : 'Mapped to ' + s.upVendor + ' · change any time from Edit.',
+
+      vendorEditOpen: s.vendorEditOpen,
+      openVendorEdit: () => this.setState({ vendorEditOpen: true, vf: Object.assign({}, vend) }),
+      closeVendorEdit: () => this.setState({ vendorEditOpen: false, vf: null }),
+      vf: s.vf || vend,
+      setVF: {
+        name: e => this.setState({ vf: Object.assign({}, s.vf || vend, { name: e.target.value }) }),
+        contact: e => this.setState({ vf: Object.assign({}, s.vf || vend, { contact: e.target.value }) }),
+        phone: e => this.setState({ vf: Object.assign({}, s.vf || vend, { phone: e.target.value }) }),
+        region: e => this.setState({ vf: Object.assign({}, s.vf || vend, { region: e.target.value }) }),
+        status: e => this.setState({ vf: Object.assign({}, s.vf || vend, { status: e.target.value }) }),
+        moq: e => this.setState({ vf: Object.assign({}, s.vf || vend, { moq: e.target.value }) }),
+        lead: e => this.setState({ vf: Object.assign({}, s.vf || vend, { lead: e.target.value }) })
+      },
+      vendorCatChips: this.allCats().map(c => {
+        const cur = s.vf || vend;
+        const on = (cur.cats || []).indexOf(c) > -1;
+        return { label: c, mark: on ? '✓ ' : '', border: on ? '#2d5be3' : '#e5e7eb', bg: on ? '#f5f8ff' : '#fff', fg: on ? '#2d5be3' : '#6b7280',
+          toggle: () => self.setState({ vf: Object.assign({}, cur, { cats: on ? cur.cats.filter(x => x !== c) : cur.cats.concat([c]) }) }) };
+      }),
+      vendorEditMeta: 'Vendor ID ' + vend.id + ' · ' + (s.vf && s.vf.cats ? s.vf.cats.length : vend.cats.length) + ' categories mapped',
+      saveVendor: () => {
+        const cur = s.vf || vend;
+        const next = Object.assign({}, s.vendorEdits);
+        next[vend.id] = { name: cur.name, contact: cur.contact, phone: cur.phone, region: cur.region, status: cur.status, moq: cur.moq, lead: cur.lead, cats: cur.cats };
+        this.setState({ vendorEdits: next, vendorEditOpen: false, vf: null });
+      },
+
+      cSearch: s.cSearch, cCat: s.cCat,
+      setCSearch: e => this.setState({ cSearch: e.target.value }),
+      setCCat: e => this.setState({ cCat: e.target.value }),
+      catalogCards: SECTIONS.filter(k => {
+        const q = s.cSearch.trim().toLowerCase();
+        if (q && !(k.title + ' ' + k.vendor).toLowerCase().includes(q)) return false;
+        if (s.cCat !== 'All categories' && k.category !== s.cCat) return false;
+        return true;
+      }).map(k => ({
+        title: k.title, vendor: k.vendor, category: k.category,
+        docCount: k.docs.length + ' PDF', latestFile: k.docs[0].file,
+        latestMeta: k.docs[0].version + ' · ' + k.docs[0].size + ' · ' + k.docs[0].uploaded,
+        sentMeta: k.sent, send: () => self.openWa(null, k.title),
+        coverImg: CATEGORY_IMG[k.category] || CATEGORY_IMG.Default,
+        edit: () => self.setState({ uploadOpen: true, upMode: 'edit', upSection: k.title, upVendor: k.vendor, upCategory: k.category })
+      })),
+
+      iSearch: s.iSearch, iCat: s.iCat, iLevel: s.iLevel,
+      setISearch: e => this.setState({ iSearch: e.target.value }),
+      setICat: e => this.setState({ iCat: e.target.value }),
+      setILevel: e => this.setState({ iLevel: e.target.value }),
+      filterLowStock: () => this.setState({ iLevel: 'Low or negative' }),
+      inventory: this.invRows(),
+      invStats: [
+        { label: 'On-Hand Value', value: '₹41.2 L', color: '#1a2332' },
+        { label: 'Distinct Items', value: '9', color: '#1a2332' },
+        { label: 'Below Reorder', value: '3', color: '#f57f17' },
+        { label: 'Negative Stock', value: '1', color: '#e53935' }
+      ],
+
+      shipTabs,
+      shipments: SHIPMENTS.filter(x => s.shipTab === 'All' || (s.shipStatusOverride[x.ref] || x.status) === s.shipTab).map(x => {
+        const st = s.shipStatusOverride[x.ref] || x.status;
+        return Object.assign({}, x, self.svcOf(x.svc), self.stOf(st), {
+          status: st,
+          stockImpact: x.svc === 'CIF' ? 'Decrements inventory' : 'No stock held',
+          open: () => self.setState({ screen: 'shipdetail', shipRef: x.ref })
+        });
+      }),
+
+      ship: Object.assign({}, ship, self.svcOf(ship.svc), self.stOf(ship.status), {
+        steps, lines: shipLines,
+        nextAction: idx < 3 ? 'Mark ' + order[idx + 1].charAt(0) + order[idx + 1].slice(1).toLowerCase() : 'Delivered',
+        fields: [
+          { k: 'Customer', v: ship.customer }, { k: 'Service type', v: ship.svc },
+          { k: 'Stock impact', v: ship.svc === 'CIF' ? 'Inventory decremented' : 'No firm-held stock' },
+          { k: 'Mode / port', v: ship.mode }, { k: 'AWB / BL', v: ship.awb },
+          { k: 'ETA', v: ship.eta }, { k: 'Recorded by', v: 'Vikram Nair (Logistics)' }
+        ],
+        docs: [
+          { file: ship.ref + '-packing-list.pdf', meta: '184 KB · 21 Jul 2026' },
+          { file: ship.ref + '-invoice.pdf', meta: '96 KB · 21 Jul 2026' },
+          { file: ship.ref + '-bl-scan.pdf', meta: '1.2 MB · 22 Jul 2026' }
+        ]
+      }),
+      advanceStatus: () => {
+        if (idx >= 3) return;
+        const next = Object.assign({}, s.shipStatusOverride); next[ship.ref] = order[idx + 1];
+        this.setState({ shipStatusOverride: next });
+      },
+
+      waOpen: s.waOpen, closeWa: () => this.setState({ waOpen: false }),
+      allCustomerNames: CUSTOMERS.map(c => c.business),
+      allCatalogNames: SECTIONS.map(k => k.title),
+      waCustomer: s.waCustomer, waCatalog: s.waCatalog,
+      setWaCustomer: e => this.setState({ waCustomer: e.target.value, waMsg: '' }),
+      setWaCatalog: e => this.setState({ waCatalog: e.target.value, waMsg: '' }),
+      waPhone: waCust.name + ' · ' + waCust.phone,
+      waSvcLabel: SVC[waCust.svc].label, waSvcBg: SVC[waCust.svc].bg, waSvcFg: SVC[waCust.svc].fg,
+      waFile: waSec.docs[0].file, waFileMeta: waSec.docs[0].version + ' · ' + waSec.docs[0].size + ' · ' + waSec.vendor,
+      waMsg: this.waMessage(), setWaMsg: e => this.setState({ waMsg: e.target.value }),
+      waS1: stepStyle(1, '1'), waS2: stepStyle(2, '2'), waS3: stepStyle(3, '3'),
+      waStep1: () => this.setState({ waSteps: Object.assign({}, s.waSteps, { 1: true }) }),
+      waStep2: () => this.setState({ waSteps: Object.assign({}, s.waSteps, { 2: true }) }),
+      waStep3: () => this.setState({ waSteps: Object.assign({}, s.waSteps, { 3: true }) }),
+      waStatus: doneCount === 0 ? 'Dispatch not logged yet. Complete the three steps.' : doneCount + ' of 3 steps done · logs against ' + waCust.business,
+      logDispatch: () => {
+        const list = (s.dispatchLog[s.waCustomer] || []).slice();
+        list.unshift({ file: waSec.docs[0].file, meta: waSec.docs[0].version.split(' ')[0] + ' · Priya Sharma · just now' });
+        const next = Object.assign({}, s.dispatchLog); next[s.waCustomer] = list;
+        this.setState({ dispatchLog: next, waOpen: false });
+      }
+    };
+  }
+}
+
+</script>
+</body>
+</html>
