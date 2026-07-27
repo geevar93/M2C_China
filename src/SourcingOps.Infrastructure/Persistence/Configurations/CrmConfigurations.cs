@@ -16,6 +16,15 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         b.HasIndex(x => x.Phone); // FR-CRM-09 duplicate detection
         b.HasIndex(x => x.CreatedAt);
 
+        // E4-06/DoD: ServiceTypeId/StatusId/OwnerUserId already get an index automatically
+        // from EF Core's FK-relationship configuration below (verified in the InitialCreate
+        // migration: ix_customers_service_type_id/status_id/owner_user_id). Region and Tags
+        // are the two E4-06 filter columns that do NOT come from a relationship, so they need
+        // an explicit index — added here as the pre-M3 migration did not anticipate list
+        // filtering yet. See AddCustomerListFilterIndexes.
+        b.HasIndex(x => x.Region);
+        b.HasIndex(x => x.Tags).HasMethod("gin"); // array-containment filter (?tag=)
+
         // External-purchase detail (freight-only customers, FSD Q1) — all six nullable,
         // schema only this pass (pre-M3 migration, see ACTION_PLAN §10.4).
         b.Property(x => x.ExternalMarketplace).HasMaxLength(200);
