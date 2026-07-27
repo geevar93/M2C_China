@@ -303,10 +303,11 @@ Physical schema derived from the FSD's Conceptual Data Model (Section 7), with F
 | `lead_statuses` | id, code, label, sort_order | Configurable pipeline stages |
 | `shipment_statuses` | id, code, label, sort_order | |
 | `invoice_statuses` | id, code, label, sort_order | Draft/Issued/Paid/Cancelled by default |
+| `vendor_statuses` | id, code, label, sort_order | Configurable master data (Active/Inactive/On-Hold by default) — corrected in the M1 build pass; an earlier draft of this table listed `vendors.status` as a plain column, which contradicted this document's own FK rule and FSD §3.3 |
 | `customers` | id, name, business_name, phone, email, city, region, source_channel, service_type_id, status_id, owner_user_id, tags (text[]), created_at | |
 | `customer_categories` | customer_id, category_id | Many-to-many (category interest) |
 | `interactions` | id, customer_id, author_user_id, type, text, follow_up_date, created_at | |
-| `vendors` | id, name, contact_person, phone, email, region, status, moq, lead_time, reliability_rating, notes | |
+| `vendors` | id, name, contact_person, phone, email, region, status_id, moq, lead_time, reliability_rating, notes | FK to `vendor_statuses`, not a plain column |
 | `vendor_categories` | vendor_id, category_id | |
 | `catalog_sections` | id, vendor_id, title, category_id, tags (text[]), created_at | |
 | `catalog_documents` | id, catalog_section_id, file_path, original_filename, size_bytes, version_label, is_latest, uploaded_by_user_id, uploaded_at | |
@@ -483,7 +484,7 @@ Comfortable fit at this scale, with substantial headroom for growth before the V
 | OI-4 | Invoicing, Login, Force-password-change, and Admin/User-management screens don't exist in the approved prototype yet — need a fast design pass in the same visual language before/alongside their implementation |
 | OI-5 | Backup retention window and restore-drill expectations (RPO/RTO) not yet specified by the business |
 | OI-6 | Single-VPS, no-HA topology assumed acceptable for Phase 1 given business-hours-only availability NFR — flag if that changes |
-| OI-7 | **Resolved**: .NET 10 SDK 10.0.203 (installed) / Angular CLI 19.2.x pinned for Node v20.12.2 compatibility (see Section 3 footnote) — confirmed against tooling actually present on the build machine. Docker 29.4, Compose v5.1.2, Caddy 2.11.3, PostgreSQL client 18 also confirmed present locally. Node itself is older than Angular's current major; upgrading it is a separate decision, not made here. |
+| OI-7 | **Reopened** (M1 pass). Versions pinned: .NET 10 SDK 10.0.203 / Angular CLI 19.2.27, core 19.2.25 for Node v20.12.2 compatibility (see Section 3 footnote); Docker 29.4, Compose v5.1.2, Caddy 2.11.3, PostgreSQL client 18 also confirmed present locally. **New finding**: `npm audit` reports moderate/high advisories in `@angular/core`/`@angular/compiler` ≤19.2.25, fixed only in the 22.x line, which the installed Node cannot run — so the version pin and staying on a patched Angular are currently mutually exclusive. Low immediate risk (internal tool, behind auth, no public exposure yet), but this is a **Node-upgrade decision for the business/ops owner**, not something to leave undiscovered until launch. |
 
 ---
 
