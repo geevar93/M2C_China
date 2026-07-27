@@ -63,7 +63,7 @@ Local development mirrors this with `docker-compose.override.yml`: `api` + `db` 
 | Caching | `ICacheService` abstraction over `IMemoryCache` (default) / `IDistributedCache` + `StackExchange.Redis` (switchable) | Per C2 |
 | Database | PostgreSQL 16 (Alpine image) | Per C3 |
 | File storage | Local disk volume behind an `IFileStorage` abstraction | No object-storage dependency for Phase 1; abstraction allows a later move to S3-compatible storage without touching business logic |
-| Frontend framework | Angular (latest stable LTS at build time — Angular 19/20 line), standalone components, esbuild-based builder | Per C6; standalone components avoid NgModule boilerplate; esbuild builder is the current Angular default and produces smaller, faster production builds |
+| Frontend framework | Angular 19.2.x, standalone components, esbuild-based builder | Per C6; standalone components avoid NgModule boilerplate; esbuild builder is the current Angular default and produces smaller, faster production builds. **Pinned to v19** (not the current "latest" major, v22) because that's the newest line compatible with this machine's installed Node (v20.12.2) — Angular 20+ raised its minimum to Node ^20.19.0. Revisit the pin if/when Node is upgraded (OI-7). |
 | Frontend state | Angular services + RxJS, no NgRx | App is CRUD-and-forms shaped; a store adds bundle weight and ceremony this app doesn't need |
 | Frontend UI kit | None — hand-ported CSS from the prototype | The approved prototype's visual system is bespoke inline CSS, not built on Material/Bootstrap; adding a UI kit would both contradict "use the CSS as-is" and bloat the bundle |
 | Icons | Emoji glyphs (as used in the prototype: 📊 👥 📝 🏭 📚 📦 🚚 📱) | Zero-dependency; avoids shipping an icon font/SVG sprite just for lightweight nav icons |
@@ -483,7 +483,7 @@ Comfortable fit at this scale, with substantial headroom for growth before the V
 | OI-4 | Invoicing, Login, Force-password-change, and Admin/User-management screens don't exist in the approved prototype yet — need a fast design pass in the same visual language before/alongside their implementation |
 | OI-5 | Backup retention window and restore-drill expectations (RPO/RTO) not yet specified by the business |
 | OI-6 | Single-VPS, no-HA topology assumed acceptable for Phase 1 given business-hours-only availability NFR — flag if that changes |
-| OI-7 | Exact Angular and .NET package versions to pin at project scaffolding time (latest stable LTS lines as of build start) |
+| OI-7 | **Resolved**: .NET 10 SDK 10.0.203 (installed) / Angular CLI 19.2.x pinned for Node v20.12.2 compatibility (see Section 3 footnote) — confirmed against tooling actually present on the build machine. Docker 29.4, Compose v5.1.2, Caddy 2.11.3, PostgreSQL client 18 also confirmed present locally. Node itself is older than Angular's current major; upgrading it is a separate decision, not made here. |
 
 ---
 
