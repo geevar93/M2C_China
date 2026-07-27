@@ -1,0 +1,49 @@
+<div class="auth-page">
+  <div class="auth-card card">
+    <div class="auth-brand">Meridian<span class="auth-brand-dot">.</span></div>
+    <div class="auth-eyebrow">SOURCING OPS</div>
+
+    <h1 class="auth-title">Sign in</h1>
+    <p class="auth-subtitle">Internal tool — staff accounts only.</p>
+
+    @if (errorMessage()) {
+      <div class="banner-warning auth-error" role="alert">{{ errorMessage() }}</div>
+    }
+
+    <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <div class="field">
+        <label for="email">Email</label>
+        <input
+          id="email"
+          class="field-input"
+          type="email"
+          formControlName="email"
+          autocomplete="username"
+          placeholder="name@company.in"
+        />
+        @if (form.controls.email.touched && form.controls.email.invalid) {
+          <div class="field-error">Enter a valid email address.</div>
+        }
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <input
+          id="password"
+          class="field-input"
+          type="password"
+          formControlName="password"
+          autocomplete="current-password"
+          placeholder="••••••••"
+        />
+        @if (form.controls.password.touched && form.controls.password.invalid) {
+          <div class="field-error">Password is required.</div>
+        }
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block" [disabled]="loading()">
+        {{ loading() ? 'Signing in…' : 'Sign in' }}
+      </button>
+    </form>
+  </div>
+</div>
