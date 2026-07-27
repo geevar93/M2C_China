@@ -16,6 +16,14 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         b.HasIndex(x => x.Phone); // FR-CRM-09 duplicate detection
         b.HasIndex(x => x.CreatedAt);
 
+        // External-purchase detail (freight-only customers, FSD Q1) — all six nullable,
+        // schema only this pass (pre-M3 migration, see ACTION_PLAN §10.4).
+        b.Property(x => x.ExternalMarketplace).HasMaxLength(200);
+        b.Property(x => x.ExternalOrderRef).HasMaxLength(200);
+        b.Property(x => x.ExternalSupplierName).HasMaxLength(300);
+        b.Property(x => x.ExternalOrderValue).HasPrecision(18, 2);
+        b.Property(x => x.ExternalOrderCurrency).HasMaxLength(3);
+
         b.HasOne(x => x.ServiceType).WithMany().HasForeignKey(x => x.ServiceTypeId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Status).WithMany().HasForeignKey(x => x.StatusId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Owner).WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.SetNull);

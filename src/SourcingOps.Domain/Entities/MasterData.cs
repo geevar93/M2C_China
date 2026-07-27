@@ -9,6 +9,9 @@ public class Category
     public string Name { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; }
+
+    /// <summary>See <see cref="Common.ILookupEntity.IsSystemDefault"/> — same retire-only rule (ACTION_PLAN N-8), Category just isn't an <see cref="ILookupEntity"/>.</summary>
+    public bool IsSystemDefault { get; set; }
 }
 
 /// <summary>Configurable service type lookup. Seed: CIF, FREIGHT_ONLY.</summary>
@@ -19,6 +22,7 @@ public class ServiceType : ILookupEntity
     public string Label { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; }
+    public bool IsSystemDefault { get; set; }
 }
 
 /// <summary>Configurable lead/customer pipeline stage lookup.</summary>
@@ -29,6 +33,7 @@ public class LeadStatus : ILookupEntity
     public string Label { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; }
+    public bool IsSystemDefault { get; set; }
 }
 
 /// <summary>Configurable shipment lifecycle lookup.</summary>
@@ -39,6 +44,7 @@ public class ShipmentStatus : ILookupEntity
     public string Label { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; }
+    public bool IsSystemDefault { get; set; }
 }
 
 /// <summary>Configurable invoice lifecycle lookup. Default: Draft/Issued/Paid/Cancelled.</summary>
@@ -49,6 +55,7 @@ public class InvoiceStatus : ILookupEntity
     public string Label { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; }
+    public bool IsSystemDefault { get; set; }
 }
 
 /// <summary>
@@ -64,4 +71,5 @@ public class VendorStatus : ILookupEntity
     public string Label { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; }
+    public bool IsSystemDefault { get; set; }
 }

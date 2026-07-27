@@ -43,10 +43,16 @@ public class ShipmentConfiguration : IEntityTypeConfiguration<Shipment>
     {
         b.ToTable("shipments");
         b.HasKey(x => x.Id);
+        b.Property(x => x.Reference).HasMaxLength(50);
         b.Property(x => x.FreightCost).HasPrecision(18, 2);
         b.Property(x => x.TotalValue).HasPrecision(18, 2);
         b.HasIndex(x => x.DispatchDate);
         b.HasIndex(x => x.CreatedAt);
+
+        // Nullable + partial unique index (not NOT NULL + plain unique) — see Shipment.Reference's
+        // doc comment: the table is empty until E7-05, so uniqueness only needs to hold once
+        // rows actually carry a value.
+        b.HasIndex(x => x.Reference).IsUnique().HasFilter("reference IS NOT NULL");
 
         b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.ServiceType).WithMany().HasForeignKey(x => x.ServiceTypeId).OnDelete(DeleteBehavior.Restrict);

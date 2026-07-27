@@ -44,6 +44,8 @@ public interface IAppDbContext
 
     DbSet<Invoice> Invoices { get; }
 
+    DbSet<CompanySettings> CompanySettings { get; }
+
     DbSet<AuditLog> AuditLogs { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

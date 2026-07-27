@@ -5,6 +5,18 @@ public class Shipment
 {
     public Guid Id { get; set; }
 
+    /// <summary>
+    /// Human-readable shipment ID the approved prototype shows as the headline identifier —
+    /// e.g. "SHP-2607-014" (prefix + YYMM + zero-padded sequence), per TECH_SPEC §6.
+    /// Nullable with a unique index (see ShipmentConfiguration), NOT NOT-NULL: the table is
+    /// empty today (no ShipmentsController exists until E7-05, M5 scope), so generating
+    /// references for hypothetical rows would be meaningless busywork now, and a NOT NULL
+    /// column would force a throwaway value E7-05 would just overwrite. Uniqueness is
+    /// enforced only over non-null values via a partial index, so this stays enforceable the
+    /// moment E7-05 starts populating it without a further migration.
+    /// </summary>
+    public string? Reference { get; set; }
+
     public Guid CustomerId { get; set; }
     public Customer Customer { get; set; } = null!;
 

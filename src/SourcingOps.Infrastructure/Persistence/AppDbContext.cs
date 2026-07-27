@@ -44,6 +44,8 @@ public class AppDbContext : DbContext, IAppDbContext
 
     public DbSet<Invoice> Invoices => Set<Invoice>();
 
+    public DbSet<CompanySettings> CompanySettings => Set<CompanySettings>();
+
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

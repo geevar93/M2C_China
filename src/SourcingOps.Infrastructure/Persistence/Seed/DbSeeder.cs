@@ -134,32 +134,45 @@ public sealed class DbSeeder
 
     private async Task SeedCategoriesAsync(CancellationToken ct)
     {
-        var existing = await _db.Categories.Select(c => c.Name).ToHashSetAsync(ct);
+        var existing = await _db.Categories.ToDictionaryAsync(c => c.Name, ct);
 
         foreach (var (name, sortOrder) in SeedDefaults.Categories)
         {
-            if (existing.Contains(name))
+            if (existing.TryGetValue(name, out var category))
             {
+                // Self-heal (N-8): a row that already existed before IsSystemDefault was
+                // introduced — or was otherwise reset — is re-flagged on this run rather
+                // than needing a one-off data migration. Never touches IsActive/SortOrder:
+                // a Super Admin's own retire/reorder choices on a default row must survive.
+                if (!category.IsSystemDefault)
+                {
+                    category.IsSystemDefault = true;
+                }
                 continue;
             }
 
-            _db.Categories.Add(new Category { Id = Guid.NewGuid(), Name = name, IsActive = true, SortOrder = sortOrder });
+            _db.Categories.Add(new Category { Id = Guid.NewGuid(), Name = name, IsActive = true, SortOrder = sortOrder, IsSystemDefault = true });
         }
     }
 
     private async Task SeedLookupAsync<TEntity>(DbSet<TEntity> set, (string Code, string Label, int SortOrder)[] defaults, CancellationToken ct)
         where TEntity : class, ILookupEntity, new()
     {
-        var existing = await set.Select(e => e.Code).ToHashSetAsync(ct);
+        var existing = await set.ToDictionaryAsync(e => e.Code, ct);
 
         foreach (var (code, label, sortOrder) in defaults)
         {
-            if (existing.Contains(code))
+            if (existing.TryGetValue(code, out var entity))
             {
+                // Self-heal (N-8) — see the identical comment in SeedCategoriesAsync above.
+                if (!entity.IsSystemDefault)
+                {
+                    entity.IsSystemDefault = true;
+                }
                 continue;
             }
 
-            set.Add(new TEntity { Id = Guid.NewGuid(), Code = code, Label = label, IsActive = true, SortOrder = sortOrder });
+            set.Add(new TEntity { Id = Guid.NewGuid(), Code = code, Label = label, IsActive = true, SortOrder = sortOrder, IsSystemDefault = true });
         }
     }
 

@@ -11,6 +11,7 @@ public class CategoryConfiguration : IEntityTypeConfiguration<Category>
         b.ToTable("categories");
         b.HasKey(x => x.Id);
         b.Property(x => x.Name).IsRequired().HasMaxLength(200);
+        b.Property(x => x.IsSystemDefault).HasDefaultValue(false);
         b.HasIndex(x => x.Name).IsUnique();
         b.HasIndex(x => x.IsActive);
     }
@@ -24,6 +25,7 @@ public class ServiceTypeConfiguration : IEntityTypeConfiguration<ServiceType>
         b.HasKey(x => x.Id);
         b.Property(x => x.Code).IsRequired().HasMaxLength(50);
         b.Property(x => x.Label).IsRequired().HasMaxLength(200);
+        b.Property(x => x.IsSystemDefault).HasDefaultValue(false);
         b.HasIndex(x => x.Code).IsUnique();
     }
 }
@@ -36,6 +38,7 @@ public class LeadStatusConfiguration : IEntityTypeConfiguration<LeadStatus>
         b.HasKey(x => x.Id);
         b.Property(x => x.Code).IsRequired().HasMaxLength(50);
         b.Property(x => x.Label).IsRequired().HasMaxLength(200);
+        b.Property(x => x.IsSystemDefault).HasDefaultValue(false);
         b.HasIndex(x => x.Code).IsUnique();
     }
 }
@@ -48,6 +51,7 @@ public class ShipmentStatusConfiguration : IEntityTypeConfiguration<ShipmentStat
         b.HasKey(x => x.Id);
         b.Property(x => x.Code).IsRequired().HasMaxLength(50);
         b.Property(x => x.Label).IsRequired().HasMaxLength(200);
+        b.Property(x => x.IsSystemDefault).HasDefaultValue(false);
         b.HasIndex(x => x.Code).IsUnique();
     }
 }
@@ -60,6 +64,7 @@ public class InvoiceStatusConfiguration : IEntityTypeConfiguration<InvoiceStatus
         b.HasKey(x => x.Id);
         b.Property(x => x.Code).IsRequired().HasMaxLength(50);
         b.Property(x => x.Label).IsRequired().HasMaxLength(200);
+        b.Property(x => x.IsSystemDefault).HasDefaultValue(false);
         b.HasIndex(x => x.Code).IsUnique();
     }
 }
@@ -72,6 +77,7 @@ public class VendorStatusConfiguration : IEntityTypeConfiguration<VendorStatus>
         b.HasKey(x => x.Id);
         b.Property(x => x.Code).IsRequired().HasMaxLength(50);
         b.Property(x => x.Label).IsRequired().HasMaxLength(200);
+        b.Property(x => x.IsSystemDefault).HasDefaultValue(false);
         b.HasIndex(x => x.Code).IsUnique();
     }
 }
