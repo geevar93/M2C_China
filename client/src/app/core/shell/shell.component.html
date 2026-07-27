@@ -1,0 +1,64 @@
+<div class="shell">
+  <aside class="sidebar" [style.width.px]="sidebarOpen() ? 220 : 64">
+    <div class="sidebar__brand">
+      <div class="sidebar__wordmark">Meridian<span class="sidebar__wordmark-dot">.</span></div>
+      <div class="sidebar__eyebrow" [style.display]="sidebarOpen() ? 'block' : 'none'">SOURCING OPS</div>
+    </div>
+
+    <nav class="sidebar__nav">
+      @for (group of navGroups(); track group.label) {
+        <div class="sidebar__group">
+          <div class="sidebar__group-label" [style.display]="sidebarOpen() ? 'block' : 'none'">{{ group.label }}</div>
+          @for (item of group.items; track item.id) {
+            <a
+              class="sidebar__item"
+              [routerLink]="item.route"
+              routerLinkActive="sidebar__item--active"
+              [routerLinkActiveOptions]="{ exact: true }"
+              [title]="item.label"
+            >
+              <span class="sidebar__icon">{{ item.icon }}</span>
+              <span class="sidebar__label" [style.display]="sidebarOpen() ? 'block' : 'none'">{{ item.label }}</span>
+            </a>
+          }
+        </div>
+      }
+    </nav>
+
+    <div class="sidebar__collapse" (click)="toggleSidebar()">
+      {{ sidebarOpen() ? '« Collapse' : '»' }}
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar__title">{{ pageTitle() }}</div>
+      <!-- Search trigger is ported visually from the prototype's ⌘K box; wiring the global
+           command palette is ACTION_PLAN E12-05 and intentionally out of scope this pass. -->
+      <div class="topbar__search" title="Command palette (coming soon)">
+        <span>⌕</span>
+        <span class="topbar__search-label">Search customers, vendors, catalogs</span>
+        <span class="topbar__kbd">⌘K</span>
+      </div>
+      <div class="topbar__spacer"></div>
+      <!-- Refresh is ported visually; wiring per-screen data refresh depends on feature
+           services not yet built (M3+), so it is a no-op for now. -->
+      <div class="topbar__refresh" title="Refresh (coming soon)">↻ Refresh</div>
+      <div class="topbar__divider"></div>
+      <div class="topbar__user">
+        <div class="topbar__avatar">{{ userInitials() }}</div>
+        <div class="topbar__user-name">
+          {{ userName() }}
+          @if (userRoleLabel()) {
+            <span class="topbar__user-role">· {{ userRoleLabel() }}</span>
+          }
+        </div>
+        <button type="button" class="topbar__logout" (click)="logout()">Log out</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+</div>
