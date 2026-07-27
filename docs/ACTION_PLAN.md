@@ -359,6 +359,7 @@ Distinct from TECH_SPEC's OI-1…OI-7 (unresolved *technical decisions*) — the
 | DR-10 | **Permission changes take effect only at next login/refresh** — an accepted trade-off in TECH_SPEC §4.3, but a support-load risk once the owner starts managing accounts. | "I changed their role and nothing happened" tickets; the owner loses trust in the admin screens. | E11-05 revokes refresh tokens on role change; the admin UI states plainly that the user must sign in again. |
 | DR-11 | **Integration tests need Docker in CI.** TECH_SPEC §4.1 specifies Testcontainers Postgres; if the CI runner cannot run containers, the integration half of the DoD quietly degrades to unit tests only. | Endpoint-level regressions ship undetected while the DoD appears satisfied. | E2-06 explicitly verifies a Testcontainers-based test runs green in CI before M3 depends on it. |
 | DR-12 | **Uploaded documents are the only durable state outside Postgres.** A backup routine or restore drill that covers only `pg_dump` loses every catalog and invoice PDF while appearing to succeed. | Catastrophic, and only discovered during a real recovery. | E2-08 backs up both; E12-04's restore drill is not complete until a restored document opens. |
+| DR-14 | **E0-06 was resolved by authorisation, not by a formal design review** (2026-07-27, see §12). The four net-new screens were designed and built in one pass against the E0-01 token reference, so the design and its implementation were reviewed together rather than the design being approved first. | If the owner dislikes a design decision, the cost is reworking a built screen, not a draft — which is precisely the cost the original E0-06 gate existed to avoid. | Accepted deliberately: the gate had been open since M0 and its cost was *growing*, since every milestone added surface waiting on it. Narrowed by (a) building only from E0-01 atoms, so a rejected screen is restyled and not rebuilt, (b) writing every design decision down in `docs/SCREEN_DESIGNS.md` so the owner reviews reasoning rather than pixels, and (c) holding Invoicing at design-only, so the screen with the most unresolved business input (Q9c) has the least code behind it. |
 | DR-13 | **The `spec.txt`/`spec_document.xml` mirrors can silently drift stale** — they were found out of sync during this planning pass and have been regenerated, but nothing currently re-generates them automatically on the next `.docx` edit. | An entire module missed, or contradictory requirements between team members, if someone edits the `.docx` again and forgets the mirrors. | Treat the `.docx` as the single source of truth; regenerate both mirrors as a checklist step whenever it changes, or retire the mirrors entirely once nothing depends on them. |
 
 ---
@@ -438,8 +439,8 @@ Verified on this machine: `dotnet build` (0 warnings, 0 errors), `dotnet test` (
 | ID | Status | Verification / note |
 | --- | --- | --- |
 | E0-01 | **Done** | Tokens extracted from the approved prototype into `docs/DESIGN_TOKENS.md` and implemented as `client/src/app/shared/styles/_tokens.scss`. Spot-checked: every documented hex occurs in the prototype, and the `SVC`/`ST` maps are byte-identical to prototype lines 1233-1250. |
-| E0-02…E0-05 | **Not started** | Needs business input; deliberately out of scope this pass. |
-| E0-06 | **Not started** | **Still an open gate.** E1-13/E1-14 were built without it under the §5 M1 fallback — they need sign-off, and a restyle if it diverges. Still gates E8-09/E8-10 and E11-07/E11-08. |
+| E0-02…E0-05 | **Superseded — see §12** | Was "Not started, needs business input" at M1. The business owner authorised proceeding on 2026-07-27; all four designs now exist in `docs/SCREEN_DESIGNS.md`. Current status is tracked in §12.1. |
+| E0-06 | **Superseded — see §12** | Was an open gate. Resolved on 2026-07-27 by the owner directing the work to proceed against the E0-01 reference rather than waiting on a separate formal design pass (DR-14). |
 | E0-07 | **Done** | Closes TECH_SPEC OI-3 in `DESIGN_TOKENS.md` §11, from direct inspection of `Source/_ds/industry-…` — an unrelated steel-blue/Barlow-Condensed theme, referenced by nothing in the approved prototype, excluded from the port. |
 
 ### E1 — Foundation, Infrastructure & Auth
@@ -641,8 +642,96 @@ One open interaction question, not a blocker: tags are free text rather than mas
 
 | # | Ask | Why it matters now |
 | --- | --- | --- |
-| **E0-06** | Review and sign off the four net-new screen designs (E0-02…E0-05) as belonging to the same visual language as the approved prototype. | Unchanged as a hard gate on E1-13/E1-14 (already shipped unsigned under the §5 fallback and may need a restyle), E8-09/E8-10 and E11-07/E11-08. It has now been open since M0 and its cost grows with each milestone, because a divergent verdict means reworking screens rather than drafts. |
+| ~~**E0-06**~~ | ~~Review and sign off the four net-new screen designs.~~ **RESOLVED 2026-07-27 — see §12.** The owner directed the work to proceed against the E0-01 reference rather than wait on a separate formal design pass. It was asked and answered; this row is kept for the record, not as an outstanding ask. | The gate no longer blocks E1-13/E1-14 or E11-07/E11-08. **E8-09/E8-10 are still blocked — but on the missing E8 backend and Q9c, not on design (§12.3).** The residual risk of resolving by authorisation rather than review is recorded as DR-14. |
 | **FSD Q9c** | The actual billing block values: legal entity name, GSTIN, registered address, bank details. | Real data, not a decision. `company_settings` is built and deliberately **empty**, with single-row-ness enforced by a CHECK constraint rather than a seeded row of nulls, so "not configured" stays representable. **No invoice can be issued until these values exist — this gates M6.** |
 | **FSD Q6** | Expected data volumes: customers, vendors and catalogs per month. | **Never actually asked** — it was omitted from the batch that produced the Q1–Q9a answers, so it is unanswered rather than pending. Sets the representative volumes E12-02's performance pass tests against, and gates the E2-10 memory-budget recheck (M1 measured only idle usage, which is weak evidence). |
 | **FSD Q8** | A sample of the legacy data to be migrated — what it contains, roughly how much. | Confirmed in scope; E12-07 cannot be estimated without it. **Ask this together with Q6:** the legacy data *is* the initial data volume, so one request answers both. Do not request them separately. |
 | **Deployment track** | Provision the VPS now, or accept local `docker compose` verification through M8? | Not an engineering call. M3 closed without live HTTP verification (N-9) partly because there is no persistent environment to verify against. The longer this runs, the more milestones accumulate that were only ever proven locally — and N-3 (automatic HTTPS, untested for want of a public DNS name) cannot be closed at all until a real environment exists. |
+
+---
+
+## 12. E0 design pass — the four net-new screens
+
+**Last updated:** 2026-07-27, opening this pass. Same evidentiary standard as §9–§11: `Done` means an executed command backs it.
+
+### 12.1 What the business owner authorised, and what it changes
+
+On **2026-07-27** the business owner directed that the E0 design pass **proceed now** rather than continue waiting on a separate formal design review. Recorded precisely, because it changes a hard gate:
+
+- **E0-06 is resolved by authorisation, not by review.** The owner's instruction to proceed *is* the disposition of the gate. The four designs (E0-02…E0-05) were produced and implemented in the same pass, using the **E0-01 token/atom reference as the consistency baseline** — which is what E0-01 was extracted for. See **DR-14** for the risk this accepts and how it is narrowed.
+- **These four screens are genuinely net-new, not ports.** Re-confirmed by direct grep of the approved prototype (`Source/Sourcing Ops Platform.dc.html`) before any design work: **zero** occurrences of `login`, `admin` or `password`. The prototype covers only Dashboard, Customers, Vendors, Catalogs, Inventory and Shipments. No design was lost or overlooked — there was never one to port.
+- **The design artifact is `docs/SCREEN_DESIGNS.md`**, and it is the thing to review. It records each screen's composition *and the reasoning behind every non-obvious decision*, because with the gate resolved by authorisation the owner is reviewing decisions rather than approving mockups.
+- **The E0-01 constraint held.** No new colour, spacing step, font, radius or shadow was introduced. Four structures the atom set lacked (`.page-header`/`.page-title`, `.tabs`/`.tab`, `.secret-value`, `.toolbar`) were added **to `_atoms.scss` as shared atoms built from existing tokens**, not invented per screen.
+
+**What this does *not* resolve.** E0-06 no longer blocks E1-13/E1-14 or E11-07/E11-08. It also no longer blocks E8-09/E8-10 — but **those two remain open for an entirely different reason**, stated plainly in §12.3: there is no invoicing backend at all.
+
+### 12.2 Story status
+
+| ID | Status | Verification / note |
+| --- | --- | --- |
+| E0-02 | **Done** | Login design in `SCREEN_DESIGNS.md`; implemented. |
+| E0-03 | **Done** | Force-password-change design in `SCREEN_DESIGNS.md`; implemented. |
+| E0-04 | **Done** | User management + master-data configuration designs; both implemented against the existing M2 controllers. |
+| E0-05 | **Done (design only — by design)** | Invoice list and generate/detail designs, implemented on **mocked data**. See §12.3. |
+| E0-06 | **Resolved by owner authorisation** (2026-07-27) | Not a review sign-off. See §12.1 and DR-14. |
+| E1-13 | **Done** | Restyled to the E0-02 design. The §5 M1-fallback caveat and its "(unsigned-off)" marker are retired. |
+| E1-14 | **Done** | Restyled to the E0-03 design. Same. |
+| E11-07 | **Done** | User management screen, incl. the show-temp-password-once interaction, against the existing `AdminUsersController`. |
+| E11-08 | **Done** | Master-data configuration screen against the existing `MasterDataController`. |
+| E8-09 | **Open — blocked** | **Not blocked on design any more; blocked on the backend.** See §12.3. |
+| E8-10 | **Open — blocked** | Same. |
+
+### 12.3 Invoicing is design-only, deliberately — E8-09/E8-10 stay open
+
+This is the single most important thing not to misread in this pass.
+
+**What exists:** two invoicing screens, matching the token system, rendering **realistic mocked data held in the component**, each carrying a visible in-app notice that it is a design preview on sample data.
+
+**What does not exist:** any invoicing backend whatsoever. Verified by direct inspection this pass — the API has exactly five controllers (`AdminUsers`, `Auth`, `Customers`, `Health`, `MasterData`). There is **no `InvoicesController`, no invoice entity, no invoice migration**; epic **E8 has not been started**. The only invoicing artefacts in the system are the `invoice_statuses` lookup rows (E3-07) and the empty `company_settings` table.
+
+**Therefore E8-09 and E8-10 remain open and blocked on:**
+
+1. **The full E8 backend epic** (E8-01…E8-07) — nothing to wire a screen to.
+2. **FSD Q9c**, still unanswered — the legal entity name, GSTIN, registered address and bank details. `company_settings` is deliberately empty, with single-row-ness enforced by a CHECK constraint rather than a seeded row of nulls, so "not configured" stays representable. **No invoice can be issued until these values exist.**
+3. **DR-3**, still open — no PDF generation library has been chosen (FR-BIL-03 requires storing invoices as PDFs, and TECH_SPEC §3's stack table names none).
+
+Building a live Invoicing UI this pass would have produced a screen with no real data behind it: the appearance of progress and none of the substance. The design deliberately makes the Q9c gap *visible* — the invoice "From" block renders an explicit "Company billing details not configured" empty state rather than inventing a plausible GSTIN, so the screen itself is now the clearest way to put Q9c to the owner.
+
+### 12.4 Verified on this machine, this pass
+
+| Check | Result |
+| --- | --- |
+| `dotnet test` | **246 passing, 0 failed** (168 unit + 78 integration on Testcontainers Postgres) — identical to the M3 close. This pass touched no backend code, and the number confirms it. |
+| `NODE_OPTIONS= npx ng test` | **136 passing, 0 failed**, up from 57 at the M3 close (+79). |
+| `NODE_OPTIONS= npx ng build` | Succeeds. All four new screens confirmed as their own lazy chunks: `admin-users-component` 17.46 kB, `invoice-detail-component` 16.95 kB, `admin-master-data-component` 13.71 kB, `invoices-component` 9.64 kB. **One budget warning — see D-15/N-10.** |
+
+### 12.5 Deviations and additions from this pass
+
+| # | Deviation | Rationale |
+| --- | --- | --- |
+| D-15 | **The initial bundle crossed its 300 kB warning budget: 288.38 kB → 303.01 kB (+14.63 kB, 3.01 kB over).** | **Measured, not assumed** — the pre-pass baseline was rebuilt from `HEAD` to confirm the breach is caused by this pass and was not pre-existing. Cause is *not* a leaked heavy dependency: the four new components import only `DatePipe`, `LowerCasePipe` and `RouterLink`, and all four are correctly lazy-chunked. The growth is shared-code hoisting — four more lazy routes pull more common code into the shared initial chunk. No new npm dependency was added. Still far below the 500 kB **error** threshold. Not silently accepted — carried as **N-10**. |
+| D-16 | **Four shared atoms added to `_atoms.scss`** (`.page-header`/`.page-title`, `.tabs`/`.tab`, `.secret-value`, `.toolbar`, plus `.row-inactive`). | Built from existing tokens only — no new colour, spacing step, font, radius or shadow. Added as *shared* atoms rather than per-screen inventions, which is the whole point of E0-01. `.page-title` duplicates the value each ported screen already had locally; component-scoped copies win on specificity, so rendering is unchanged. |
+| D-17 | **Login required no changes at all.** | The M1-fallback screens were recorded as "functional-but-unstyled". That was inaccurate: both already consumed the E0-01 tokens via a shared `_auth-page.scss`. Login already met the E0-02 design in full, including the generic-error rule — verified against `AuthService.LoginAsync`, which returns the identical message for unknown email, wrong password and inactive account. Only the force-change screen needed work. |
+| D-18 | **The force-change password hint states the real policy, which is weaker than expected.** | `AuthService.ChangePasswordAsync` enforces **only** `length >= 8` — no complexity or character-class rule exists. The hint says exactly that rather than a plausible-sounding stronger policy. **Worth a business decision:** if the owner expects complexity rules, that is a backend change (E12-03 hardening), not a UI one. |
+
+### 12.6 Open items after the E0 pass
+
+| # | Item |
+| --- | --- |
+| **N-10** | **Initial bundle is 3.01 kB over its 300 kB warning budget** (D-15). Not a build failure and nowhere near the 500 kB error threshold, but the §7 DoD says the production build stays within budget, so this is a real breach and is recorded rather than absorbed. Three options, all cheap: (a) raise the initial warning budget with a written justification, exactly as D-3 did for the per-chunk budget — defensible, since ~253 kB of the 303 kB is the Angular framework itself and the budget was set when the app had six routes rather than twelve; (b) investigate the shared-chunk hoisting for a genuine win; (c) leave it and let E12-06 handle it. **Recommend (a)**, since the budget exists to catch a UI-kit/chart-library regression and it is still doing that job — but this should be an explicit decision, not a warning everyone learns to ignore. |
+| **N-11** | **This pass has no live HTTP verification**, the same gap M3 carried as N-9. The admin screens in particular are wired to real M2 endpoints and have only been exercised against mocked HTTP in Karma. The seam most worth checking is the one §10.3 flagged and M1 proved twice: the live API response diffed against the TypeScript interfaces. Two known asymmetries make this more than routine — `AdminUserDto.roles` returns role **names** while assignment takes role **ids**, and `categories` uses `name` where every other collection uses `code`+`label`. Both are handled in code; neither has been confirmed against a running API. |
+| N-1, N-3, N-5 | **Unchanged.** |
+| N-6 | **CLOSED.** E0-06 is resolved (§12.1) and E1-13/E1-14 are no longer "unsigned-off". The design gate no longer blocks any UI story. E8-09/E8-10 remain blocked, but on the missing E8 backend and FSD Q9c — a different cause entirely (§12.3). |
+| N-9 | **Unchanged and now compounding** — M3 still has no live HTTP verification, and this pass adds more unverified surface on top. See N-11. |
+
+### 12.7 Next
+
+**Still open, and still needing the business owner rather than an engineer:**
+
+- **FSD Q9c** — legal entity name, GSTIN, registered address, bank details. Now has a screen attached to it: the invoice detail's "From" block renders the not-configured empty state, which is the concrete way to ask. **Gates M6 entirely.**
+- **FSD Q6 + Q8** — expected data volumes and a legacy-data sample. Ask together; the legacy data *is* the initial volume.
+- **Deployment track** — provision the VPS, or accept local `docker compose` verification through M8? N-11 and N-9 both trace back to there being no persistent environment to verify against.
+- **N-10** — the bundle budget decision above.
+- **D-18** — whether an 8-character minimum with no complexity rule is the intended password policy.
+
+**Engineering-side, whenever M6 is picked up:** E8 is untouched. E8-01…E8-07 (entity, migration, controller, PDF, lifecycle) all remain to be built before E8-09/E8-10 can wire the now-designed screens to anything real. **DR-3** (no PDF library chosen) is still open and should be settled before M6 starts, not during it.
