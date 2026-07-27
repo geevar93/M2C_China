@@ -14,10 +14,10 @@ public interface IMasterDataItemDto;
 /// Categories (TECH_SPEC §6) use <c>Name</c>, not <c>Code</c>/<c>Label</c> — matches the
 /// binding aggregate-read contract's <c>categories</c> shape exactly.
 /// </summary>
-public sealed record CategoryDto(Guid Id, string Name, int SortOrder, bool IsActive) : IMasterDataItemDto;
+public sealed record CategoryDto(Guid Id, string Name, int SortOrder, bool IsActive, bool IsSystemDefault) : IMasterDataItemDto;
 
 /// <summary>Shared shape for every other configurable-master-data collection (ServiceType/LeadStatus/ShipmentStatus/InvoiceStatus/VendorStatus).</summary>
-public sealed record LookupItemDto(Guid Id, string Code, string Label, int SortOrder, bool IsActive) : IMasterDataItemDto;
+public sealed record LookupItemDto(Guid Id, string Code, string Label, int SortOrder, bool IsActive, bool IsSystemDefault) : IMasterDataItemDto;
 
 /// <summary>The single aggregate-read shape the frontend loads once at startup (binding contract).</summary>
 public sealed record MasterDataAggregateDto(

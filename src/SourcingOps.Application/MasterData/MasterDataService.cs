@@ -92,8 +92,8 @@ public sealed class MasterDataService : IMasterDataService
            .Select(e => ToDto(e))
            .ToList();
 
-    private static CategoryDto ToDto(Category c) => new(c.Id, c.Name, c.SortOrder, c.IsActive);
-    private static LookupItemDto ToDto(ILookupEntity e) => new(e.Id, e.Code, e.Label, e.SortOrder, e.IsActive);
+    private static CategoryDto ToDto(Category c) => new(c.Id, c.Name, c.SortOrder, c.IsActive, c.IsSystemDefault);
+    private static LookupItemDto ToDto(ILookupEntity e) => new(e.Id, e.Code, e.Label, e.SortOrder, e.IsActive, e.IsSystemDefault);
 
     // ---- Create -------------------------------------------------------------
 
@@ -408,6 +408,15 @@ public sealed class MasterDataService : IMasterDataService
             return MasterDataDeleteResult.NotFoundResult();
         }
 
+        // N-8: a seeded default is retire-only, regardless of whether anything references
+        // it yet — checked BEFORE the reference check so an unreferenced seeded default
+        // (exactly the case that let the M2 pass hard-delete the seeded ACTIVE vendor
+        // status) is still rejected.
+        if (category.IsSystemDefault)
+        {
+            return MasterDataDeleteResult.Conflict("This category is a seeded system default and cannot be deleted. Retire it instead of deleting.");
+        }
+
         if (await IsCategoryReferencedAsync(id, ct))
         {
             return MasterDataDeleteResult.Conflict("This category is still referenced by existing records. Retire it instead of deleting.");
@@ -427,6 +436,13 @@ public sealed class MasterDataService : IMasterDataService
         if (entity is null)
         {
             return MasterDataDeleteResult.NotFoundResult();
+        }
+
+        // N-8: same retire-only rule as the category branch above — checked first, ahead of
+        // the reference check, so it applies regardless of reference count.
+        if (entity.IsSystemDefault)
+        {
+            return MasterDataDeleteResult.Conflict($"This {entityType} is a seeded system default and cannot be deleted. Retire it instead of deleting.");
         }
 
         if (await isReferenced(id, ct))
