@@ -7,11 +7,18 @@ using SourcingOps.Domain.Constants;
 
 namespace SourcingOps.Api.Tests.Auth;
 
-public class LoginTests : IClassFixture<ApiFactory>
+/// <summary>
+/// Uses <see cref="RelaxedRateLimitApiFactory"/> rather than the base <see cref="ApiFactory"/>
+/// (coordinator-flagged, M3 review): this class makes several <c>/auth/login</c> calls sharing
+/// one class fixture, and the base factory's production-matching 10/minute/IP limit leaves too
+/// little headroom once run alongside its siblings. <see cref="RateLimitAndCorsTests"/> is the
+/// one class that must keep proving the real limit trips, and is untouched.
+/// </summary>
+public class LoginTests : IClassFixture<RelaxedRateLimitApiFactory>
 {
     private readonly ApiFactory _factory;
 
-    public LoginTests(ApiFactory factory)
+    public LoginTests(RelaxedRateLimitApiFactory factory)
     {
         _factory = factory;
     }

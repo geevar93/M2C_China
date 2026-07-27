@@ -131,6 +131,12 @@ public sealed class AdminUserService : IAdminUserService
         await RevokeActiveRefreshTokensAsync(userId, ct);
         await _db.SaveChangesAsync(ct);
 
+        // E11-02 (task-1 follow-up): same risk class as deactivation — an admin forcing a
+        // credential change intends to cut existing access, not just future logins. No
+        // self-lockout ordering hazard here (unlike AuthService.ChangePasswordAsync) because
+        // this path does not reissue a token synchronously to the person being reset.
+        await _tokenRevocation.RevokeAllIssuedBeforeNowAsync(userId, ct);
+
         await _audit.LogAsync(actorUserId, "PasswordReset", "User", user.Id.ToString(), null, ct);
         return new ResetPasswordResult(temporaryPassword);
     }

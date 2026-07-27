@@ -102,6 +102,30 @@ public class AdminUsersEndpointTests : IClassFixture<AdminSeededFixture>
     }
 
     [Fact]
+    public async Task ResetPassword_RevokesAlreadyIssuedAccessToken_SameTokenIsRejectedOnNextRequest()
+    {
+        // Task-1 follow-up: same proof shape as Deactivate_RevokesAlreadyIssuedAccessToken_...
+        // below — E11-02 admin-forced reset now feeds the same ITokenRevocationService
+        // deny-list, so an already-issued access token must stop working immediately, not
+        // wait out its ~8h life.
+        var associateAuth = await AdminApiTestHelpers.ProvisionActiveAssociateAsync(_fixture.Factory, _fixture.AdminClient, _fixture.AssociateRoleId, Guid.NewGuid().ToString("N")[..8]);
+        using var associateClient = _fixture.Factory.CreateClient().WithBearer(associateAuth.AccessToken);
+        (await associateClient.GetAsync("/api/v1/master-data")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // See the identical comment on the Deactivate/AssignRoles sibling tests: JWT `iat`
+        // only has whole-second resolution, so this reflects realistic timing between a
+        // login and the admin action revoking it.
+        await Task.Delay(1100);
+
+        var resetResponse = await _fixture.AdminClient.PostAsync($"/api/v1/admin/users/{associateAuth.User.Id}/reset-password", content: null);
+        resetResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var afterResetResponse = await associateClient.GetAsync("/api/v1/master-data");
+        afterResetResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        afterResetResponse.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+    }
+
+    [Fact]
     public async Task Deactivate_BlocksLogin_AndRevokesExistingRefreshTokens()
     {
         var email = $"deactivate-{Guid.NewGuid():N}@test.local";

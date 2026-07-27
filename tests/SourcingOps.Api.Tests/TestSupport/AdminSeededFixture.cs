@@ -35,12 +35,12 @@ public sealed class AdminSeededFixture : IAsyncLifetime
 
         var changeResponse = await AdminClient.PostAsJsonAsync("/api/v1/auth/change-password",
             new ChangePasswordRequest(Factory.BootstrapAdminPassword, "Bootstrap-Changed-Pw1!"));
-        changeResponse.EnsureSuccessStatusCode();
+        await changeResponse.EnsureSuccessOrThrowWithBodyAsync();
         AdminAuth = (await changeResponse.Content.ReadFromJsonAsync<AuthResult>())!;
         AdminClient.WithBearer(AdminAuth.AccessToken);
 
         var rolesResponse = await AdminClient.GetAsync("/api/v1/admin/roles");
-        rolesResponse.EnsureSuccessStatusCode();
+        await rolesResponse.EnsureSuccessOrThrowWithBodyAsync();
         var roles = (await rolesResponse.Content.ReadFromJsonAsync<List<RoleDto>>())!;
         AssociateRoleId = roles.Single(r => r.Name == RoleNames.Associate).Id;
         SuperAdminRoleId = roles.Single(r => r.Name == RoleNames.SuperAdmin).Id;

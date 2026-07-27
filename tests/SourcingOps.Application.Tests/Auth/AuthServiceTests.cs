@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using SourcingOps.Application.Auth;
 using SourcingOps.Application.Common;
@@ -6,20 +7,29 @@ using SourcingOps.Application.Interfaces;
 using SourcingOps.Application.Tests.TestSupport;
 using SourcingOps.Domain.Entities;
 using SourcingOps.Infrastructure.Auth;
+using SourcingOps.Infrastructure.Caching;
 using SourcingOps.Infrastructure.Persistence;
 
 namespace SourcingOps.Application.Tests.Auth;
 
 public class AuthServiceTests
 {
-    private static AuthService CreateSut(AppDbContext db, out Mock<IAuditLogger> auditLoggerMock)
+    private static AuthService CreateSut(AppDbContext db, out Mock<IAuditLogger> auditLoggerMock) =>
+        CreateSut(db, out auditLoggerMock, out _);
+
+    // Real TokenRevocationService over a real MemoryCacheService (not a mock) for
+    // ChangePasswordAsync's self-lockout proof below — a mock would only prove "the method
+    // was called", not that the actual revoke-then-reissue sequence is safe by construction.
+    private static AuthService CreateSut(AppDbContext db, out Mock<IAuditLogger> auditLoggerMock, out ITokenRevocationService tokenRevocation)
     {
         auditLoggerMock = new Mock<IAuditLogger>();
         var jwtOptions = new JwtOptions { SigningKey = new string('k', 40), Issuer = "test-iss", Audience = "test-aud" };
         var authOptions = new AuthOptions { AccessTokenLifetimeMinutes = 480, RefreshTokenLifetimeDays = 30 };
         var tokenGenerator = new JwtTokenGenerator(jwtOptions, authOptions);
+        var cache = new MemoryCacheService(new MemoryCache(new MemoryCacheOptions()));
+        tokenRevocation = new TokenRevocationService(cache, authOptions);
 
-        return new AuthService(db, AuthTestData.RealPasswordHasher, tokenGenerator, auditLoggerMock.Object, authOptions);
+        return new AuthService(db, AuthTestData.RealPasswordHasher, tokenGenerator, auditLoggerMock.Object, authOptions, tokenRevocation);
     }
 
     [Fact]
@@ -231,5 +241,58 @@ public class AuthServiceTests
         var result = await sut.ChangePasswordAsync(Guid.NewGuid(), new ChangePasswordRequest("x", "Brand-New-Password2"));
 
         result.Outcome.Should().Be(ChangePasswordOutcome.UserNotFound);
+    }
+
+    // ---- Task-1 follow-up: self-service change-password also feeds the access-token
+    // deny-list (same risk class as AdminUserService.ResetPasswordAsync), but THIS path
+    // reissues a token to the same caller in the same call — the self-lockout hazard the
+    // coordinator flagged. Proven here against the REAL TokenRevocationService/cache, not a
+    // mock, using the exact same "sub"/"iat" extraction TokenRevocationMiddleware performs
+    // on every request, so this is the real mechanism, not a stand-in for it.
+
+    [Fact]
+    public async Task ChangePasswordAsync_RevokesPriorAccessTokens_ViaDenyList()
+    {
+        using var db = TestDbContextFactory.Create();
+        var user = AuthTestData.CreateActiveUserWithRole(db, "Associate", "Correct-Password1", "Customers.View");
+        var sut = CreateSut(db, out _, out var tokenRevocation);
+
+        // A token "issued" a moment before the change-password call must be considered revoked afterwards.
+        var priorIssuedAtUtc = DateTime.UtcNow.AddSeconds(-5);
+
+        await sut.ChangePasswordAsync(user.Id, new ChangePasswordRequest("Correct-Password1", "Brand-New-Password2"));
+
+        (await tokenRevocation.IsRevokedAsync(user.Id, priorIssuedAtUtc)).Should().BeTrue(
+            "a token issued before the password change must no longer be honoured");
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_ReturnedTokenIsUsableImmediately_NotSelfLockedOut()
+    {
+        // This is the specific hazard the coordinator called out: ChangePasswordAsync both
+        // records a revocation AND reissues a token in the same call. If the ordering, or
+        // ITokenRevocationService.IsRevokedAsync's "strictly before" + floor-to-seconds
+        // tolerance, were wrong, the token hen just handed back would immediately be
+        // rejected by TokenRevocationMiddleware on the very next request. Proven directly
+        // against the real decoded token's own `iat`, exactly as the middleware reads it —
+        // not assumed from the source's call ordering alone.
+        using var db = TestDbContextFactory.Create();
+        var user = AuthTestData.CreateActiveUserWithRole(db, "Associate", "Correct-Password1", "Customers.View");
+        var sut = CreateSut(db, out _, out var tokenRevocation);
+
+        var result = await sut.ChangePasswordAsync(user.Id, new ChangePasswordRequest("Correct-Password1", "Brand-New-Password2"));
+
+        result.Outcome.Should().Be(ChangePasswordOutcome.Success);
+        var accessToken = result.Result!.AccessToken;
+
+        var handler = new Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler();
+        var jwt = handler.ReadJsonWebToken(accessToken);
+        jwt.TryGetPayloadValue<long>("iat", out var iatUnixSeconds).Should().BeTrue();
+        var issuedAtUtc = DateTimeOffset.FromUnixTimeSeconds(iatUnixSeconds).UtcDateTime;
+
+        var isRevoked = await tokenRevocation.IsRevokedAsync(user.Id, issuedAtUtc);
+
+        isRevoked.Should().BeFalse(
+            "the token change-password just issued must not be rejected by the revocation the same call recorded — see ChangePassword_ReturnedTokenIsUsableImmediately for the full-HTTP-pipeline version of this proof");
     }
 }

@@ -12,6 +12,7 @@ public sealed class AuthService : IAuthService
     private readonly IJwtTokenGenerator _tokenGenerator;
     private readonly IAuditLogger _auditLogger;
     private readonly AuthOptions _options;
+    private readonly ITokenRevocationService _tokenRevocation;
 
     // Fixed dummy hash used to burn comparable CPU time when the email is unknown, so an
     // unknown email and a wrong password are not distinguishable by response timing.
@@ -24,13 +25,15 @@ public sealed class AuthService : IAuthService
         IPasswordHasher passwordHasher,
         IJwtTokenGenerator tokenGenerator,
         IAuditLogger auditLogger,
-        AuthOptions options)
+        AuthOptions options,
+        ITokenRevocationService tokenRevocation)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _tokenGenerator = tokenGenerator;
         _auditLogger = auditLogger;
         _options = options;
+        _tokenRevocation = tokenRevocation;
     }
 
     public async Task<AuthResult?> LoginAsync(LoginRequest request, CancellationToken ct = default)
@@ -147,6 +150,18 @@ public sealed class AuthService : IAuthService
         {
             t.RevokedAt = DateTime.UtcNow;
         }
+
+        // E1-08 (task-1 follow-up): self-service change-password carries the same
+        // "cut existing access now" intent as an admin-forced reset, but this path — unlike
+        // AdminUserService.ResetPasswordAsync — reissues a token to the SAME caller in the
+        // same request. That is the self-lockout hazard the coordinator flagged: if this were
+        // ordered wrong, or if ITokenRevocationService.IsRevokedAsync didn't tolerate a token
+        // minted in the same whole second as the revocation, the token handed back below
+        // would be rejected by TokenRevocationMiddleware on the very next request. It is safe
+        // by construction (see IsRevokedAsync's "strictly before" + floor-to-seconds
+        // tolerance), proven by ChangePassword_ReturnedTokenIsUsableImmediately in
+        // AuthEndpointsTests — not merely assumed here.
+        await _tokenRevocation.RevokeAllIssuedBeforeNowAsync(user.Id, ct);
 
         var result = await IssueTokenPairAsync(user, ct);
         await _auditLogger.LogAsync(user.Id, "PasswordChanged", "User", user.Id.ToString(), null, ct);

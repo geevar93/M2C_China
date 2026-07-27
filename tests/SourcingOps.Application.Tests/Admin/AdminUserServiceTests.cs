@@ -133,6 +133,24 @@ public class AdminUserServiceTests
         result.Should().BeNull();
     }
 
+    [Fact]
+    public async Task ResetPasswordAsync_RevokesAlreadyIssuedAccessTokens_ViaDenyList()
+    {
+        // Task-1 follow-up: E11-02 admin-forced reset is the same risk class as deactivation
+        // (E11-03, N-7) — an admin forcing a credential change intends to cut existing
+        // access now, not just future logins. Unlike ChangePasswordAsync, this path does not
+        // reissue a token synchronously, so there is no self-lockout ordering hazard to prove
+        // here — just that the deny-list is actually invoked.
+        using var db = TestDbContextFactory.Create();
+        var associate = AddRole(db, RoleNames.Associate);
+        var sut = CreateSut(db, out _, out var revocation);
+        var created = await sut.CreateAsync(new CreateUserRequest("Jane", "jane-n7-reset@example.com", [associate.Id]), Actor);
+
+        await sut.ResetPasswordAsync(created.User.Id, Actor);
+
+        revocation.Verify(r => r.RevokeAllIssuedBeforeNowAsync(created.User.Id, default), Times.Once);
+    }
+
     // ---- Deactivate (soft delete, E11-03/OI-2) --------------------------------
 
     [Fact]

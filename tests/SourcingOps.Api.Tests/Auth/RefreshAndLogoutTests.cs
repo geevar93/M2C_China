@@ -6,11 +6,21 @@ using SourcingOps.Application.Auth;
 
 namespace SourcingOps.Api.Tests.Auth;
 
-public class RefreshAndLogoutTests : IClassFixture<ApiFactory>
+/// <summary>
+/// Uses <see cref="RelaxedRateLimitApiFactory"/> rather than the base <see cref="ApiFactory"/>
+/// (coordinator-flagged, M3 review): this class makes several <c>/auth/login</c> calls sharing
+/// one class fixture, and the base factory's production-matching 10/minute/IP limit leaves too
+/// little headroom once run alongside its siblings. <see cref="RateLimitAndCorsTests"/> is the
+/// one class that must keep proving the real limit trips, and is untouched. This class doesn't
+/// mutate the bootstrap admin's password (unlike the old <c>ChangePasswordTests</c>), so sharing
+/// one bootstrap-admin login across its methods is not itself a correctness risk — only the
+/// rate-limit headroom needed fixing here.
+/// </summary>
+public class RefreshAndLogoutTests : IClassFixture<RelaxedRateLimitApiFactory>
 {
     private readonly ApiFactory _factory;
 
-    public RefreshAndLogoutTests(ApiFactory factory)
+    public RefreshAndLogoutTests(RelaxedRateLimitApiFactory factory)
     {
         _factory = factory;
     }
@@ -19,7 +29,10 @@ public class RefreshAndLogoutTests : IClassFixture<ApiFactory>
     {
         var response = await client.PostAsJsonAsync("/api/v1/auth/login",
             new LoginRequest(_factory.BootstrapAdminEmail, _factory.BootstrapAdminPassword));
-        response.EnsureSuccessStatusCode();
+        // Coordinator-flagged fix: a bare EnsureSuccessStatusCode() throws with no status code
+        // or response body, which is why the ChangePasswordTests failure took three runs to
+        // diagnose. Every login helper in this test project now surfaces both on failure.
+        await response.EnsureSuccessOrThrowWithBodyAsync();
         return (await response.Content.ReadFromJsonAsync<AuthResult>())!;
     }
 
