@@ -1,0 +1,129 @@
+# DRAFT — ACTION_PLAN E2-06. Written but NOT run: this environment has no CI runner and
+# no container registry credentials, so nothing here has executed end-to-end. The build
+# + unit test steps mirror commands that WERE run and verified locally (see the build
+# report); the integration-test step mirrors the local Testcontainers run that also
+# passed locally on this machine. The image-push and registry steps are illustrative —
+# REGISTRY/credentials must be filled in for a real account before this can run.
+#
+# DR-11 note: this workflow assumes the GitHub-hosted runner can start Docker
+# containers for Testcontainers (true for ubuntu-latest runners, which have Docker
+# pre-installed) — that assumption is unverified here since there is no runner to try.
+
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+env:
+  DOTNET_VERSION: "10.0.203"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-api
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore SourcingOps.sln
+
+      - name: Build
+        run: dotnet build SourcingOps.sln --no-restore -c Release
+
+      - name: Unit tests (Application)
+        run: dotnet test tests/SourcingOps.Application.Tests/SourcingOps.Application.Tests.csproj --no-build -c Release --logger trx --results-directory TestResults
+
+      # Requires Docker on the runner for Testcontainers Postgres (TECH_SPEC §4.1, DR-11).
+      # ubuntu-latest ships Docker pre-installed; this step is the CI verification that
+      # DR-11 asks for and was NOT itself run here (no runner available in this session).
+      - name: Integration tests (Api, Testcontainers Postgres)
+        run: dotnet test tests/SourcingOps.Api.Tests/SourcingOps.Api.Tests.csproj --no-build -c Release --logger trx --results-directory TestResults
+
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+
+  build-and-push-images:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: src/SourcingOps.Api/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      # Angular static bundle image build is owned by the frontend track — this job only
+      # builds/pushes the API image. Wire in a second build-push-action step here once
+      # client/dist/browser is a real build artifact to package.
+
+      - name: Setup .NET (for migrations bundle)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef
+
+      # See deploy/deploy.sh for why this exists: the runtime image has no SDK, so
+      # migrations run from this pre-built self-contained bundle instead, as an explicit
+      # deploy step (E2-07) — never auto-applied by the api container in production.
+      - name: Build EF Core migrations bundle
+        run: |
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet ef migrations bundle \
+            --project src/SourcingOps.Infrastructure \
+            --startup-project src/SourcingOps.Api \
+            --self-contained -r linux-musl-x64 \
+            -o efbundle
+
+      - name: Upload migrations bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: efbundle
+          path: efbundle
+
+  # DRAFT, disabled by default — E2-05 (provisioning the real VPS) is explicitly out of
+  # scope for this pass, so there is no SSH host/key to deploy to yet. Uncomment the
+  # `if:` below and supply DEPLOY_HOST/DEPLOY_SSH_KEY secrets once the VPS exists.
+  deploy:
+    needs: build-and-push-images
+    runs-on: ubuntu-latest
+    if: false # flip on once E2-05 has provisioned a real target
+    steps:
+      - name: Download migrations bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: efbundle
+
+      - name: Deploy over SSH
+        run: |
+          echo "Copy docker-compose.yml, Caddyfile, efbundle and deploy/deploy.sh to the VPS, then run deploy.sh there."
+          echo "Not implemented — no deploy target exists yet (see E2-05)."
