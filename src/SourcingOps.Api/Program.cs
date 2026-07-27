@@ -2,10 +2,12 @@ using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SourcingOps.Api;
+using SourcingOps.Api.Authorization;
 using SourcingOps.Api.Filters;
 using SourcingOps.Api.Middleware;
 using SourcingOps.Application;
@@ -61,13 +63,16 @@ builder.Services
         };
     });
 
+// E3-01: real PermissionRequirement/PermissionAuthorizationHandler backing every
+// [Authorize(Policy = "...")] attribute — MasterDataController/AdminUsersController are the
+// first feature controllers to use them. One policy per catalog entry, so adding a
+// permission is a one-line addition to PermissionCodes.All, not new plumbing.
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddAuthorization(options =>
 {
-    // E3-01 pulled forward just enough to have correctly-shaped policies available;
-    // no feature controller exists yet to attach them to (see build report).
     foreach (var code in PermissionCodes.All)
     {
-        options.AddPolicy(code, policy => policy.RequireClaim("permissions", code));
+        options.AddPolicy(code, policy => policy.Requirements.Add(new PermissionRequirement(code)));
     }
 });
 
@@ -80,6 +85,14 @@ builder.Services.AddCors(options =>
         .AllowAnyMethod());
 });
 
+// Configurable (default matches the original hardcoded 10/60s exactly — see
+// appsettings.json's "RateLimiting" section) so integration tests that legitimately need
+// many /auth/login calls across many test methods sharing one WebApplicationFactory (M2's
+// AdminSeededFixture-based suites) can raise the limit via UseSetting without touching
+// production behaviour. RateLimitAndCorsTests keeps proving the real default trips.
+var loginPermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:LoginPermitLimit") ?? 10;
+var loginWindowSeconds = builder.Configuration.GetValue<int?>("RateLimiting:LoginWindowSeconds") ?? 60;
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -91,8 +104,8 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? IPAddress.None.ToString(),
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                Window = TimeSpan.FromMinutes(1),
-                PermitLimit = 10,
+                Window = TimeSpan.FromSeconds(loginWindowSeconds),
+                PermitLimit = loginPermitLimit,
                 QueueLimit = 0
             }));
 });

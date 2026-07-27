@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SourcingOps.Application.Admin;
 using SourcingOps.Application.Auth;
+using SourcingOps.Application.MasterData;
 
 namespace SourcingOps.Application;
 
@@ -13,6 +15,8 @@ public static class DependencyInjection
         services.AddSingleton(authOptions);
 
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IMasterDataService, MasterDataService>();
+        services.AddScoped<IAdminUserService, AdminUserService>();
 
         return services;
     }
