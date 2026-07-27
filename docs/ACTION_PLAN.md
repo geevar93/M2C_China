@@ -509,3 +509,74 @@ Recorded per the §7 DoD requirement that assumptions be surfaced, not absorbed.
 | N-4 | **`redis` was never exercised as a real cache**, only as a reachable provider, because M1 has no cache consumers. First genuine test is E3-09. |
 | N-5 | **Changing `DB_PASSWORD` after first `docker compose up` silently breaks auth**, because Postgres only applies `POSTGRES_PASSWORD` when initialising an empty data directory; an existing `pgdata` volume keeps the old credential. Cost real debugging time this pass. Worth a line in the E12-09 operating guide. |
 | N-6 | E0-06 remains unsigned, and E1-13/E1-14 shipped under the §5 fallback. Unchanged gate for E8-09/E8-10 and E11-07/E11-08. |
+
+---
+
+## 10. M2 close-out — Master data & RBAC live
+
+**Last updated:** 2026-07-27, end of the M2 implementation pass. Same evidentiary standard as §9: `Done` means an executed command backs it.
+
+**Exit criterion met.** A Super Admin creates an Associate account with the temp password shown once, adds/renames/retires a category, and a feature endpoint returns 403 for a missing permission — all verified over real HTTP through Caddy, not only in tests.
+
+Verified on this machine: `dotnet build` (0 warnings), `dotnet test` (**151 passing** — 99 unit + 52 integration on Testcontainers Postgres), plus a full `docker compose --profile prod` smoke test of the combined stack.
+
+### E3 — Master Data & RBAC Scaffold
+
+| ID | Status | Verification |
+| --- | --- | --- |
+| E3-01 | **Done** | `PermissionRequirement` + handler backing `[Authorize(Policy=…)]`. Verified live: Associate read 200, Associate write 403, Associate `/admin/users` 403, SuperAdmin write 201. **Closes N-2.** |
+| E3-02 | **Done** | Additive union proven end-to-end — a live Associate token carries exactly 15 permissions (17-code catalog minus the two `Admin.*`). |
+| E3-03 | **Done** | Categories create/rename/reorder/retire via `MasterDataController`. |
+| E3-04 | **Done** | `CIF` / `FREIGHT_ONLY` as lookup rows with editable labels; verified live as FK-backed, never enum or free text. |
+| E3-05 | **Done** | 6 lead statuses seeded and configurable. |
+| E3-06 | **Done** | 4 shipment statuses; `IN TRANSIT` confirmed live with a space, matching the prototype's ported colour map key. |
+| E3-07 | **Done** | 4 invoice statuses. |
+| E3-08 | **Done** | Verified live: `DELETE` on a **referenced** row → `409` + `application/problem+json`, detail "…Retire it instead of deleting."; unreferenced → `204`. Retire/restore flip `IsActive` without touching any FK. |
+| E3-09 | **Done** | First real `ICacheService` consumer. Verified a retire is visible in the immediately following cache-backed read (no stale window), under **both** in-memory and Redis. |
+| E3-10 | **Done** | `MasterDataService` — one HTTP call shared by all consumers; 10/10 Karma tests. Active-vs-retired split enforced by separate accessors. |
+
+### E11-01…E11-05 — Account management backend
+
+| ID | Status | Verification |
+| --- | --- | --- |
+| E11-01 | **Done** | Temp password returned once; verified live it is **never** echoed by `GET /admin/users`. |
+| E11-02 | **Done** | Reset issues a new temp password and revokes refresh tokens. |
+| E11-03 | **Done** | Soft delete per the settled OI-2 reasoning. Login and refresh both 401 afterwards. **But see N-7** — already-issued access tokens survive. |
+| E11-04 | **Done** | List/search including inactive, paged. |
+| E11-05 | **Done** | Role reassignment revokes refresh tokens (DR-10). |
+
+### 10.1 Deviations and additions from this pass
+
+| # | Deviation | Rationale |
+| --- | --- | --- |
+| D-10 | **`POST /admin/users/{id}/restore` added** | Not in E11-03. Without it an accidental deactivation is unrecoverable through the API. |
+| D-11 | **Last-active-SuperAdmin guard added** — blocks deactivating *or* role-reassigning-away-from the final active Super Admin | Real lockout safety: no hard delete, `restore` itself needs `Admin.ManageUsers`, and the bootstrap seed is idempotent so it will not re-create an existing admin. A zero-SuperAdmin state would be permanently unadministrable. Verified live on both paths (400, account untouched). **Not described in TECH_SPEC §4.4 — worth adding there.** |
+| D-12 | **Lookup `Code` is immutable after creation**; `PUT` edits label/name only | The frontend's `StatusStyleService` keys its ported colour maps by `Code`, so a mutable `Code` would silently break status colours app-wide. Renaming still works via the display field. |
+| D-13 | **Login rate limit made configurable** (production default unchanged) | It was hard-coded, and under `WebApplicationFactory` all requests share one synthetic IP, so the suite self-tripped the real 10/min cap. Would have failed **intermittently in CI** (E2-06) by concurrency. Fixed at the root, not with retries; a test still asserts the real default so a disabled limiter cannot ship unnoticed. |
+| D-14 | **A failing test's premise was fixed, not its assertion** | `Deactivate_TheLastActiveSuperAdmin` asserted a *global* DB condition while sharing one Postgres with siblings that create users; a sibling left a second active admin behind. The product guard was never broken (confirmed by unit test). Had the test ever passed, it would have deactivated the shared fixture admin and poisoned every later test in the class. |
+
+### 10.2 Open items after M2
+
+| # | Item |
+| --- | --- |
+| **N-7** | **A deactivated user keeps full API access for up to 8 hours.** Verified live: after `DELETE /admin/users/{id}`, login and refresh both correctly return 401, but the user's **already-issued access token still returns 200**. The access token lifetime is 8h (TECH_SPEC §4.2), so that is the exposure window. E11-03's own wording is "blocks login and **revokes sessions**" — refresh tokens *are* revoked, so the gap is specifically the bearer token. TECH_SPEC §4.3 knowingly accepts this for *permission* changes, but deactivation is a different risk class: it is the "remove access now" operation, used when someone leaves or is compromised. Genuinely low risk at Q7's stated 2–5 internal staff, but it should be an **explicit accepted decision, not an unnoticed gap**. Three options: (a) shorten the access-token lifetime and lean on refresh rotation — simplest; (b) check `IsActive` per request — a DB hit §4.3 deliberately avoided; (c) a revocation deny-list in `ICacheService` keyed by user id with TTL equal to the token lifetime — no DB hit, bounded size, and the cache now has a proven consumer. **Recommend (c), or (a) if simplicity wins.** |
+| N-8 | **Seeded default lookups are deletable while unreferenced.** Observed during verification: `DELETE` removed the seeded `ACTIVE` vendor status because no vendor referenced it yet. This is *correct* per E3-08 and consistent with FSD §3.3 configurability, but it means an early mistake can remove a default the seeder will not restore (seeding is idempotent and only fills gaps on an empty set). Consider whether seeded defaults should be retire-only. |
+| N-1 | **Unchanged.** The Angular 19 pin and staying on patched Angular remain mutually exclusive until Node is upgraded. TECH_SPEC OI-7 reopened. |
+| N-3, N-4 | **N-3 unchanged** (automatic HTTPS still untested — no public DNS name; first real exercise is E2-05). **N-4 now closed** — Redis was exercised as a real cache under E3-09, not merely as a reachable provider. |
+| N-5 | **Unchanged and re-encountered.** Changing `DB_PASSWORD` against an existing `pgdata` volume still breaks auth confusingly. Belongs in the E12-09 operating guide. |
+| N-6 | **Unchanged.** E0-06 still unsigned; E1-13/E1-14 shipped under the §5 fallback. Still gates E8-09/E8-10 and E11-07/E11-08. |
+
+### 10.3 Cross-track integration check (the seam M1 proved matters)
+
+M1's two real defects were both wiring between components that each passed their own tests, so E3-10 was diffed against a **live** API response rather than trusted:
+
+- All six collections present, no extras, **keys match the TypeScript interfaces exactly**, `sortOrder` int / `isActive` bool / `id` string.
+- The deliberate asymmetry holds on both sides — `categories` returns `name`; every other collection returns `code` + `label`.
+- `includeRetired` is genuinely honoured, **not silently ignored as an unknown query param**: a retired row is absent at `false` and present with `isActive: false` at `true`. This is exactly what E3-10's design depends on, since it loads with `true` so `*ById` resolves retired rows while `*Options` filters them out.
+- Seeded values still match the prototype verbatim (`IN TRANSIT` with a space; `CIF` / `FREIGHT_ONLY` with the prototype's labels), so the ported colour maps resolve.
+
+### 10.4 Next
+
+**M3 — CRM vertical slice (E4).** Now unblocked: FSD Q1 is answered, and Q2 confirmed E4-08 in scope needing no migration.
+
+**Do first, before any E4 story:** the single reviewed **pre-M3 migration** carrying the three deferred schema corrections — the six `external_*` columns on `customers` (Q1), `shipments.reference`, and `company_settings` (shape only; Q9c values still outstanding). Deliberately held out of M2 so the M1 freeze (DR-2) breaks once, with review.
