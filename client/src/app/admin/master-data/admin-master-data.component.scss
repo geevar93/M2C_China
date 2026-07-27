@@ -1,0 +1,52 @@
+.md-toolbar {
+  margin-bottom: var(--space-8);
+}
+
+.md-retired-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: 13px;
+}
+
+.md-banner {
+  margin-bottom: var(--space-8);
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.row-sub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.chip-active {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.chip-inactive {
+  background: var(--color-neutral-chip-bg);
+  color: var(--color-text-muted);
+}
+
+.md-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  justify-content: flex-end;
+}
+
+.md-hint {
+  text-align: right;
+  margin-top: var(--space-3);
+}
+
+.md-modal-actions {
+  display: flex;
+  gap: var(--space-6);
+  margin-top: var(--space-8);
+}

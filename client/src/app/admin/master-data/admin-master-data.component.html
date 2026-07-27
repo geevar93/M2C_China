@@ -1,0 +1,160 @@
+<div>
+  <div class="page-header">
+    <h1 class="page-title">Master Data</h1>
+    <button type="button" class="btn btn-primary" (click)="openCreateForm()">+ Add</button>
+  </div>
+
+  <div class="tabs">
+    @for (key of collectionKeys; track key) {
+      <button
+        type="button"
+        class="tab"
+        [class.tab--active]="activeCollection() === key"
+        (click)="selectTab(key)"
+      >
+        {{ collectionLabels[key] }}
+      </button>
+    }
+  </div>
+
+  <div class="toolbar md-toolbar">
+    <label class="md-retired-toggle">
+      <input type="checkbox" [checked]="includeRetired()" (change)="toggleIncludeRetired()" />
+      Show retired
+    </label>
+  </div>
+
+  @if (actionError()) {
+    <div class="banner-warning md-banner" role="alert">{{ actionError() }}</div>
+  }
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Order</th>
+          <th>{{ isCategoryTab() ? 'Name' : 'Code / Label' }}</th>
+          <th>Status</th>
+          <th class="align-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows(); track row.id) {
+          <tr [class.row-inactive]="!row.isActive">
+            <td class="muted">{{ row.sortOrder }}</td>
+            <td>
+              @if (isCategoryTab()) {
+                {{ categoryName(row) }}
+              } @else {
+                <strong>{{ lookupCode(row) }}</strong>
+                <div class="row-sub">{{ lookupLabel(row) }}</div>
+              }
+            </td>
+            <td>
+              @if (row.isActive) {
+                <span class="chip chip-active">Active</span>
+              } @else {
+                <span class="chip chip-inactive">Inactive</span>
+              }
+            </td>
+            <td class="align-right">
+              <div class="md-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  [disabled]="!canMoveUp(row)"
+                  title="Move up"
+                  aria-label="Move up"
+                  (click)="moveUp(row)"
+                >↑</button>
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  [disabled]="!canMoveDown(row)"
+                  title="Move down"
+                  aria-label="Move down"
+                  (click)="moveDown(row)"
+                >↓</button>
+                <button type="button" class="btn btn-secondary btn-sm" (click)="openEditForm(row)">Rename</button>
+                @if (row.isActive) {
+                  <button type="button" class="btn btn-secondary btn-sm" [disabled]="togglingId() === row.id" (click)="retireRow(row)">Retire</button>
+                } @else {
+                  <button type="button" class="btn btn-secondary btn-sm" [disabled]="togglingId() === row.id" (click)="restoreRow(row)">Restore</button>
+                }
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  [disabled]="row.isSystemDefault || deletingId() === row.id"
+                  [title]="row.isSystemDefault ? 'Seeded defaults are retire-only and cannot be deleted.' : 'Delete'"
+                  (click)="deleteRow(row)"
+                >Delete</button>
+              </div>
+              @if (row.isSystemDefault) {
+                <div class="field-hint md-hint">Seeded default — retire-only.</div>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (loading()) {
+      <div class="state-panel">
+        <div class="spinner"></div>
+        <span>Loading master data…</span>
+      </div>
+    } @else if (error()) {
+      <div class="state-panel">
+        <span>{{ error() }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+      </div>
+    } @else if (noResults()) {
+      <div class="state-panel">
+        No {{ collectionLabels[activeCollection()] | lowercase }} to show{{ includeRetired() ? '' : ' — try "Show retired"' }}.
+      </div>
+    }
+  </div>
+
+  @if (formOpen()) {
+    <div class="dialog-backdrop">
+      <div class="dialog-panel">
+        <div class="section-title">{{ formMode() === 'create' ? 'Add' : 'Rename' }} — {{ collectionLabels[activeCollection()] }}</div>
+        @if (formError()) {
+          <div class="field-error" role="alert">{{ formError() }}</div>
+        }
+
+        @if (isCategoryTab()) {
+          <div class="field">
+            <label for="md-name">Name</label>
+            <input id="md-name" class="field-input" [value]="formName()" (input)="formName.set($any($event.target).value)" />
+          </div>
+        } @else {
+          <div class="field">
+            <label for="md-code">Code</label>
+            <input
+              id="md-code"
+              class="field-input"
+              [value]="formCode()"
+              [disabled]="formMode() === 'edit'"
+              (input)="formCode.set($any($event.target).value)"
+            />
+            @if (formMode() === 'edit') {
+              <div class="field-hint">Code can't be changed after creation — status colours are keyed by it app-wide. Rename the label instead.</div>
+            }
+          </div>
+          <div class="field">
+            <label for="md-label">Label</label>
+            <input id="md-label" class="field-input" [value]="formLabel()" (input)="formLabel.set($any($event.target).value)" />
+          </div>
+        }
+
+        <div class="md-modal-actions">
+          <button type="button" class="btn btn-primary" [disabled]="formSaving()" (click)="submitForm()">
+            {{ formSaving() ? 'Saving…' : 'Save' }}
+          </button>
+          <button type="button" class="btn btn-secondary" (click)="cancelForm()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

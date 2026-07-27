@@ -1,0 +1,248 @@
+<div>
+  <div class="page-header">
+    <h1 class="page-title">Users</h1>
+    <button type="button" class="btn btn-primary" (click)="openCreate()">+ New User</button>
+  </div>
+
+  <div class="card filter-bar">
+    <div class="field filter-search">
+      <label for="au-search">Search</label>
+      <input
+        id="au-search"
+        class="field-input"
+        [value]="search()"
+        (input)="onSearchInput($any($event.target).value)"
+        placeholder="Name or email"
+      />
+    </div>
+    <label class="au-inactive-toggle">
+      <input type="checkbox" [checked]="includeInactive()" (change)="toggleIncludeInactive()" />
+      Show inactive
+    </label>
+    <div class="filter-spacer"></div>
+  </div>
+
+  <div class="au-summary">{{ totalCount() }} users</div>
+
+  @if (actionError()) {
+    <div class="banner-warning au-banner" role="alert">{{ actionError() }}</div>
+  }
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Roles</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th class="align-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (u of rows(); track u.id) {
+          <tr [class.row-inactive]="!u.isActive">
+            <td>
+              <div class="row-name">{{ u.name }}</div>
+              <div class="row-sub">{{ u.email }}</div>
+            </td>
+            <td>
+              @for (r of u.roles; track r) {
+                <span class="chip au-role-chip">{{ r }}</span>
+              }
+              @if (u.roles.length === 0) {
+                <span class="muted">—</span>
+              }
+            </td>
+            <td>
+              @if (u.isActive) {
+                <span class="chip chip-active">Active</span>
+              } @else {
+                <span class="chip chip-inactive">Inactive</span>
+              }
+              @if (u.mustChangePassword) {
+                <span class="chip chip-warning">Must change password</span>
+              }
+            </td>
+            <td class="muted">{{ u.createdAt | date: 'mediumDate' }}</td>
+            <td class="align-right">
+              <div class="au-actions">
+                <button type="button" class="btn btn-secondary btn-sm" (click)="openRoles(u)">Roles</button>
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  [disabled]="resettingUserId() === u.id"
+                  (click)="resetPassword(u)"
+                >
+                  {{ resettingUserId() === u.id ? 'Resetting…' : 'Reset password' }}
+                </button>
+                @if (u.isActive) {
+                  <button type="button" class="btn btn-secondary btn-sm" (click)="openDeactivateConfirm(u)">Deactivate</button>
+                } @else {
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    [disabled]="restoringUserId() === u.id"
+                    (click)="restore(u)"
+                  >
+                    {{ restoringUserId() === u.id ? 'Restoring…' : 'Restore' }}
+                  </button>
+                }
+              </div>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (loading()) {
+      <div class="state-panel">
+        <div class="spinner"></div>
+        <span>Loading users…</span>
+      </div>
+    } @else if (error()) {
+      <div class="state-panel">
+        <span>{{ error() }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+      </div>
+    } @else if (noResults()) {
+      <div class="state-panel">No users match these filters.</div>
+    }
+  </div>
+
+  @if (!loading() && !error() && totalCount() > 0) {
+    <div class="pager">
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() <= 1" (click)="prevPage()">← Prev</button>
+      <span class="muted">Page {{ page() }} of {{ totalPages() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() >= totalPages()" (click)="nextPage()">Next →</button>
+    </div>
+  }
+
+  <!-- Create user modal -->
+  @if (createOpen()) {
+    <div class="dialog-backdrop">
+      <div class="dialog-panel">
+        <div class="section-title">New user</div>
+        @if (createError()) {
+          <div class="field-error" role="alert">{{ createError() }}</div>
+        }
+        <div class="field">
+          <label for="au-create-name">Name</label>
+          <input id="au-create-name" class="field-input" [value]="createName()" (input)="createName.set($any($event.target).value)" />
+        </div>
+        <div class="field">
+          <label for="au-create-email">Email</label>
+          <input
+            id="au-create-email"
+            class="field-input"
+            type="email"
+            [value]="createEmail()"
+            (input)="createEmail.set($any($event.target).value)"
+          />
+        </div>
+        <div class="field">
+          <label>Roles</label>
+          <div class="au-role-list">
+            @for (r of roles(); track r.id) {
+              <label class="au-role-option">
+                <input
+                  type="checkbox"
+                  [checked]="createSelectedRoleIds().includes(r.id)"
+                  (change)="toggleCreateRole(r.id)"
+                />
+                {{ r.name }}
+              </label>
+            }
+            @if (roles().length === 0) {
+              <span class="muted">No roles available.</span>
+            }
+          </div>
+        </div>
+        <div class="au-modal-actions">
+          <button type="button" class="btn btn-primary" [disabled]="creating()" (click)="submitCreate()">
+            {{ creating() ? 'Creating…' : 'Create User' }}
+          </button>
+          <button type="button" class="btn btn-secondary" (click)="cancelCreate()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!--
+    One-time temporary-password modal (E0-04a's load-bearing interaction).
+    Deliberately no (click) handler on this backdrop and no (keydown.escape)
+    binding anywhere in this file — the ONLY way to close it is the explicit
+    "I have copied it" button below, because an accidental dismissal is
+    otherwise unrecoverable (the password is never shown again).
+  -->
+  @if (tempPassword(); as pw) {
+    <div class="dialog-backdrop">
+      <div class="dialog-panel">
+        <div class="section-title">Temporary password</div>
+        <p>This password will only be shown this one time. Copy it now and share it securely — it cannot be retrieved again.</p>
+        <div class="secret-value">{{ pw }}</div>
+        <div class="au-modal-actions">
+          <button type="button" class="btn btn-secondary" (click)="copyTempPassword()">
+            {{ tempPasswordCopied() ? 'Copied ✓' : 'Copy' }}
+          </button>
+          <button type="button" class="btn btn-primary" (click)="acknowledgeTempPassword()">I have copied it</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Deactivate confirmation -->
+  @if (deactivateTarget(); as target) {
+    <div class="dialog-backdrop">
+      <div class="dialog-panel">
+        <div class="section-title">Deactivate {{ target.name }}?</div>
+        @if (deactivateError()) {
+          <div class="field-error" role="alert">{{ deactivateError() }}</div>
+        }
+        <p>This revokes their active sessions and access token immediately. You can restore this account later.</p>
+        <div class="au-modal-actions">
+          <button type="button" class="btn btn-primary" [disabled]="deactivating()" (click)="confirmDeactivate()">
+            {{ deactivating() ? 'Deactivating…' : 'Deactivate' }}
+          </button>
+          <button type="button" class="btn btn-secondary" (click)="cancelDeactivate()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Roles assignment modal -->
+  @if (roleModalUser(); as ru) {
+    <div class="dialog-backdrop">
+      <div class="dialog-panel">
+        <div class="section-title">Manage roles — {{ ru.name }}</div>
+        <div class="banner-warning au-banner">
+          The user must sign in again for a role change to take effect — permissions are only re-evaluated at next login/refresh.
+        </div>
+        @if (roleModalError()) {
+          <div class="field-error" role="alert">{{ roleModalError() }}</div>
+        }
+        <div class="au-role-list">
+          @for (r of roles(); track r.id) {
+            <label class="au-role-option">
+              <input
+                type="checkbox"
+                [checked]="roleModalSelectedIds().includes(r.id)"
+                (change)="toggleRoleSelection(r.id)"
+              />
+              {{ r.name }}
+            </label>
+          }
+          @if (roles().length === 0) {
+            <span class="muted">No roles available.</span>
+          }
+        </div>
+        <div class="au-modal-actions">
+          <button type="button" class="btn btn-primary" [disabled]="savingRoles()" (click)="saveRoles()">
+            {{ savingRoles() ? 'Saving…' : 'Save Roles' }}
+          </button>
+          <button type="button" class="btn btn-secondary" (click)="cancelRoles()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>
