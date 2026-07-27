@@ -74,6 +74,28 @@ export class ShellComponent {
         { id: 'inventory', icon: '📦', label: 'Inventory', route: '/inventory', permission: 'Inventory.View' },
         { id: 'shipments', icon: '🚚', label: 'Shipments', route: '/shipments', permission: 'Shipments.View' }
       ]
+    },
+    {
+      // Invoicing is a DESIGN PREVIEW on mocked data this pass — there is no
+      // invoicing backend (ACTION_PLAN §12.3). The nav entry exists so the
+      // design is reachable for review; E8-09/E8-10 remain open.
+      label: 'BILLING',
+      items: [{ id: 'invoices', icon: '🧾', label: 'Invoices', route: '/invoices', permission: 'Invoicing.View' }]
+    },
+    {
+      // Admin.* is SuperAdmin-only in the seeded role map, so this whole group
+      // is invisible to an Associate via the existing permission filter below.
+      label: 'ADMIN',
+      items: [
+        { id: 'admin-users', icon: '👤', label: 'Users', route: '/admin/users', permission: 'Admin.ManageUsers' },
+        {
+          id: 'admin-master-data',
+          icon: '⚙️',
+          label: 'Master Data',
+          route: '/admin/master-data',
+          permission: 'Admin.ManageMasterData'
+        }
+      ]
     }
   ];
 
