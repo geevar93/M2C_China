@@ -124,6 +124,44 @@ public class AdminUsersEndpointTests : IClassFixture<AdminSeededFixture>
     }
 
     [Fact]
+    public async Task Deactivate_RevokesAlreadyIssuedAccessToken_SameTokenIsRejectedOnNextRequest()
+    {
+        // ACTION_PLAN §10.2 N-7's exact reproduction: login and refresh already correctly
+        // 401 after deactivation — this proves the previously-surviving gap (the
+        // ALREADY-ISSUED access token) is now closed too, without waiting out its ~8h life.
+        var associateAuth = await AdminApiTestHelpers.ProvisionActiveAssociateAsync(_fixture.Factory, _fixture.AdminClient, _fixture.AssociateRoleId, Guid.NewGuid().ToString("N")[..8]);
+        using var associateClient = _fixture.Factory.CreateClient().WithBearer(associateAuth.AccessToken);
+
+        // The token works before deactivation — any authenticated (non-admin) endpoint proves it.
+        (await associateClient.GetAsync("/api/v1/master-data")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // A JWT `iat` only has whole-second resolution (see TokenRevocationService's doc
+        // comment on the hazard-1 fix), so a token minted and then revoked within the SAME
+        // wall-clock second is not reliably distinguishable from a legitimate
+        // revoke-then-reissue sequence — the design deliberately favors never self-locking-out
+        // a freshly reissued token over catching that narrow same-second race. A real
+        // deactivation is never seconds-close to the login it is revoking, so this delay
+        // reflects realistic timing, not a workaround for a flaky assertion.
+        await Task.Delay(1100);
+
+        var deactivateResponse = await _fixture.AdminClient.DeleteAsync($"/api/v1/admin/users/{associateAuth.User.Id}");
+        deactivateResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // N-7: the SAME already-issued access token must now be rejected — 401, not 200.
+        var afterDeactivateResponse = await associateClient.GetAsync("/api/v1/master-data");
+        afterDeactivateResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        afterDeactivateResponse.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+
+        // Restore + a fresh login must work again (the deny-list must not outlive the revocation's purpose).
+        var restoreResponse = await _fixture.AdminClient.PostAsync($"/api/v1/admin/users/{associateAuth.User.Id}/restore", content: null);
+        restoreResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var reLogin = await AdminApiTestHelpers.LoginAsync(_fixture.Factory.CreateClient(), associateAuth.User.Email, "Associate-Changed-Pw1!");
+        using var newClient = _fixture.Factory.CreateClient().WithBearer(reLogin.AccessToken);
+        (await newClient.GetAsync("/api/v1/master-data")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task Deactivate_UnknownUser_Returns404()
     {
         var response = await _fixture.AdminClient.DeleteAsync($"/api/v1/admin/users/{Guid.NewGuid()}");
@@ -221,6 +259,28 @@ public class AdminUsersEndpointTests : IClassFixture<AdminSeededFixture>
         reLogin.User.Roles.Should().BeEquivalentTo([RoleNames.Associate, RoleNames.SuperAdmin]);
         reLogin.User.Permissions.Should().Contain(PermissionCodes.AdminManageMasterData);
         reLogin.User.Permissions.Should().OnlyHaveUniqueItems("the union must not duplicate permissions shared by both roles");
+    }
+
+    [Fact]
+    public async Task AssignRoles_RevokesAlreadyIssuedAccessToken_SameTokenIsRejectedOnNextRequest()
+    {
+        // N-7's second required trigger (ACTION_PLAN "must fire on deactivation and role
+        // reassignment") — same proof shape as the deactivate test above, for role change.
+        var associateAuth = await AdminApiTestHelpers.ProvisionActiveAssociateAsync(_fixture.Factory, _fixture.AdminClient, _fixture.AssociateRoleId, Guid.NewGuid().ToString("N")[..8]);
+        using var associateClient = _fixture.Factory.CreateClient().WithBearer(associateAuth.AccessToken);
+        (await associateClient.GetAsync("/api/v1/master-data")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // See the identical comment in the Deactivate test above: JWT `iat` only has
+        // whole-second resolution, so this reflects realistic timing between a login and the
+        // admin action revoking it, rather than racing the same wall-clock second.
+        await Task.Delay(1100);
+
+        var assignResponse = await _fixture.AdminClient.PutAsJsonAsync($"/api/v1/admin/users/{associateAuth.User.Id}/roles",
+            new AssignRolesRequest([_fixture.AssociateRoleId]));
+        assignResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var afterResponse = await associateClient.GetAsync("/api/v1/master-data");
+        afterResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]

@@ -372,4 +372,75 @@ public class MasterDataServiceTests
         result.Deleted.Should().BeFalse();
         result.ConflictDetail.Should().NotBeNullOrWhiteSpace();
     }
+
+    // ---- Delete: seeded system defaults are retire-only (N-8) ------------------------
+
+    [Fact]
+    public async Task DeleteAsync_SystemDefaultVendorStatus_ReturnsConflict_EvenThoughUnreferenced()
+    {
+        // Reproduces the exact defect from ACTION_PLAN §10.2 N-8: the M2 pass hard-deleted
+        // the seeded "ACTIVE" vendor status because nothing referenced it yet.
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db, out _);
+        db.VendorStatuses.Add(new VendorStatus { Id = Guid.NewGuid(), Code = "ACTIVE", Label = "Active", IsActive = true, SortOrder = 1, IsSystemDefault = true });
+        await db.SaveChangesAsync();
+        var seeded = db.VendorStatuses.Single(s => s.Code == "ACTIVE");
+
+        var result = await sut.DeleteAsync(MasterDataCollectionKey.VendorStatuses, seeded.Id, Actor);
+
+        result.Deleted.Should().BeFalse();
+        result.NotFound.Should().BeFalse();
+        result.ConflictDetail.Should().Contain("Retire");
+        db.VendorStatuses.Should().Contain(s => s.Id == seeded.Id, "a seeded default must not be hard-deleted, even when nothing references it");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_SystemDefaultCategory_ReturnsConflict_EvenThoughUnreferenced()
+    {
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db, out _);
+        db.Categories.Add(new Category { Id = Guid.NewGuid(), Name = "Jewellery", IsActive = true, SortOrder = 1, IsSystemDefault = true });
+        await db.SaveChangesAsync();
+        var seeded = db.Categories.Single(c => c.Name == "Jewellery");
+
+        var result = await sut.DeleteAsync(MasterDataCollectionKey.Categories, seeded.Id, Actor);
+
+        result.Deleted.Should().BeFalse();
+        result.ConflictDetail.Should().Contain("Retire");
+        db.Categories.Should().Contain(c => c.Id == seeded.Id);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_UserCreatedLookupRow_IsNotFlaggedSystemDefault_AndRemainsHardDeletable()
+    {
+        // The other half of N-8's requirement: user-added custom rows must keep working
+        // exactly as built — hard-deletable while unreferenced.
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db, out _);
+        var created = (LookupItemDto)await sut.CreateAsync(MasterDataCollectionKey.VendorStatuses, new UpsertMasterDataRequest(null, "CUSTOM", "Custom"), Actor);
+        created.IsSystemDefault.Should().BeFalse("only DbSeeder-created rows are system defaults");
+
+        var result = await sut.DeleteAsync(MasterDataCollectionKey.VendorStatuses, created.Id, Actor);
+
+        result.Deleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_SystemDefaultRow_TakesPriorityOverReferenceCheck()
+    {
+        // "Regardless of reference count" per the coordinator's brief — prove the
+        // system-default rejection still fires even when the row IS also referenced (not
+        // just the more common unreferenced case above).
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db, out _);
+        var status = new VendorStatus { Id = Guid.NewGuid(), Code = "ACTIVE", Label = "Active", IsActive = true, SortOrder = 1, IsSystemDefault = true };
+        db.VendorStatuses.Add(status);
+        db.Vendors.Add(new Vendor { Id = Guid.NewGuid(), Name = "V1", StatusId = status.Id, CreatedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+
+        var result = await sut.DeleteAsync(MasterDataCollectionKey.VendorStatuses, status.Id, Actor);
+
+        result.Deleted.Should().BeFalse();
+        result.ConflictDetail.Should().Contain("system default");
+    }
 }

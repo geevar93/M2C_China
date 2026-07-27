@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using SourcingOps.Application.Admin;
+using SourcingOps.Application.Auth;
 using SourcingOps.Application.Common;
 using SourcingOps.Application.Interfaces;
 using SourcingOps.Application.Tests.TestSupport;
@@ -11,16 +12,21 @@ using SourcingOps.Domain.Entities;
 namespace SourcingOps.Application.Tests.Admin;
 
 /// <summary>
-/// Covers ACTION_PLAN E11-01…E11-05 plus the coordinator-approved restore addition.
+/// Covers ACTION_PLAN E11-01…E11-05 plus the coordinator-approved restore addition, and the
+/// N-7 access-token deny-list wiring (Deactivate/AssignRoles must call ITokenRevocationService).
 /// </summary>
 public class AdminUserServiceTests
 {
     private static readonly Guid Actor = Guid.NewGuid();
 
-    private static AdminUserService CreateSut(SourcingOps.Infrastructure.Persistence.AppDbContext db, out Mock<IAuditLogger> auditMock)
+    private static AdminUserService CreateSut(SourcingOps.Infrastructure.Persistence.AppDbContext db, out Mock<IAuditLogger> auditMock) =>
+        CreateSut(db, out auditMock, out _);
+
+    private static AdminUserService CreateSut(SourcingOps.Infrastructure.Persistence.AppDbContext db, out Mock<IAuditLogger> auditMock, out Mock<ITokenRevocationService> revocationMock)
     {
         auditMock = new Mock<IAuditLogger>();
-        return new AdminUserService(db, AuthTestData.RealPasswordHasher, auditMock.Object);
+        revocationMock = new Mock<ITokenRevocationService>();
+        return new AdminUserService(db, AuthTestData.RealPasswordHasher, auditMock.Object, revocationMock.Object);
     }
 
     private static Role AddRole(SourcingOps.Infrastructure.Persistence.AppDbContext db, string name)
@@ -148,6 +154,34 @@ public class AdminUserServiceTests
     }
 
     [Fact]
+    public async Task DeactivateAsync_RevokesAlreadyIssuedAccessTokens_ViaDenyList()
+    {
+        using var db = TestDbContextFactory.Create();
+        var associate = AddRole(db, RoleNames.Associate);
+        var sut = CreateSut(db, out _, out var revocation);
+        var created = await sut.CreateAsync(new CreateUserRequest("Jane", "jane-n7-deactivate@example.com", [associate.Id]), Actor);
+
+        await sut.DeactivateAsync(created.User.Id, Actor);
+
+        revocation.Verify(r => r.RevokeAllIssuedBeforeNowAsync(created.User.Id, default), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeactivateAsync_AlreadyInactive_DoesNotCallRevocationAgain()
+    {
+        using var db = TestDbContextFactory.Create();
+        var associate = AddRole(db, RoleNames.Associate);
+        var sut = CreateSut(db, out _, out var revocation);
+        var created = await sut.CreateAsync(new CreateUserRequest("Jane", "jane-n7-idempotent@example.com", [associate.Id]), Actor);
+        await sut.DeactivateAsync(created.User.Id, Actor);
+        revocation.Invocations.Clear();
+
+        await sut.DeactivateAsync(created.User.Id, Actor);
+
+        revocation.Verify(r => r.RevokeAllIssuedBeforeNowAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task DeactivateAsync_UnknownUser_ReturnsFalse()
     {
         using var db = TestDbContextFactory.Create();
@@ -264,6 +298,20 @@ public class AdminUserServiceTests
         result!.Roles.Should().BeEquivalentTo([RoleNames.Associate, RoleNames.SuperAdmin]);
         db.RefreshTokens.Single(t => t.UserId == created.User.Id).RevokedAt.Should().NotBeNull();
         audit.Verify(a => a.LogAsync(Actor, "UserRolesChanged", "User", created.User.Id.ToString(), It.IsAny<object>(), default), Times.Once);
+    }
+
+    [Fact]
+    public async Task AssignRolesAsync_RevokesAlreadyIssuedAccessTokens_ViaDenyList()
+    {
+        using var db = TestDbContextFactory.Create();
+        var associate = AddRole(db, RoleNames.Associate);
+        var superAdmin = AddRole(db, RoleNames.SuperAdmin);
+        var sut = CreateSut(db, out _, out var revocation);
+        var created = await sut.CreateAsync(new CreateUserRequest("Jane", "jane-n7-roles@example.com", [associate.Id]), Actor);
+
+        await sut.AssignRolesAsync(created.User.Id, [associate.Id, superAdmin.Id], Actor);
+
+        revocation.Verify(r => r.RevokeAllIssuedBeforeNowAsync(created.User.Id, default), Times.Once);
     }
 
     [Fact]

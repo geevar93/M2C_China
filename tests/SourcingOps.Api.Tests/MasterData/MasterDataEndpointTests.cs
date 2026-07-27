@@ -142,10 +142,13 @@ public class MasterDataEndpointTests : IClassFixture<AdminSeededFixture>
     [Fact]
     public async Task DeleteUnreferencedRow_Returns204()
     {
+        // Created via the API, not the seeder — IsSystemDefault is false, so this is also
+        // N-8's "user-added custom rows keep working exactly as built" half.
         var code = $"DEL-{Guid.NewGuid():N}"[..12].ToUpperInvariant();
         var createResponse = await _fixture.AdminClient.PostAsJsonAsync("/api/v1/master-data/lead-statuses",
             new UpsertMasterDataRequest(null, code, "Deletable"));
         var created = (await createResponse.Content.ReadFromJsonAsync<LookupItemDto>())!;
+        created.IsSystemDefault.Should().BeFalse();
 
         var deleteResponse = await _fixture.AdminClient.DeleteAsync($"/api/v1/master-data/lead-statuses/{created.Id}");
 
@@ -176,6 +179,34 @@ public class MasterDataEndpointTests : IClassFixture<AdminSeededFixture>
         deleteResponse.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
         var problem = await deleteResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
         problem.GetProperty("detail").GetString().Should().Contain("Retire");
+    }
+
+    [Fact]
+    public async Task DeleteSeededActiveVendorStatus_Returns409_EvenThoughUnreferenced()
+    {
+        // ACTION_PLAN §10.2 N-8's exact reproduction: this is the specific row the M2
+        // verification pass hard-deleted (nothing referenced it yet, so E3-08's original
+        // logic let the delete through). Proves it is now retire-only.
+        var aggregate = await (await _fixture.AdminClient.GetAsync("/api/v1/master-data?includeRetired=true"))
+            .Content.ReadFromJsonAsync<MasterDataAggregateDto>();
+        var activeVendorStatus = aggregate!.VendorStatuses.Single(s => s.Code == "ACTIVE");
+        activeVendorStatus.IsSystemDefault.Should().BeTrue("the seeded row must carry the flag DbSeeder sets");
+
+        var deleteResponse = await _fixture.AdminClient.DeleteAsync($"/api/v1/master-data/vendor-statuses/{activeVendorStatus.Id}");
+
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        deleteResponse.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+        var problem = await deleteResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        problem.GetProperty("detail").GetString().Should().Contain("Retire");
+
+        // Retire remains available and IS the intended action for this exact row.
+        var retireResponse = await _fixture.AdminClient.PostAsync($"/api/v1/master-data/vendor-statuses/{activeVendorStatus.Id}/retire", content: null);
+        retireResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Restore it so this test does not leave a poisoned seeded default behind for any
+        // sibling test sharing the same class fixture / Testcontainers database.
+        var restoreResponse = await _fixture.AdminClient.PostAsync($"/api/v1/master-data/vendor-statuses/{activeVendorStatus.Id}/restore", content: null);
+        restoreResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]

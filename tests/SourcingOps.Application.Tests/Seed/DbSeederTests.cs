@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using SourcingOps.Application.Tests.TestSupport;
 using SourcingOps.Domain.Constants;
+using SourcingOps.Domain.Entities;
 using SourcingOps.Infrastructure.Persistence.Seed;
 
 namespace SourcingOps.Application.Tests.Seed;
@@ -74,6 +75,57 @@ public class DbSeederTests
 
         var role = db.Roles.Single(r => r.Name == RoleNames.SuperAdmin);
         db.UserRoles.Should().ContainSingle(ur => ur.UserId == admin.Id && ur.RoleId == role.Id);
+    }
+
+    [Fact]
+    public async Task SeedAsync_MarksEverySeededDefaultRowAsSystemDefault()
+    {
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db);
+
+        await sut.SeedAsync();
+
+        db.Categories.Should().OnlyContain(c => c.IsSystemDefault);
+        db.ServiceTypes.Should().OnlyContain(s => s.IsSystemDefault);
+        db.LeadStatuses.Should().OnlyContain(s => s.IsSystemDefault);
+        db.ShipmentStatuses.Should().OnlyContain(s => s.IsSystemDefault);
+        db.InvoiceStatuses.Should().OnlyContain(s => s.IsSystemDefault);
+        db.VendorStatuses.Should().OnlyContain(s => s.IsSystemDefault);
+    }
+
+    [Fact]
+    public async Task SeedAsync_SelfHealsIsSystemDefault_OnARowThatPreDatesTheFlag()
+    {
+        // ACTION_PLAN N-8: an existing database's seeded rows (created before IsSystemDefault
+        // existed, or somehow reset) must pick the flag back up on the next startup without a
+        // one-off data migration — DbSeeder's normal idempotent "fill gaps" pass self-heals it.
+        using var db = TestDbContextFactory.Create();
+        db.VendorStatuses.Add(new VendorStatus { Id = Guid.NewGuid(), Code = "ACTIVE", Label = "Active", IsActive = true, SortOrder = 1, IsSystemDefault = false });
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db);
+
+        await sut.SeedAsync();
+
+        db.VendorStatuses.Single(s => s.Code == "ACTIVE").IsSystemDefault.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SeedAsync_SelfHeal_DoesNotTouchIsActiveOrSortOrder_OfAPreExistingRow()
+    {
+        // The self-heal must be scoped to IsSystemDefault only — a Super Admin's own
+        // retire/reorder choices on a default row (E3-08's normal, still-supported retire
+        // path) must survive re-seeding, not get silently reset.
+        using var db = TestDbContextFactory.Create();
+        db.VendorStatuses.Add(new VendorStatus { Id = Guid.NewGuid(), Code = "ACTIVE", Label = "Active", IsActive = false, SortOrder = 99, IsSystemDefault = false });
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db);
+
+        await sut.SeedAsync();
+
+        var row = db.VendorStatuses.Single(s => s.Code == "ACTIVE");
+        row.IsSystemDefault.Should().BeTrue();
+        row.IsActive.Should().BeFalse("a prior retire decision must not be reverted by re-seeding");
+        row.SortOrder.Should().Be(99, "a prior reorder decision must not be reverted by re-seeding");
     }
 
     [Fact]
