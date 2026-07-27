@@ -1,0 +1,6 @@
+@SourcingOps.Api_HostAddress = http://localhost:5211
+
+GET {{SourcingOps.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
