@@ -1,0 +1,256 @@
+// Reusable atoms ported from the prototype's markup (buttons, cards, tables, form fields,
+// dialogs, chips, stat tiles). Defined once here and consumed by class name everywhere —
+// never copy-pasted per screen. See docs/DESIGN_TOKENS.md §8 for the source values.
+
+// ---- Buttons ---------------------------------------------------------
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  border-radius: var(--radius-md);
+  padding: var(--space-5) var(--space-7);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: var(--line-height-base);
+  transition: background .15s, border-color .15s;
+
+  &:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+  }
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: #fff;
+  border: 1px solid var(--color-accent);
+
+  &:hover:not(:disabled) {
+    background: var(--color-accent-hover);
+    border-color: var(--color-accent-hover);
+  }
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+
+  &:hover:not(:disabled) {
+    background: var(--color-page-bg);
+  }
+}
+
+.btn-sm {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+// ---- Card --------------------------------------------------------------
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-9);
+  box-shadow: var(--shadow-card);
+}
+
+// ---- Stat tile -----------------------------------------------------------
+.stat-tile {
+  @extend .card;
+}
+
+.stat-tile__label {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.stat-tile__value {
+  font-size: 28px;
+  font-weight: 700;
+  margin-top: var(--space-4);
+}
+
+.stat-tile__sub {
+  font-size: 12px;
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+
+  &--success { color: var(--color-success); }
+  &--warning { color: var(--color-warning); }
+  &--danger { color: var(--color-danger); }
+}
+
+// ---- .table-style list ---------------------------------------------------
+.table-wrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+.table-wrap table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.table-wrap th {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--color-text-muted);
+  background: var(--color-page-bg);
+  padding: 10px var(--space-8);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+
+  &.align-right {
+    text-align: right;
+  }
+}
+
+.table-wrap td {
+  font-size: 14px;
+  padding: var(--space-6) var(--space-8);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table-wrap tbody tr {
+  background: var(--color-surface);
+  transition: background .15s;
+
+  &:hover {
+    background: #f9fafb;
+  }
+}
+
+// ---- Form field ------------------------------------------------------------
+.field {
+  display: block;
+  margin-bottom: var(--space-8);
+}
+
+.field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: var(--space-3);
+}
+
+.field-input,
+input.field-input,
+select.field-input,
+textarea.field-input {
+  width: 100%;
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--color-surface);
+  color: var(--color-text);
+
+  &:focus {
+    border-color: var(--color-accent);
+    outline: none;
+  }
+
+  &:disabled {
+    background: var(--color-page-bg);
+    color: var(--color-text-muted);
+  }
+}
+
+textarea.field-input {
+  resize: vertical;
+}
+
+.field-error {
+  font-size: 12px;
+  color: var(--color-danger);
+  margin-top: var(--space-2);
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
+}
+
+// ---- Chip / badge ----------------------------------------------------------
+.chip {
+  display: inline-block;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+// ---- Dialog ------------------------------------------------------------
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-scrim);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 64px var(--space-10);
+  overflow-y: auto;
+  z-index: 50;
+}
+
+.dialog-panel {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-10);
+  width: 100%;
+  max-width: 720px;
+  box-shadow: var(--shadow-dialog);
+}
+
+// ---- Banner (freight-only / warning info strip) -----------------------------
+.banner-warning {
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6) var(--space-8);
+  font-size: 13px;
+  color: var(--color-warning);
+}
+
+// ---- Loading / empty / error states (DoD: every screen must handle these) --
+.state-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  padding: 120px 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

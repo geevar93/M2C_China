@@ -1,0 +1,68 @@
+// Design tokens ported 1:1 from the approved prototype (Source/Sourcing Ops Platform.dc.html).
+// This file MUST agree with docs/DESIGN_TOKENS.md — update both together.
+// Do not hand-invent a parallel palette; every value here traces back to that reference.
+
+:root {
+  // Brand / structure
+  --color-navy: #1a2332;
+  --color-accent: #2d5be3;
+  --color-accent-hover: #2449b5;
+  --color-page-bg: #f8f9fb;
+  --color-surface: #ffffff;
+  --color-track: #f1f3f6;
+
+  // Text / borders
+  --color-text: #1a2332;
+  --color-text-muted: #6b7280;
+  --color-text-strong-muted: #374151;
+  --color-border: #e5e7eb;
+  --color-border-strong: #e5e7eb;
+
+  // Semantic accents
+  --color-warning: #f57f17;
+  --color-warning-bg: #fff3e0;
+  --color-warning-border: #ffcc80;
+  --color-danger: #e53935;
+  --color-danger-bg: #ffebee;
+  --color-success: #2e7d32;
+  --color-success-bg: #e8f5e9;
+  --color-info: #1565c0;
+  --color-info-bg: #e3f2fd;
+  --color-neutral-chip-bg: #e5e7eb;
+
+  // WhatsApp preview bubble
+  --color-wa-bubble: #dbeafe;
+
+  // Spacing scale
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 9px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-9: 20px;
+  --space-10: 24px;
+
+  // Layout constants
+  --sidebar-width-expanded: 220px;
+  --sidebar-width-collapsed: 64px;
+  --topbar-height: 56px;
+
+  // Typography
+  --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-size-base: 14px;
+  --line-height-base: 1.4;
+
+  // Radius
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-pill: 12px;
+
+  // Shadows
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, .08);
+  --shadow-dialog: 0 8px 32px rgba(0, 0, 0, .2);
+  --overlay-scrim: rgba(0, 0, 0, .4);
+}

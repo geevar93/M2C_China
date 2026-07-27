@@ -1,0 +1,45 @@
+// Global styles — ported 1:1 from the prototype's <helmet><style> block plus the
+// design tokens and shared atoms extracted into docs/DESIGN_TOKENS.md.
+@use 'app/shared/styles/tokens';
+@use 'app/shared/styles/atoms';
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-page-bg);
+  color: var(--color-text);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--color-accent-hover);
+    text-decoration: underline;
+  }
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+}
