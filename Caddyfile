@@ -1,0 +1,21 @@
+# TECH_SPEC §7.2. Domain is read from the CADDY_DOMAIN env var so this file doesn't
+# hard-code the production hostname (no secret, but keeps the file environment-portable
+# and out of the "real domain committed to the repo" category).
+#
+# NOTE: for LOCAL verification, where there is no public DNS name for automatic HTTPS to
+# provision a certificate against, run with CADDY_DOMAIN=:80 (see .env.example) — Caddy
+# then serves plain HTTP on port 80 without attempting Let's Encrypt.
+
+{$CADDY_DOMAIN} {
+	encode gzip zstd
+
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		root * /srv/www
+		try_files {path} /index.html
+		file_server
+	}
+}

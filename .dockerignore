@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+.git/
+.gitignore
+client/
+Source/
+docs/
+dist/
+**/*.user
+.env
+.env.*
+!.env.example
+**/pgdata/
+**/uploads/

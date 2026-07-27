@@ -1,0 +1,24 @@
+# Auto-merged by `docker compose up` whenever docker-compose.yml is also present
+# (no -f flags needed). Local-dev-only adjustments (TECH_SPEC §7.1, ACTION_PLAN E2-02):
+# publish ports for direct access from the host, enable auto-migration (Program.cs only
+# auto-migrates when ASPNETCORE_ENVIRONMENT=Development), and expose Postgres for local
+# debugging. None of this applies in production — that deploy does not use this file.
+
+services:
+  api:
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      # Defaults to InMemory for local dev (C2), but stays overridable so the
+      # documented Redis test path actually works:
+      #   CACHING_PROVIDER=Redis docker compose --profile redis up -d
+      # Hard-coding InMemory here silently defeated that — this override file is
+      # auto-merged on every local `docker compose up`, so it beat the base file's
+      # ${CACHING_PROVIDER:-InMemory} and made the switch untestable locally,
+      # contradicting E2-02's acceptance criteria and TECH_SPEC §7.1.
+      - Caching__Provider=${CACHING_PROVIDER:-InMemory}
+
+  db:
+    ports:
+      - "5432:5432" # local debug only — not exposed in prod (TECH_SPEC §8)

@@ -1,0 +1,91 @@
+# Base compose definition (TECH_SPEC §7), reused for both local dev
+# (docker-compose.override.yml is auto-merged) and production (deployed with
+# `docker compose --profile prod up -d`, no override file).
+#
+# DEVIATION from TECH_SPEC §7.1/§7.2's indicative snippets, both flagged in the build
+# report:
+#   1. api.build uses `context: .` + an explicit `dockerfile:` path rather than the
+#      `build: ./src/SourcingOps.Api` shorthand — a multi-project solution needs the
+#      sibling Domain/Application/Infrastructure folders inside the build context.
+#   2. Memory limits use the top-level `mem_limit` key, not `deploy.resources.limits`.
+#      The `deploy` key's resource limits are a Swarm-mode construct; plain
+#      `docker compose up` (what E2-10 asks to verify locally) does not reliably apply
+#      them. `mem_limit` is honored by `docker compose up` directly.
+#   3. `caddy` is gated behind a `prod` profile (not in TECH_SPEC's list of profiled
+#      services) so ONE file can serve both environments per constraint C1/TECH_SPEC
+#      §7's "single docker-compose definition reused (with overrides)": local dev never
+#      starts it (Angular runs via `ng serve`, per E2-02), production activates it
+#      explicitly via `--profile prod`.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/SourcingOps.Api/Dockerfile
+    environment:
+      - ConnectionStrings__Default=Host=db;Port=5432;Database=sourcingops;Username=app;Password=${DB_PASSWORD}
+      - Caching__Provider=${CACHING_PROVIDER:-InMemory}
+      - Caching__Redis__ConnectionString=${REDIS_CONNECTION_STRING:-redis:6379}
+      - Jwt__SigningKey=${JWT_SIGNING_KEY}
+      - Storage__RootPath=/data/uploads
+      - Bootstrap__AdminEmail=${BOOTSTRAP_ADMIN_EMAIL:-admin@sourcingops.local}
+      - Bootstrap__AdminPassword=${BOOTSTRAP_ADMIN_PASSWORD:-}
+      - Cors__FrontendOrigin=${FRONTEND_ORIGIN:-http://localhost:4200}
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 400m
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=sourcingops
+      - POSTGRES_USER=app
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d sourcingops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    mem_limit: 1200m
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["prod"]
+    environment:
+      # Caddy resolves {$CADDY_DOMAIN} from its OWN process environment inside the
+      # container, so the value must be passed in explicitly — compose-level
+      # interpolation of .env does NOT reach the Caddyfile. Without this, the
+      # placeholder expands to empty, Caddy reads the leading `{` as a global
+      # options block, and startup dies with "unrecognized global option: encode".
+      # Default `:80` serves plain HTTP for local verification (no public DNS name
+      # for automatic HTTPS to provision against); production sets the real hostname.
+      - CADDY_DOMAIN=${CADDY_DOMAIN:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./client/dist/browser:/srv/www:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:
+  caddy-data:
+  caddy-config:
