@@ -39,9 +39,11 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<Dispatch> Dispatches => Set<Dispatch>();
 
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
+    public DbSet<InventoryInboundEntry> InventoryInboundEntries => Set<InventoryInboundEntry>();
 
     public DbSet<Shipment> Shipments => Set<Shipment>();
     public DbSet<ShipmentLine> ShipmentLines => Set<ShipmentLine>();
+    public DbSet<ShipmentStatusHistory> ShipmentStatusHistory => Set<ShipmentStatusHistory>();
     public DbSet<ShipmentDocument> ShipmentDocuments => Set<ShipmentDocument>();
 
     public DbSet<Invoice> Invoices => Set<Invoice>();

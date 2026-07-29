@@ -95,7 +95,12 @@ public sealed class MasterDataService : IMasterDataService
            .ToList();
 
     private static CategoryDto ToDto(Category c) => new(c.Id, c.Name, c.SortOrder, c.IsActive, c.IsSystemDefault);
-    private static LookupItemDto ToDto(ILookupEntity e) => new(e.Id, e.Code, e.Label, e.SortOrder, e.IsActive, e.IsSystemDefault);
+
+    // Scope is a DocumentType-only concept (D-f), so it is read off the concrete type rather
+    // than widened onto ILookupEntity — nothing else in the lookup family has one, and adding
+    // it to the interface would force five entities to carry a property that means nothing.
+    private static LookupItemDto ToDto(ILookupEntity e) =>
+        new(e.Id, e.Code, e.Label, e.SortOrder, e.IsActive, e.IsSystemDefault, (e as DocumentType)?.Scope);
 
     // ---- Create -------------------------------------------------------------
 
@@ -152,12 +157,38 @@ public sealed class MasterDataService : IMasterDataService
             MasterDataCollectionKey.ShipmentStatuses => CreateLookupEntityAsync(_db.ShipmentStatuses, "ShipmentStatus", code, label, actorUserId, ct),
             MasterDataCollectionKey.InvoiceStatuses => CreateLookupEntityAsync(_db.InvoiceStatuses, "InvoiceStatus", code, label, actorUserId, ct),
             MasterDataCollectionKey.VendorStatuses => CreateLookupEntityAsync(_db.VendorStatuses, "VendorStatus", code, label, actorUserId, ct),
-            MasterDataCollectionKey.DocumentTypes => CreateLookupEntityAsync(_db.DocumentTypes, "DocumentType", code, label, actorUserId, ct),
+            // D-f: the one collection carrying a Scope. Validated here rather than inside the
+            // generic method so the generic stays free of any single collection's specifics.
+            MasterDataCollectionKey.DocumentTypes => CreateLookupEntityAsync(
+                _db.DocumentTypes, "DocumentType", code, label, actorUserId, ct,
+                configure: entity => entity.Scope = ResolveDocumentTypeScope(request.Scope)),
             _ => throw new ArgumentOutOfRangeException(nameof(key), key, "Unknown master-data collection.")
         };
     }
 
-    private async Task<LookupItemDto> CreateLookupEntityAsync<TEntity>(DbSet<TEntity> set, string entityType, string code, string label, Guid actorUserId, CancellationToken ct)
+    /// <summary>
+    /// D-f. Defaults to <see cref="DocumentTypeScopes.Vendor"/> when omitted, so every caller
+    /// that predates the scope column keeps its previous behaviour rather than failing.
+    /// </summary>
+    private static string ResolveDocumentTypeScope(string? requested)
+    {
+        if (string.IsNullOrWhiteSpace(requested))
+        {
+            return DocumentTypeScopes.Vendor;
+        }
+
+        var scope = requested.Trim();
+        if (!DocumentTypeScopes.IsValid(scope))
+        {
+            throw new AppValidationException("scope", $"Unknown document type scope '{scope}'. Expected one of: {string.Join(", ", DocumentTypeScopes.All)}.");
+        }
+
+        return scope;
+    }
+
+    private async Task<LookupItemDto> CreateLookupEntityAsync<TEntity>(
+        DbSet<TEntity> set, string entityType, string code, string label, Guid actorUserId, CancellationToken ct,
+        Action<TEntity>? configure = null)
         where TEntity : class, ILookupEntity, new()
     {
         var existing = await set.ToListAsync(ct);
@@ -168,6 +199,8 @@ public sealed class MasterDataService : IMasterDataService
 
         var nextSortOrder = existing.Count == 0 ? 1 : existing.Max(e => e.SortOrder) + 1;
         var entity = new TEntity { Id = Guid.NewGuid(), Code = code, Label = label, IsActive = true, SortOrder = nextSortOrder };
+        // Runs BEFORE Add/SaveChanges so a rejected scope throws without leaving a tracked entity.
+        configure?.Invoke(entity);
         set.Add(entity);
         await _db.SaveChangesAsync(ct);
 
@@ -488,7 +521,15 @@ public sealed class MasterDataService : IMasterDataService
     private Task<bool> IsShipmentStatusReferencedAsync(Guid id, CancellationToken ct) => _db.Shipments.AnyAsync(x => x.StatusId == id, ct);
     private Task<bool> IsInvoiceStatusReferencedAsync(Guid id, CancellationToken ct) => _db.Invoices.AnyAsync(x => x.StatusId == id, ct);
     private Task<bool> IsVendorStatusReferencedAsync(Guid id, CancellationToken ct) => _db.Vendors.AnyAsync(x => x.StatusId == id, ct);
-    private Task<bool> IsDocumentTypeReferencedAsync(Guid id, CancellationToken ct) => _db.VendorDocuments.AnyAsync(x => x.DocTypeId == id, ct);
+    private async Task<bool> IsDocumentTypeReferencedAsync(Guid id, CancellationToken ct)
+    {
+        if (await _db.VendorDocuments.AnyAsync(x => x.DocTypeId == id, ct)) return true;
+        // D-f: shipment_documents now FKs into the same lookup, so E3-08's referential-safety
+        // check has a second table to consult. Missing this would let a Super Admin hard-delete
+        // a document type that shipment documents still point at.
+        if (await _db.ShipmentDocuments.AnyAsync(x => x.DocumentTypeId == id, ct)) return true;
+        return false;
+    }
 
     private async Task InvalidateAggregateCacheAsync(CancellationToken ct)
     {

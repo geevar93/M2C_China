@@ -92,16 +92,39 @@ public static class SeedDefaults
     /// <summary>
     /// Vendor-document type lookup (code, label, sortOrder) — ACTION_PLAN E5-07 / FR-VEN-07.
     /// Not itemized in TECH_SPEC §6 or FSD Section 7 (the whole `vendor_documents` table is
-    /// the DR-4 gap this story closes); added as an explicit deviation following the same
+    /// the DR-4 gap this story closed); added as an explicit deviation following the same
     /// reasoning as <see cref="VendorStatuses"/> — see the E5-07 build report. Defaults chosen
     /// to cover the compliance-document filing FSD Q5 describes (licence, quality cert, test
     /// report) plus a catch-all.
+    ///
+    /// All seed with <c>Scope = DocumentTypeScopes.Vendor</c>. Existing rows are backfilled to
+    /// that scope by the M5 migration, so this set's meaning is unchanged by D-f.
     /// </summary>
-    public static readonly (string Code, string Label, int SortOrder)[] DocumentTypes =
+    public static readonly (string Code, string Label, int SortOrder)[] VendorDocumentTypes =
     [
         ("BUSINESS_LICENCE", "Business Licence", 1),
         ("QUALITY_CERTIFICATE", "Quality Certificate", 2),
         ("TEST_REPORT", "Test Report", 3),
         ("OTHER", "Other", 4)
+    ];
+
+    /// <summary>
+    /// Shipment reference-document type lookup (code, label, sortOrder) — ACTION_PLAN E7-09 /
+    /// FR-INV-08, added in the M5 pass under deviation D-f. All seed with
+    /// <c>Scope = DocumentTypeScopes.Shipment</c> and <c>IsSystemDefault = true</c>, so they
+    /// are retire-only per N-8.
+    ///
+    /// The four defaults are exactly the document kinds E7-09's own criteria name ("Packing
+    /// list / AWB / BL") plus the invoice slot the approved shipment detail screen's mock data
+    /// already contains (it renders "<c>{ref}-invoice.pdf</c>" alongside the packing list and
+    /// BL scan). Sort order continues from the vendor set so the two scopes do not collide in
+    /// the admin screen's ordering.
+    /// </summary>
+    public static readonly (string Code, string Label, int SortOrder)[] ShipmentDocumentTypes =
+    [
+        ("PACKING_LIST", "Packing List", 5),
+        ("BILL_OF_LADING", "Bill of Lading", 6),
+        ("AIRWAY_BILL", "Airway Bill", 7),
+        ("INVOICE", "Invoice", 8)
     ];
 }

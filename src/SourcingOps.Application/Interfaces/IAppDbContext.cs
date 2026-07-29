@@ -39,9 +39,11 @@ public interface IAppDbContext
     DbSet<Dispatch> Dispatches { get; }
 
     DbSet<InventoryItem> InventoryItems { get; }
+    DbSet<InventoryInboundEntry> InventoryInboundEntries { get; }
 
     DbSet<Shipment> Shipments { get; }
     DbSet<ShipmentLine> ShipmentLines { get; }
+    DbSet<ShipmentStatusHistory> ShipmentStatusHistory { get; }
     DbSet<ShipmentDocument> ShipmentDocuments { get; }
 
     DbSet<Invoice> Invoices { get; }

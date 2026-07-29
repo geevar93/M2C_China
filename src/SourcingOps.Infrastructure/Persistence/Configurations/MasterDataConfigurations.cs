@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using SourcingOps.Domain.Common;
 using SourcingOps.Domain.Entities;
 
 namespace SourcingOps.Infrastructure.Persistence.Configurations;
@@ -92,5 +93,11 @@ public class DocumentTypeConfiguration : IEntityTypeConfiguration<DocumentType>
         b.Property(x => x.Label).IsRequired().HasMaxLength(200);
         b.Property(x => x.IsSystemDefault).HasDefaultValue(false);
         b.HasIndex(x => x.Code).IsUnique();
+
+        // D-f: non-null with a DB-level default so the M5 migration backfills every pre-existing
+        // row (all of which are vendor-compliance types) without a separate UPDATE statement.
+        // Indexed because both document upload paths filter on it on every request.
+        b.Property(x => x.Scope).IsRequired().HasMaxLength(20).HasDefaultValue(DocumentTypeScopes.Vendor);
+        b.HasIndex(x => x.Scope);
     }
 }

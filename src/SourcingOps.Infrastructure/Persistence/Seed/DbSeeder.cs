@@ -48,7 +48,7 @@ public sealed class DbSeeder
         await SeedLookupAsync(_db.ShipmentStatuses, SeedDefaults.ShipmentStatuses, ct);
         await SeedLookupAsync(_db.InvoiceStatuses, SeedDefaults.InvoiceStatuses, ct);
         await SeedLookupAsync(_db.VendorStatuses, SeedDefaults.VendorStatuses, ct);
-        await SeedLookupAsync(_db.DocumentTypes, SeedDefaults.DocumentTypes, ct);
+        await SeedDocumentTypesAsync(ct);
 
         await _db.SaveChangesAsync(ct);
 
@@ -174,6 +174,58 @@ public sealed class DbSeeder
             }
 
             set.Add(new TEntity { Id = Guid.NewGuid(), Code = code, Label = label, IsActive = true, SortOrder = sortOrder, IsSystemDefault = true });
+        }
+    }
+
+    /// <summary>
+    /// <see cref="DocumentType"/> is the one lookup carrying a <c>Scope</c> discriminator
+    /// (deviation D-f), so it cannot go through the generic <see cref="SeedLookupAsync"/> —
+    /// that overload has no way to set a property outside <see cref="ILookupEntity"/>. Same
+    /// idempotency and N-8 self-heal semantics otherwise, plus a scope self-heal for rows that
+    /// predate the column (the M5 migration backfills them to Vendor; this is the belt-and-braces
+    /// path for a row created between the migration and this code shipping).
+    /// </summary>
+    private async Task SeedDocumentTypesAsync(CancellationToken ct)
+    {
+        var existing = await _db.DocumentTypes.ToDictionaryAsync(e => e.Code, ct);
+
+        void Ensure((string Code, string Label, int SortOrder) row, string scope)
+        {
+            if (existing.TryGetValue(row.Code, out var entity))
+            {
+                if (!entity.IsSystemDefault)
+                {
+                    entity.IsSystemDefault = true;
+                }
+                // Never touches IsActive/SortOrder/Label — a Super Admin's own retire/reorder/
+                // rename choices on a default row must survive, exactly as SeedLookupAsync does.
+                if (entity.Scope != scope)
+                {
+                    entity.Scope = scope;
+                }
+                return;
+            }
+
+            _db.DocumentTypes.Add(new DocumentType
+            {
+                Id = Guid.NewGuid(),
+                Code = row.Code,
+                Label = row.Label,
+                IsActive = true,
+                SortOrder = row.SortOrder,
+                IsSystemDefault = true,
+                Scope = scope
+            });
+        }
+
+        foreach (var row in SeedDefaults.VendorDocumentTypes)
+        {
+            Ensure(row, DocumentTypeScopes.Vendor);
+        }
+
+        foreach (var row in SeedDefaults.ShipmentDocumentTypes)
+        {
+            Ensure(row, DocumentTypeScopes.Shipment);
         }
     }
 

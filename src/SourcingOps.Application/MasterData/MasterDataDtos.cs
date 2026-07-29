@@ -16,8 +16,17 @@ public interface IMasterDataItemDto;
 /// </summary>
 public sealed record CategoryDto(Guid Id, string Name, int SortOrder, bool IsActive, bool IsSystemDefault) : IMasterDataItemDto;
 
-/// <summary>Shared shape for every other configurable-master-data collection (ServiceType/LeadStatus/ShipmentStatus/InvoiceStatus/VendorStatus).</summary>
-public sealed record LookupItemDto(Guid Id, string Code, string Label, int SortOrder, bool IsActive, bool IsSystemDefault) : IMasterDataItemDto;
+/// <summary>
+/// Shared shape for every other configurable-master-data collection (ServiceType/LeadStatus/
+/// ShipmentStatus/InvoiceStatus/VendorStatus/DocumentType).
+///
+/// <paramref name="Scope"/> is populated ONLY for <c>documentTypes</c> ("Vendor" or
+/// "Shipment", deviation D-f) and is null for every other collection. Added as a nullable
+/// trailing field rather than a separate DTO so the aggregate response keeps exactly one
+/// lookup shape — the frontend's <c>MasterDataService</c> deserializes all six collections
+/// through one interface, and forking it for a single collection would cost more than a null.
+/// </summary>
+public sealed record LookupItemDto(Guid Id, string Code, string Label, int SortOrder, bool IsActive, bool IsSystemDefault, string? Scope = null) : IMasterDataItemDto;
 
 /// <summary>The single aggregate-read shape the frontend loads once at startup (binding contract).</summary>
 public sealed record MasterDataAggregateDto(
@@ -33,8 +42,14 @@ public sealed record MasterDataAggregateDto(
 /// Single request shape for create/update across every collection. Categories only ever
 /// read <see cref="Name"/>; every other collection reads <see cref="Code"/> (create only —
 /// PUT never changes it, see <see cref="MasterDataService"/>'s doc comment) and <see cref="Label"/>.
+///
+/// <see cref="Scope"/> applies only to <c>documentTypes</c> (deviation D-f) and, like
+/// <see cref="Code"/>, is honoured on create and ignored on update: a type whose scope
+/// changed after documents already referenced it would silently move those documents into the
+/// other module's dropdown. Defaults to "Vendor" when omitted, preserving the pre-M5 behaviour
+/// of every existing caller.
 /// </summary>
-public sealed record UpsertMasterDataRequest(string? Name, string? Code, string? Label);
+public sealed record UpsertMasterDataRequest(string? Name, string? Code, string? Label, string? Scope = null);
 
 /// <summary>One row of a bulk reorder request body: <c>[{ "id": "...", "sortOrder": 1 }, …]</c>.</summary>
 public sealed record ReorderItemDto(Guid Id, int SortOrder);

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SourcingOps.Application.Common;
 using SourcingOps.Application.Interfaces;
+using SourcingOps.Domain.Common;
 using SourcingOps.Domain.Entities;
 
 namespace SourcingOps.Application.Vendors;
@@ -63,6 +64,15 @@ public sealed class VendorDocumentService : IVendorDocumentService
 
         var docType = await _db.DocumentTypes.FindAsync([docTypeId], ct)
             ?? throw new AppValidationException("docTypeId", "Unknown document type.");
+
+        // D-f: document_types now also carries shipment-scoped rows (Packing List, Bill of
+        // Lading, …). A shipment-scoped type on a vendor-compliance upload is rejected rather
+        // than quietly accepted — the whole reason the scope column exists is that the two sets
+        // are not interchangeable.
+        if (!string.Equals(docType.Scope, DocumentTypeScopes.Vendor, StringComparison.Ordinal))
+        {
+            throw new AppValidationException("docTypeId", "This document type is not valid for vendor documents.");
+        }
 
         var validation = await PdfUploadValidator.ValidateAsync(contentType, sizeBytes, content, _options.MaxUploadSizeBytes, ct);
         if (!validation.IsValid)
