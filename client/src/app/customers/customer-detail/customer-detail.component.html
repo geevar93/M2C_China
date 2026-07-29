@@ -23,7 +23,15 @@
         <div class="detail-sub">{{ c.name }} · {{ c.city ?? '—' }} · {{ c.phone }} · owner {{ c.ownerName ?? 'Unassigned' }}</div>
       </div>
       <div class="detail-actions">
-        <button type="button" class="btn btn-primary" disabled title="Wired in E9 (WhatsApp dispatch)">Send Catalog via WhatsApp</button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="!canDispatch()"
+          [title]="canDispatch() ? '' : 'Requires the Dispatch.Send permission'"
+          (click)="openDispatch()"
+        >
+          Send Catalog via WhatsApp
+        </button>
         <button type="button" class="btn btn-secondary" disabled title="Edit is a later CRM story">Edit</button>
       </div>
     </div>
@@ -89,6 +97,10 @@
         </div>
       </div>
     </div>
+
+    @if (dispatchOpen() && dispatchCustomerLock(); as lock) {
+      <app-dispatch-dialog [customerLock]="lock" (closed)="cancelDispatch()" (logged)="onDispatchLogged()"></app-dispatch-dialog>
+    }
     }
   }
 </div>

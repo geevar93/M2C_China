@@ -23,6 +23,7 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<ShipmentStatus> ShipmentStatuses => Set<ShipmentStatus>();
     public DbSet<InvoiceStatus> InvoiceStatuses => Set<InvoiceStatus>();
     public DbSet<VendorStatus> VendorStatuses => Set<VendorStatus>();
+    public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerCategory> CustomerCategories => Set<CustomerCategory>();
@@ -30,6 +31,7 @@ public class AppDbContext : DbContext, IAppDbContext
 
     public DbSet<Vendor> Vendors => Set<Vendor>();
     public DbSet<VendorCategory> VendorCategories => Set<VendorCategory>();
+    public DbSet<VendorDocument> VendorDocuments => Set<VendorDocument>();
 
     public DbSet<CatalogSection> CatalogSections => Set<CatalogSection>();
     public DbSet<CatalogDocument> CatalogDocuments => Set<CatalogDocument>();

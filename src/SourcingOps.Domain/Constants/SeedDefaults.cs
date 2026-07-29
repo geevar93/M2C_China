@@ -88,4 +88,20 @@ public static class SeedDefaults
         ("ON-HOLD", "On Hold", 2),
         ("INACTIVE", "Inactive", 3)
     ];
+
+    /// <summary>
+    /// Vendor-document type lookup (code, label, sortOrder) — ACTION_PLAN E5-07 / FR-VEN-07.
+    /// Not itemized in TECH_SPEC §6 or FSD Section 7 (the whole `vendor_documents` table is
+    /// the DR-4 gap this story closes); added as an explicit deviation following the same
+    /// reasoning as <see cref="VendorStatuses"/> — see the E5-07 build report. Defaults chosen
+    /// to cover the compliance-document filing FSD Q5 describes (licence, quality cert, test
+    /// report) plus a catch-all.
+    /// </summary>
+    public static readonly (string Code, string Label, int SortOrder)[] DocumentTypes =
+    [
+        ("BUSINESS_LICENCE", "Business Licence", 1),
+        ("QUALITY_CERTIFICATE", "Quality Certificate", 2),
+        ("TEST_REPORT", "Test Report", 3),
+        ("OTHER", "Other", 4)
+    ];
 }

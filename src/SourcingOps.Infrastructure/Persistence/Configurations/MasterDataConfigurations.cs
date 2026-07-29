@@ -81,3 +81,16 @@ public class VendorStatusConfiguration : IEntityTypeConfiguration<VendorStatus>
         b.HasIndex(x => x.Code).IsUnique();
     }
 }
+
+public class DocumentTypeConfiguration : IEntityTypeConfiguration<DocumentType>
+{
+    public void Configure(EntityTypeBuilder<DocumentType> b)
+    {
+        b.ToTable("document_types");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Code).IsRequired().HasMaxLength(50);
+        b.Property(x => x.Label).IsRequired().HasMaxLength(200);
+        b.Property(x => x.IsSystemDefault).HasDefaultValue(false);
+        b.HasIndex(x => x.Code).IsUnique();
+    }
+}

@@ -75,6 +75,11 @@ describe('CatalogsComponent', () => {
     httpMock.expectOne((r) => r.url === '/api/v1/catalog-sections').flush({ items, page: 1, pageSize: 24, totalCount });
   }
 
+  /** Drains the per-card E9-07 dispatch-history fetch that fires once a card with a document renders. */
+  function flushSentHistory(docId = 'doc-1'): void {
+    httpMock.expectOne((r) => r.url === `/api/v1/catalog-documents/${docId}/dispatches`).flush([]);
+  }
+
   it('populates the category filter dropdown from MasterDataService, not a hard-coded list', async () => {
     await configure();
     fixture.detectChanges();
@@ -93,6 +98,8 @@ describe('CatalogsComponent', () => {
     flushMasterData();
     flushList([section()]);
     fixture.detectChanges();
+    flushSentHistory();
+    fixture.detectChanges();
 
     const text: string = fixture.nativeElement.textContent;
     expect(text).toContain('Yiwu Jewel Craft — Jewellery — AW26 Catalog');
@@ -110,6 +117,8 @@ describe('CatalogsComponent', () => {
     fixture.detectChanges();
     flushMasterData();
     flushList([section()]);
+    fixture.detectChanges();
+    flushSentHistory();
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('img')).toBeFalsy();
@@ -170,15 +179,86 @@ describe('CatalogsComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('No catalog sections match these filters');
   });
 
-  it('renders the "Send via WhatsApp" control as inert (E9 is out of scope)', async () => {
+  it('renders the "Send via WhatsApp" control disabled without Dispatch.Send (E9-05)', async () => {
     await configure();
     fixture.detectChanges();
     flushMasterData();
     flushList([section()]);
     fixture.detectChanges();
+    httpMock.expectOne((r) => r.url === '/api/v1/catalog-documents/doc-1/dispatches').flush([]);
+    fixture.detectChanges();
 
     const btn: HTMLButtonElement = fixture.nativeElement.querySelector('[aria-label="Send via WhatsApp"]');
     expect(btn.disabled).toBeTrue();
+  });
+
+  it('opens the dispatch dialog document-locked to the card\'s latest document with Dispatch.Send', async () => {
+    await configure(['Dispatch.Send']);
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([section()]);
+    fixture.detectChanges();
+    httpMock.expectOne((r) => r.url === '/api/v1/catalog-documents/doc-1/dispatches').flush([]);
+    fixture.detectChanges();
+
+    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('[aria-label="Send via WhatsApp"]');
+    expect(btn.disabled).toBeFalse();
+
+    btn.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.dispatchOpen()).toBeTrue();
+    expect(fixture.componentInstance.dispatchDocumentLock()).toEqual({
+      documentId: 'doc-1',
+      title: 'Yiwu Jewel Craft — Jewellery — AW26 Catalog',
+      filename: 'yiwu-jewel-craft-aw26-v3.pdf',
+      meta: '8.4 MB · 14 Jul 2026 · Yiwu Jewel Craft Co.'
+    });
+
+    // The dialog's own child-load request (customers, since no customerLock
+    // was supplied) — drained so httpMock.verify() doesn't fail the outer spec.
+    httpMock.expectOne((r) => r.url === '/api/v1/customers').flush({ items: [], page: 1, pageSize: 200, totalCount: 0 });
+  });
+
+  it('renders "Sent to N customers · last DATE" per card, derived from the dispatch log (E9-07)', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([section()]);
+    fixture.detectChanges();
+    httpMock.expectOne((r) => r.url === '/api/v1/catalog-documents/doc-1/dispatches').flush([
+      { dispatchId: 'd1', customerId: 'cust-1', customerName: 'Meena Traders', staffUserId: 'user-1', staffUserName: 'Priya Sharma', sentAtUtc: '2026-07-18T14:22:00Z' },
+      { dispatchId: 'd2', customerId: 'cust-2', customerName: 'Anand Bags House', staffUserId: 'user-1', staffUserName: 'Priya Sharma', sentAtUtc: '2026-07-10T09:00:00Z' }
+    ]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Sent to 2 customers · last 18 Jul 2026');
+  });
+
+  it('shows "Not sent yet" when a document has no dispatch history', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([section()]);
+    fixture.detectChanges();
+    httpMock.expectOne((r) => r.url === '/api/v1/catalog-documents/doc-1/dispatches').flush([]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Not sent yet');
+  });
+
+  it('shows a per-card fallback instead of hanging when the dispatch history fetch fails', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([section()]);
+    fixture.detectChanges();
+    httpMock
+      .expectOne((r) => r.url === '/api/v1/catalog-documents/doc-1/dispatches')
+      .flush({ title: 'Server error' }, { status: 500, statusText: 'Server Error' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Sent history unavailable');
   });
 
   it('previews the latest document through the authenticated download endpoint', async () => {
@@ -186,6 +266,8 @@ describe('CatalogsComponent', () => {
     fixture.detectChanges();
     flushMasterData();
     flushList([section()]);
+    fixture.detectChanges();
+    flushSentHistory();
     fixture.detectChanges();
 
     spyOn(window, 'open').and.stub();
@@ -203,6 +285,8 @@ describe('CatalogsComponent', () => {
     fixture.detectChanges();
     flushMasterData();
     flushList([section()]);
+    fixture.detectChanges();
+    flushSentHistory();
     fixture.detectChanges();
 
     const text: string = fixture.nativeElement.textContent;
@@ -236,6 +320,8 @@ describe('CatalogsComponent', () => {
     flushMasterData();
     const s = section();
     flushList([s]);
+    fixture.detectChanges();
+    flushSentHistory();
     fixture.detectChanges();
 
     fixture.componentInstance.openEdit(s);

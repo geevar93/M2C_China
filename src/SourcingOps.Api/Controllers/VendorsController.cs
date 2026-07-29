@@ -10,6 +10,11 @@ namespace SourcingOps.Api.Controllers;
 /// Binding cross-track contract fixed by the coordinator (ACTION_PLAN E5). Reads require
 /// <see cref="PermissionCodes.VendorsView"/>, writes <see cref="PermissionCodes.VendorsEdit"/>.
 /// Every mutation writes through <c>IAuditLogger</c> inside <see cref="VendorService"/>.
+///
+/// Also hosts E5-07's nested document list/upload (<c>GET</c>/<c>POST {id}/documents</c>) —
+/// same nesting pattern <see cref="CatalogSectionsController"/> uses for its own upload
+/// route. Download and delete live on the separate <see cref="VendorDocumentsController"/>
+/// resource root, mirroring <see cref="CatalogDocumentsController"/>.
 /// </summary>
 [ApiController]
 [Route("api/v1/vendors")]
@@ -17,10 +22,12 @@ namespace SourcingOps.Api.Controllers;
 public sealed class VendorsController : ControllerBase
 {
     private readonly IVendorService _service;
+    private readonly IVendorDocumentService _documentService;
 
-    public VendorsController(IVendorService service)
+    public VendorsController(IVendorService service, IVendorDocumentService documentService)
     {
         _service = service;
+        _documentService = documentService;
     }
 
     [HttpGet]
@@ -61,5 +68,31 @@ public sealed class VendorsController : ControllerBase
     {
         var result = await _service.UpdateAsync(id, request, User.GetRequiredUserId(), ct);
         return result is null ? NotFound() : Ok(result);
+    }
+
+    /// <summary>E5-07: non-catalog vendor documents (licence, quality certs) filed for reference only — see VendorDocumentService's doc comment.</summary>
+    [HttpGet("{id:guid}/documents")]
+    [Authorize(Policy = PermissionCodes.VendorsView)]
+    public async Task<IActionResult> ListDocuments(Guid id, CancellationToken ct)
+    {
+        var result = await _documentService.ListAsync(id, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    /// <summary>E5-07: multipart PDF upload; validation failures surface as 400 ProblemDetails via AppValidationException (ExceptionHandlingMiddleware).</summary>
+    [HttpPost("{id:guid}/documents")]
+    [Authorize(Policy = PermissionCodes.VendorsEdit)]
+    [RequestSizeLimit(200 * 1024 * 1024)]
+    public async Task<IActionResult> UploadDocument(Guid id, [FromForm] IFormFile file, [FromForm] Guid docTypeId, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "File is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await _documentService.UploadDocumentAsync(id, stream, file.FileName, file.ContentType, file.Length, docTypeId, User.GetRequiredUserId(), ct);
+
+        return result is null ? NotFound() : StatusCode(StatusCodes.Status201Created, result);
     }
 }

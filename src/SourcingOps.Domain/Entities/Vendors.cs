@@ -30,6 +30,7 @@ public class Vendor
 
     public ICollection<VendorCategory> VendorCategories { get; set; } = new List<VendorCategory>();
     public ICollection<CatalogSection> CatalogSections { get; set; } = new List<CatalogSection>();
+    public ICollection<VendorDocument> VendorDocuments { get; set; } = new List<VendorDocument>();
 }
 
 /// <summary>Many-to-many: category coverage of a vendor.</summary>
@@ -40,4 +41,30 @@ public class VendorCategory
 
     public Guid CategoryId { get; set; }
     public Category Category { get; set; } = null!;
+}
+
+/// <summary>
+/// Non-catalog vendor-level document (licence, quality certificate, etc.) — ACTION_PLAN
+/// E5-07 / FR-VEN-07, the table DR-4 flagged as missing from TECH_SPEC §6. Filed for
+/// reference only per FSD Q5: no version history/`is_latest` (unlike
+/// <see cref="CatalogDocument"/>, which E6-03 requires to have it) and no enforcement logic
+/// anywhere in the codebase reads <see cref="DocTypeId"/> to gate anything.
+/// </summary>
+public class VendorDocument
+{
+    public Guid Id { get; set; }
+
+    public Guid VendorId { get; set; }
+    public Vendor Vendor { get; set; } = null!;
+
+    public string FilePath { get; set; } = string.Empty;
+    public string OriginalFilename { get; set; } = string.Empty;
+    public long SizeBytes { get; set; }
+
+    public Guid DocTypeId { get; set; }
+    public DocumentType DocType { get; set; } = null!;
+
+    public Guid UploadedByUserId { get; set; }
+    public User UploadedBy { get; set; } = null!;
+    public DateTime UploadedAt { get; set; }
 }

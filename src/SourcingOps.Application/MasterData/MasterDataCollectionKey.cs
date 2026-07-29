@@ -16,7 +16,10 @@ public enum MasterDataCollectionKey
     LeadStatuses,
     ShipmentStatuses,
     InvoiceStatuses,
-    VendorStatuses
+    VendorStatuses,
+
+    /// <summary>ACTION_PLAN E5-07 / FR-VEN-07. See <see cref="SourcingOps.Domain.Entities.DocumentType"/>.</summary>
+    DocumentTypes
 }
 
 /// <summary>Maps the contract's kebab-case URL segments (e.g. <c>service-types</c>) to <see cref="MasterDataCollectionKey"/>.</summary>
@@ -30,7 +33,8 @@ public static class MasterDataCollectionKeyExtensions
             ["lead-statuses"] = MasterDataCollectionKey.LeadStatuses,
             ["shipment-statuses"] = MasterDataCollectionKey.ShipmentStatuses,
             ["invoice-statuses"] = MasterDataCollectionKey.InvoiceStatuses,
-            ["vendor-statuses"] = MasterDataCollectionKey.VendorStatuses
+            ["vendor-statuses"] = MasterDataCollectionKey.VendorStatuses,
+            ["document-types"] = MasterDataCollectionKey.DocumentTypes
         };
 
     public static bool TryParse(string? segment, out MasterDataCollectionKey key)

@@ -73,3 +73,21 @@ public class VendorStatus : ILookupEntity
     public int SortOrder { get; set; }
     public bool IsSystemDefault { get; set; }
 }
+
+/// <summary>
+/// Configurable vendor-document type lookup (Business Licence/Quality Certificate/Test
+/// Report/Other by default). Not itemized in TECH_SPEC §6 — added for E5-07 (FR-VEN-07)
+/// following the exact precedent of the D-2 deviation that added <see cref="VendorStatus"/>:
+/// the DoD requires every status/category/service-type-shaped value to be an FK to a lookup
+/// table, never free text, and a document type is exactly that family (FSD Q5, TECH_SPEC
+/// §10 OI-8). See SeedDefaults.DocumentTypes.
+/// </summary>
+public class DocumentType : ILookupEntity
+{
+    public Guid Id { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public bool IsActive { get; set; } = true;
+    public int SortOrder { get; set; }
+    public bool IsSystemDefault { get; set; }
+}

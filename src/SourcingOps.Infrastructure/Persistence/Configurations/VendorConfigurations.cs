@@ -35,3 +35,27 @@ public class VendorCategoryConfiguration : IEntityTypeConfiguration<VendorCatego
         b.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
     }
 }
+
+/// <summary>
+/// ACTION_PLAN E5-07 / FR-VEN-07 (DR-4's flagged gap). Mirrors <c>CatalogDocumentConfiguration</c>
+/// closely, minus <c>IsLatest</c>/versioning — out of scope per FSD Q5 ("filed for reference
+/// only"). <see cref="VendorDocument.VendorId"/> and <see cref="VendorDocument.DocTypeId"/> each
+/// get EF Core's automatic FK index, which already serves the two queries actually made
+/// ("documents for this vendor", E3-08's "is this doc type referenced" check) — no extra
+/// composite index is needed the way catalog_documents needed one for its is_latest filter.
+/// </summary>
+public class VendorDocumentConfiguration : IEntityTypeConfiguration<VendorDocument>
+{
+    public void Configure(EntityTypeBuilder<VendorDocument> b)
+    {
+        b.ToTable("vendor_documents");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.FilePath).IsRequired();
+        b.Property(x => x.OriginalFilename).IsRequired().HasMaxLength(500);
+        b.HasIndex(x => x.UploadedAt);
+
+        b.HasOne(x => x.Vendor).WithMany(v => v.VendorDocuments).HasForeignKey(x => x.VendorId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne(x => x.DocType).WithMany().HasForeignKey(x => x.DocTypeId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne(x => x.UploadedBy).WithMany().HasForeignKey(x => x.UploadedByUserId).OnDelete(DeleteBehavior.Restrict);
+    }
+}

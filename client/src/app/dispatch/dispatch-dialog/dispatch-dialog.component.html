@@ -1,0 +1,148 @@
+<div class="dialog-backdrop">
+  <div class="dialog-panel wa-dialog-panel">
+    <div class="wa-header">
+      <div>
+        <div class="section-title">Send Catalog via WhatsApp</div>
+        <div class="muted wa-header-sub">Click-to-chat cannot attach a file. Download the PDF, then open the chat and attach it.</div>
+      </div>
+      <div class="dialog-close" (click)="cancel()">✕</div>
+    </div>
+
+    @if (customersError() || documentsError()) {
+      <div class="field-error wa-banner" role="alert">{{ customersError() || documentsError() }}</div>
+    }
+
+    <div class="wa-grid-2">
+      <div class="wa-panel">
+        <div class="wa-panel-label">Recipient</div>
+        @if (!customerLock) {
+          @if (customersLoading()) {
+            <div class="muted">Loading customers…</div>
+          } @else if (customerOptions().length === 0) {
+            <div class="muted">No customers found.</div>
+          } @else {
+            <select
+              class="field-input wa-select"
+              aria-label="Recipient"
+              [value]="selectedCustomerId()"
+              (change)="onCustomerChange($any($event.target).value)"
+            >
+              @for (opt of customerOptions(); track opt.id) {
+                <option [value]="opt.id">{{ opt.businessName }}</option>
+              }
+            </select>
+          }
+        } @else {
+          <div class="wa-locked-name">{{ customerLock.businessName }}</div>
+        }
+        <div class="wa-sub muted">{{ recipientSubline() }}</div>
+        <div class="wa-chip-row">
+          <span class="chip" [style.background]="recipientSvc().bg" [style.color]="recipientSvc().fg">{{ recipientSvc().label }}</span>
+        </div>
+      </div>
+
+      <div class="wa-panel">
+        <div class="wa-panel-label">Catalog PDF</div>
+        @if (!documentLock) {
+          @if (documentsLoading()) {
+            <div class="muted">Loading catalog documents…</div>
+          } @else if (documentOptions().length === 0) {
+            <div class="muted">No catalog documents available.</div>
+          } @else {
+            <select
+              class="field-input wa-select"
+              aria-label="Catalog PDF"
+              [value]="selectedDocumentId()"
+              (change)="onDocumentChange($any($event.target).value)"
+            >
+              @for (opt of documentOptions(); track opt.documentId) {
+                <option [value]="opt.documentId">{{ opt.title }}</option>
+              }
+            </select>
+          }
+        } @else {
+          <div class="wa-locked-name">{{ documentLock.title }}</div>
+        }
+        <div class="wa-file-row">
+          <span class="wa-file-icon">📄</span>
+          <div class="wa-file-info">
+            <div class="wa-file-name">{{ documentFilename() }}</div>
+            <div class="muted">{{ documentMeta() }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wa-message-card">
+      <div class="wa-message-head">
+        <div class="wa-panel-label wa-panel-label--tight">Pre-filled Message</div>
+        <div class="muted wa-template-label">Template: Catalog share (default)</div>
+      </div>
+      @if (composeLoading()) {
+        <div class="muted">Preparing message…</div>
+      } @else if (composeError()) {
+        <div class="field-error wa-compose-error" role="alert">
+          {{ composeError() }}
+          <button type="button" class="btn btn-secondary btn-sm" (click)="retryCompose()">Retry</button>
+        </div>
+      } @else {
+        <textarea
+          class="field-input wa-textarea"
+          rows="3"
+          aria-label="Pre-filled message"
+          [value]="message()"
+          (input)="onMessageInput($any($event.target).value)"
+        ></textarea>
+        <div class="wa-preview">
+          <div class="wa-preview-label">PREVIEW</div>
+          <div class="wa-bubble">{{ message() }}</div>
+        </div>
+      }
+    </div>
+
+    <div class="wa-steps-grid">
+      <div class="step-tile" [class.step-tile--done]="doneSteps()[1]" (click)="downloadStep()">
+        <div class="step-tile-head">
+          <span class="step-dot" [class.step-dot--done]="doneSteps()[1]">{{ doneSteps()[1] ? '✓' : '1' }}</span>
+          <span class="step-label">Download PDF</span>
+        </div>
+        <div class="step-desc">{{ downloading() ? 'Downloading…' : 'Saves to this device so it can be attached.' }}</div>
+      </div>
+      <div
+        class="step-tile"
+        [class.step-tile--done]="doneSteps()[2]"
+        [class.step-tile--disabled]="!canOpenWhatsApp()"
+        (click)="openWhatsAppStep()"
+      >
+        <div class="step-tile-head">
+          <span class="step-dot" [class.step-dot--done]="doneSteps()[2]">{{ doneSteps()[2] ? '✓' : '2' }}</span>
+          <span class="step-label">Open WhatsApp ↗</span>
+        </div>
+        <div class="step-desc">wa.me deep link, pre-addressed and pre-filled.</div>
+      </div>
+      <div class="step-tile" [class.step-tile--done]="doneSteps()[3]" (click)="markSentStep()">
+        <div class="step-tile-head">
+          <span class="step-dot" [class.step-dot--done]="doneSteps()[3]">{{ doneSteps()[3] ? '✓' : '3' }}</span>
+          <span class="step-label">Attach &amp; send in chat</span>
+        </div>
+        <div class="step-desc">Manual in Phase 1. Automated with the Business API.</div>
+      </div>
+    </div>
+
+    @if (downloadError()) {
+      <div class="field-error wa-banner" role="alert">{{ downloadError() }}</div>
+    }
+
+    <div class="wa-footer">
+      <div class="wa-status muted">{{ statusText() }}</div>
+      <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="!canLogDispatch()" (click)="logDispatch()">
+        {{ saving() ? 'Logging…' : 'Log Dispatch' }}
+      </button>
+    </div>
+
+    @if (saveError()) {
+      <div class="field-error wa-save-error" role="alert">{{ saveError() }}</div>
+    }
+  </div>
+</div>

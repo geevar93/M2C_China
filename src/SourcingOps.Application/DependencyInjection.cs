@@ -33,12 +33,20 @@ public static class DependencyInjection
         configuration.GetSection("Dispatch").Bind(dispatchOptions);
         services.AddSingleton(dispatchOptions);
 
+        // Bound from the same "Storage" config section as CatalogUploadOptions — see
+        // VendorUploadOptions's doc comment for why Application keeps its own POCO per
+        // feature rather than sharing CatalogUploadOptions across tracks.
+        var vendorUploadOptions = new VendorUploadOptions();
+        configuration.GetSection("Storage").Bind(vendorUploadOptions);
+        services.AddSingleton(vendorUploadOptions);
+
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IMasterDataService, MasterDataService>();
         services.AddScoped<IAdminUserService, AdminUserService>();
         services.AddScoped<ITokenRevocationService, TokenRevocationService>();
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<IVendorService, VendorService>();
+        services.AddScoped<IVendorDocumentService, VendorDocumentService>();
         services.AddScoped<ICatalogService, CatalogService>();
         services.AddScoped<IDispatchService, DispatchService>();
 

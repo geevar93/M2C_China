@@ -69,6 +69,7 @@ public sealed class MasterDataService : IMasterDataService
         var shipmentStatuses = await _db.ShipmentStatuses.ToListAsync(ct);
         var invoiceStatuses = await _db.InvoiceStatuses.ToListAsync(ct);
         var vendorStatuses = await _db.VendorStatuses.ToListAsync(ct);
+        var documentTypes = await _db.DocumentTypes.ToListAsync(ct);
 
         return new MasterDataAggregateDto(
             FilterAndMapCategories(categories, includeRetired),
@@ -76,7 +77,8 @@ public sealed class MasterDataService : IMasterDataService
             FilterAndMapLookup(leadStatuses, includeRetired),
             FilterAndMapLookup(shipmentStatuses, includeRetired),
             FilterAndMapLookup(invoiceStatuses, includeRetired),
-            FilterAndMapLookup(vendorStatuses, includeRetired));
+            FilterAndMapLookup(vendorStatuses, includeRetired),
+            FilterAndMapLookup(documentTypes, includeRetired));
     }
 
     private static IReadOnlyList<CategoryDto> FilterAndMapCategories(List<Category> all, bool includeRetired) =>
@@ -150,6 +152,7 @@ public sealed class MasterDataService : IMasterDataService
             MasterDataCollectionKey.ShipmentStatuses => CreateLookupEntityAsync(_db.ShipmentStatuses, "ShipmentStatus", code, label, actorUserId, ct),
             MasterDataCollectionKey.InvoiceStatuses => CreateLookupEntityAsync(_db.InvoiceStatuses, "InvoiceStatus", code, label, actorUserId, ct),
             MasterDataCollectionKey.VendorStatuses => CreateLookupEntityAsync(_db.VendorStatuses, "VendorStatus", code, label, actorUserId, ct),
+            MasterDataCollectionKey.DocumentTypes => CreateLookupEntityAsync(_db.DocumentTypes, "DocumentType", code, label, actorUserId, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(key), key, "Unknown master-data collection.")
         };
     }
@@ -228,6 +231,7 @@ public sealed class MasterDataService : IMasterDataService
             MasterDataCollectionKey.ShipmentStatuses => UpdateLookupEntityAsync(_db.ShipmentStatuses, "ShipmentStatus", id, label, actorUserId, ct),
             MasterDataCollectionKey.InvoiceStatuses => UpdateLookupEntityAsync(_db.InvoiceStatuses, "InvoiceStatus", id, label, actorUserId, ct),
             MasterDataCollectionKey.VendorStatuses => UpdateLookupEntityAsync(_db.VendorStatuses, "VendorStatus", id, label, actorUserId, ct),
+            MasterDataCollectionKey.DocumentTypes => UpdateLookupEntityAsync(_db.DocumentTypes, "DocumentType", id, label, actorUserId, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(key), key, "Unknown master-data collection.")
         };
     }
@@ -282,6 +286,7 @@ public sealed class MasterDataService : IMasterDataService
                 MasterDataCollectionKey.ShipmentStatuses => await SetLookupActiveAsync(_db.ShipmentStatuses, "ShipmentStatus", id, isActive, action, actorUserId, ct),
                 MasterDataCollectionKey.InvoiceStatuses => await SetLookupActiveAsync(_db.InvoiceStatuses, "InvoiceStatus", id, isActive, action, actorUserId, ct),
                 MasterDataCollectionKey.VendorStatuses => await SetLookupActiveAsync(_db.VendorStatuses, "VendorStatus", id, isActive, action, actorUserId, ct),
+                MasterDataCollectionKey.DocumentTypes => await SetLookupActiveAsync(_db.DocumentTypes, "DocumentType", id, isActive, action, actorUserId, ct),
                 _ => throw new ArgumentOutOfRangeException(nameof(key), key, "Unknown master-data collection.")
             };
         }
@@ -343,6 +348,7 @@ public sealed class MasterDataService : IMasterDataService
                 MasterDataCollectionKey.ShipmentStatuses => await ReorderLookupAsync(_db.ShipmentStatuses, "ShipmentStatus", items, actorUserId, ct),
                 MasterDataCollectionKey.InvoiceStatuses => await ReorderLookupAsync(_db.InvoiceStatuses, "InvoiceStatus", items, actorUserId, ct),
                 MasterDataCollectionKey.VendorStatuses => await ReorderLookupAsync(_db.VendorStatuses, "VendorStatus", items, actorUserId, ct),
+                MasterDataCollectionKey.DocumentTypes => await ReorderLookupAsync(_db.DocumentTypes, "DocumentType", items, actorUserId, ct),
                 _ => throw new ArgumentOutOfRangeException(nameof(key), key, "Unknown master-data collection.")
             };
         }
@@ -390,6 +396,7 @@ public sealed class MasterDataService : IMasterDataService
             MasterDataCollectionKey.ShipmentStatuses => await DeleteLookupAsync(_db.ShipmentStatuses, "ShipmentStatus", id, IsShipmentStatusReferencedAsync, actorUserId, ct),
             MasterDataCollectionKey.InvoiceStatuses => await DeleteLookupAsync(_db.InvoiceStatuses, "InvoiceStatus", id, IsInvoiceStatusReferencedAsync, actorUserId, ct),
             MasterDataCollectionKey.VendorStatuses => await DeleteLookupAsync(_db.VendorStatuses, "VendorStatus", id, IsVendorStatusReferencedAsync, actorUserId, ct),
+            MasterDataCollectionKey.DocumentTypes => await DeleteLookupAsync(_db.DocumentTypes, "DocumentType", id, IsDocumentTypeReferencedAsync, actorUserId, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(key), key, "Unknown master-data collection.")
         };
 
@@ -481,6 +488,7 @@ public sealed class MasterDataService : IMasterDataService
     private Task<bool> IsShipmentStatusReferencedAsync(Guid id, CancellationToken ct) => _db.Shipments.AnyAsync(x => x.StatusId == id, ct);
     private Task<bool> IsInvoiceStatusReferencedAsync(Guid id, CancellationToken ct) => _db.Invoices.AnyAsync(x => x.StatusId == id, ct);
     private Task<bool> IsVendorStatusReferencedAsync(Guid id, CancellationToken ct) => _db.Vendors.AnyAsync(x => x.StatusId == id, ct);
+    private Task<bool> IsDocumentTypeReferencedAsync(Guid id, CancellationToken ct) => _db.VendorDocuments.AnyAsync(x => x.DocTypeId == id, ct);
 
     private async Task InvalidateAggregateCacheAsync(CancellationToken ct)
     {

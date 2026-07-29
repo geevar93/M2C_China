@@ -132,6 +132,27 @@
   opacity: 0.55;
 }
 
+// Enabled once Dispatch.Send is granted and the card has a document to send
+// (E9-05) — the prototype's hover-darken behaviour restored now that the
+// button is a real action, not a permanently inert placeholder.
+.cat-wa-btn--active {
+  cursor: pointer;
+  opacity: 1;
+
+  &:hover {
+    background: #256428;
+    border-color: #256428;
+  }
+}
+
+.cat-sent-meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-track);
+  padding-top: var(--space-5);
+  margin-top: auto;
+}
+
 .pager {
   display: flex;
   align-items: center;

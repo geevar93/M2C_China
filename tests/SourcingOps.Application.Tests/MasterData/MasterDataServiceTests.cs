@@ -373,6 +373,64 @@ public class MasterDataServiceTests
         result.ConflictDetail.Should().NotBeNullOrWhiteSpace();
     }
 
+    // ---- DocumentTypes (E5-07) — proves the new collection follows the same generic path ---
+
+    [Fact]
+    public async Task CreateAsync_DocumentType_PersistsCodeAndLabel_AndAppearsOnAggregate()
+    {
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db, out var audit);
+
+        var result = await sut.CreateAsync(MasterDataCollectionKey.DocumentTypes, new UpsertMasterDataRequest(null, "WAREHOUSE_CERT", "Warehouse Certificate"), Actor);
+
+        var dto = result.Should().BeOfType<LookupItemDto>().Subject;
+        dto.Code.Should().Be("WAREHOUSE_CERT");
+        db.DocumentTypes.Should().ContainSingle(d => d.Code == "WAREHOUSE_CERT");
+        audit.Verify(a => a.LogAsync(Actor, "MasterDataCreated", "DocumentType", dto.Id.ToString(), It.IsAny<object>(), default), Times.Once);
+
+        var aggregate = await sut.GetAggregateAsync(includeRetired: false);
+        aggregate.DocumentTypes.Should().ContainSingle(d => d.Id == dto.Id);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DocumentTypeReferencedByVendorDocument_ReturnsConflict()
+    {
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db, out _);
+        var docType = (LookupItemDto)await sut.CreateAsync(MasterDataCollectionKey.DocumentTypes, new UpsertMasterDataRequest(null, "BUSINESS_LICENCE", "Business Licence"), Actor);
+        var vendorStatus = new VendorStatus { Id = Guid.NewGuid(), Code = "ACTIVE", Label = "Active", IsActive = true, SortOrder = 1 };
+        db.VendorStatuses.Add(vendorStatus);
+        var vendor = new Vendor { Id = Guid.NewGuid(), Name = "V1", StatusId = vendorStatus.Id, CreatedAt = DateTime.UtcNow };
+        db.Vendors.Add(vendor);
+        var uploader = new User { Id = Guid.NewGuid(), Name = "Uploader", Email = "uploader@example.com", IsActive = true, CreatedAt = DateTime.UtcNow };
+        db.Users.Add(uploader);
+        db.VendorDocuments.Add(new VendorDocument
+        {
+            Id = Guid.NewGuid(), VendorId = vendor.Id, FilePath = "vendor-docs/x/y.pdf", OriginalFilename = "y.pdf",
+            SizeBytes = 100, DocTypeId = docType.Id, UploadedByUserId = uploader.Id, UploadedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var result = await sut.DeleteAsync(MasterDataCollectionKey.DocumentTypes, docType.Id, Actor);
+
+        result.Deleted.Should().BeFalse();
+        result.ConflictDetail.Should().Contain("Retire");
+        db.DocumentTypes.Should().Contain(d => d.Id == docType.Id, "a referenced document type must not be deleted");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_UnreferencedDocumentType_Succeeds()
+    {
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db, out _);
+        var docType = (LookupItemDto)await sut.CreateAsync(MasterDataCollectionKey.DocumentTypes, new UpsertMasterDataRequest(null, "OTHER", "Other"), Actor);
+
+        var result = await sut.DeleteAsync(MasterDataCollectionKey.DocumentTypes, docType.Id, Actor);
+
+        result.Deleted.Should().BeTrue();
+        db.DocumentTypes.Should().NotContain(d => d.Id == docType.Id);
+    }
+
     // ---- Delete: seeded system defaults are retire-only (N-8) ------------------------
 
     [Fact]

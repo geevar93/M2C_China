@@ -11,6 +11,8 @@ import { formatDateOnly } from '../shared/utils/date-format.util';
 import { CatalogsService } from './services/catalogs.service';
 import { CatalogSection } from './models/catalog.models';
 import { CatalogUploadDialogComponent } from './upload-dialog/upload-dialog.component';
+import { DispatchDialogComponent, DispatchDocumentLock } from '../dispatch/dispatch-dialog/dispatch-dialog.component';
+import { DispatchService } from '../dispatch/services/dispatch.service';
 
 interface CatalogCard {
   id: string;
@@ -22,6 +24,7 @@ interface CatalogCard {
   latestFileName: string;
   latestMeta: string;
   latestDocId: string | null;
+  sentMeta: string;
   section: CatalogSection;
 }
 
@@ -42,25 +45,30 @@ const ALL = '';
  * from existing colour/spacing tokens) instead of a photo — so the layout is
  * unchanged and nothing is invented.
  *
- * The prototype's per-card "Sent to N customers · last …" footer is dropped
- * for the same reason `customer-detail` dropped its dispatch log: there is
- * no dispatch-log data source in this pass (E9 is out of scope) and
- * fabricating a count would be worse than omitting the line.
+ * The prototype's per-card "Sent to N customers · last …" footer and ➤
+ * dispatch button are wired in this pass (E9-05/E9-07): the footer now comes
+ * from `GET /catalog-documents/{id}/dispatches`, fetched per-card once its
+ * latest document id is known (a card whose fetch fails shows "Sent history
+ * unavailable" rather than blocking the rest of the grid). The ➤ button
+ * opens the shared `DispatchDialogComponent` with the card's latest document
+ * fixed (`documentLock`) so the dialog only needs a customer picked.
  */
 @Component({
   selector: 'app-catalogs',
   standalone: true,
-  imports: [RouterLink, CatalogUploadDialogComponent],
+  imports: [RouterLink, CatalogUploadDialogComponent, DispatchDialogComponent],
   templateUrl: './catalogs.component.html',
   styleUrl: './catalogs.component.scss'
 })
 export class CatalogsComponent {
   private readonly catalogsService = inject(CatalogsService);
   private readonly masterDataService = inject(MasterDataService);
+  private readonly dispatchService = inject(DispatchService);
   private readonly auth = inject(AuthService);
 
   readonly categoryOptions = toSignal(this.masterDataService.categoryOptions(), { initialValue: [] });
   readonly canEdit = computed(() => this.auth.hasPermission('Catalogs.Edit'));
+  readonly canDispatch = computed(() => this.auth.hasPermission('Dispatch.Send'));
 
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
@@ -81,6 +89,10 @@ export class CatalogsComponent {
 
   readonly uploadOpen = signal(false);
   readonly editSection = signal<CatalogSection | null>(null);
+
+  readonly dispatchOpen = signal(false);
+  readonly dispatchDocumentLock = signal<DispatchDocumentLock | null>(null);
+  private readonly sentMetaByDocId = signal<Record<string, string>>({});
 
   private readonly search$ = new Subject<string>();
 
@@ -143,6 +155,29 @@ export class CatalogsComponent {
     this.fetch();
   }
 
+  openDispatch(card: CatalogCard): void {
+    if (!card.latestDocId) return;
+    this.dispatchDocumentLock.set({
+      documentId: card.latestDocId,
+      title: card.title,
+      filename: card.latestFileName,
+      meta: `${card.latestMeta} · ${card.vendorName}`
+    });
+    this.dispatchOpen.set(true);
+  }
+
+  cancelDispatch(): void {
+    this.dispatchOpen.set(false);
+    this.dispatchDocumentLock.set(null);
+  }
+
+  onDispatchLogged(): void {
+    const docId = this.dispatchDocumentLock()?.documentId;
+    this.dispatchOpen.set(false);
+    this.dispatchDocumentLock.set(null);
+    if (docId) this.loadSentMeta(docId);
+  }
+
   previewDocument(docId: string | null): void {
     if (!docId || this.previewingDocId()) return;
     this.previewingDocId.set(docId);
@@ -174,6 +209,10 @@ export class CatalogsComponent {
           this.items.set(res.items);
           this.totalCount.set(res.totalCount);
           this.loading.set(false);
+          for (const section of res.items) {
+            const latest = section.documents.find((d) => d.isLatest) ?? section.documents[0];
+            if (latest) this.loadSentMeta(latest.id);
+          }
         },
         error: (err: unknown) => {
           this.loading.set(false);
@@ -182,9 +221,26 @@ export class CatalogsComponent {
       });
   }
 
+  /** E9-07: "Sent to N customers · last DATE", derived from the dispatch log — one card's fetch failing never blocks the rest of the grid. */
+  private loadSentMeta(documentId: string): void {
+    this.dispatchService.history(documentId).subscribe({
+      next: (entries) => {
+        const label =
+          entries.length === 0
+            ? 'Not sent yet'
+            : `Sent to ${new Set(entries.map((e) => e.customerId)).size} customer${
+                new Set(entries.map((e) => e.customerId)).size === 1 ? '' : 's'
+              } · last ${formatDateOnly(entries[0].sentAtUtc)}`;
+        this.sentMetaByDocId.update((m) => ({ ...m, [documentId]: label }));
+      },
+      error: () => this.sentMetaByDocId.update((m) => ({ ...m, [documentId]: 'Sent history unavailable' }))
+    });
+  }
+
   private toCard(section: CatalogSection): CatalogCard {
     const latest = section.documents.find((d) => d.isLatest) ?? section.documents[0] ?? null;
     const count = section.documents.length;
+    const sentMeta = latest ? (this.sentMetaByDocId()[latest.id] ?? 'Loading dispatch history…') : 'No documents yet';
     return {
       id: section.id,
       title: section.title,
@@ -195,6 +251,7 @@ export class CatalogsComponent {
       latestFileName: latest?.originalFilename ?? 'No documents yet',
       latestMeta: latest ? `${formatFileSize(latest.sizeBytes)} · ${formatDateOnly(latest.uploadedAt)}` : '—',
       latestDocId: latest?.id ?? null,
+      sentMeta,
       section
     };
   }

@@ -17,7 +17,10 @@ const AGGREGATE: MasterDataAggregate = {
   leadStatuses: [],
   shipmentStatuses: [],
   invoiceStatuses: [],
-  vendorStatuses: []
+  vendorStatuses: [],
+  documentTypes: [
+    { id: 'doc-1', code: 'BUSINESS_LICENCE', label: 'Business Licence', sortOrder: 1, isActive: true, isSystemDefault: true }
+  ]
 };
 
 describe('AdminMasterDataComponent', () => {

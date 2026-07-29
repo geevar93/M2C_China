@@ -144,14 +144,102 @@ describe('VendorDetailComponent', () => {
     expect(text).not.toContain('+ Upload Catalog PDF');
   });
 
-  it('renders the "Send via WhatsApp" control as inert (E9 is out of scope)', async () => {
-    await configure();
+  it('disables "Send via WhatsApp" without Dispatch.Send (E9-05)', async () => {
+    await configure('ven-1', ['Vendors.Edit', 'Catalogs.Edit']);
     fixture.detectChanges();
     flushVendor();
     fixture.detectChanges();
 
     const btn: HTMLButtonElement = fixture.nativeElement.querySelector('[aria-label="Send via WhatsApp"]');
     expect(btn.disabled).toBeTrue();
+  });
+
+  it('opens the dispatch dialog document-locked to that row\'s document with Dispatch.Send', async () => {
+    await configure('ven-1', ['Vendors.Edit', 'Catalogs.Edit', 'Dispatch.Send']);
+    fixture.detectChanges();
+    flushVendor();
+    fixture.detectChanges();
+
+    const btns: HTMLButtonElement[] = fixture.nativeElement.querySelectorAll('[aria-label="Send via WhatsApp"]');
+    expect(btns[0].disabled).toBeFalse();
+
+    btns[0].click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.dispatchOpen()).toBeTrue();
+    expect(fixture.componentInstance.dispatchDocumentLock()).toEqual({
+      documentId: 'doc-1',
+      title: 'Yiwu Jewel Craft — Jewellery — AW26 Catalog',
+      filename: 'yiwu-jewel-craft-aw26-v3.pdf',
+      meta: 'v3 · 8.4 MB · Yiwu Jewel Craft Co.'
+    });
+
+    // The dialog's own child-load requests (master data + customers, since no
+    // customerLock was supplied) — drained so httpMock.verify() doesn't fail
+    // the outer spec. Vendor-detail itself never touches MasterDataService,
+    // so this is the dialog's first-ever load of it in this test.
+    httpMock.expectOne((r) => r.url === '/api/v1/master-data').flush({
+      categories: [],
+      serviceTypes: [],
+      leadStatuses: [],
+      shipmentStatuses: [],
+      invoiceStatuses: [],
+      vendorStatuses: []
+    });
+    httpMock.expectOne((r) => r.url === '/api/v1/customers').flush({ items: [], page: 1, pageSize: 200, totalCount: 0 });
+  });
+
+  it('expands a "Sent to" history panel per document row (E9-07), newest first', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushVendor();
+    fixture.detectChanges();
+
+    fixture.componentInstance.toggleHistory('doc-1');
+    fixture.detectChanges();
+
+    const req = httpMock.expectOne((r) => r.url === '/api/v1/catalog-documents/doc-1/dispatches');
+    req.flush([
+      { dispatchId: 'd1', customerId: 'cust-1', customerName: 'Meena Traders', staffUserId: 'user-1', staffUserName: 'Priya Sharma', sentAtUtc: '2026-07-18T14:22:00Z' }
+    ]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Meena Traders');
+    expect(fixture.nativeElement.textContent).toContain('Priya Sharma');
+  });
+
+  it('shows an empty state instead of hanging when a document has no dispatch history', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushVendor();
+    fixture.detectChanges();
+
+    fixture.componentInstance.toggleHistory('doc-1');
+    httpMock.expectOne((r) => r.url === '/api/v1/catalog-documents/doc-1/dispatches').flush([]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Not sent to any customer yet');
+  });
+
+  it('shows a visible error with retry instead of hanging when the history fetch fails', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushVendor();
+    fixture.detectChanges();
+
+    fixture.componentInstance.toggleHistory('doc-1');
+    httpMock
+      .expectOne((r) => r.url === '/api/v1/catalog-documents/doc-1/dispatches')
+      .flush({ title: 'Server error', detail: 'History lookup failed' }, { status: 500, statusText: 'Server Error' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('History lookup failed');
+
+    fixture.componentInstance.retryHistory('doc-1');
+    httpMock.expectOne((r) => r.url === '/api/v1/catalog-documents/doc-1/dispatches').flush([]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Not sent to any customer yet');
   });
 
   it('previews a document through the authenticated download endpoint, never a static href', async () => {

@@ -41,6 +41,7 @@ export interface MasterDataAggregate {
   shipmentStatuses: LookupRow[];
   invoiceStatuses: LookupRow[];
   vendorStatuses: LookupRow[];
+  documentTypes: LookupRow[];
 }
 
 export type MasterDataCollectionKey = keyof MasterDataAggregate;
@@ -57,7 +58,8 @@ export const COLLECTION_SEGMENTS: Record<MasterDataCollectionKey, string> = {
   leadStatuses: 'lead-statuses',
   shipmentStatuses: 'shipment-statuses',
   invoiceStatuses: 'invoice-statuses',
-  vendorStatuses: 'vendor-statuses'
+  vendorStatuses: 'vendor-statuses',
+  documentTypes: 'document-types'
 };
 
 /** Display label per collection tab. */
@@ -67,7 +69,8 @@ export const COLLECTION_LABELS: Record<MasterDataCollectionKey, string> = {
   leadStatuses: 'Lead Statuses',
   shipmentStatuses: 'Shipment Statuses',
   invoiceStatuses: 'Invoice Statuses',
-  vendorStatuses: 'Vendor Statuses'
+  vendorStatuses: 'Vendor Statuses',
+  documentTypes: 'Document Types'
 };
 
 export const COLLECTION_KEYS: MasterDataCollectionKey[] = [
@@ -76,7 +79,8 @@ export const COLLECTION_KEYS: MasterDataCollectionKey[] = [
   'leadStatuses',
   'shipmentStatuses',
   'invoiceStatuses',
-  'vendorStatuses'
+  'vendorStatuses',
+  'documentTypes'
 ];
 
 /** Single request shape for create/update. Categories only ever send `name`;

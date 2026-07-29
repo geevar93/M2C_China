@@ -4,12 +4,16 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { extractErrorMessage } from '../../core/services/problem-details.util';
 import { StatusStyleService } from '../../shared/services/status-style.service';
+import { TimelineDatePipe } from '../../shared/pipes/timeline-date.pipe';
 import { formatDateOnly } from '../../shared/utils/date-format.util';
 import { formatFileSize } from '../../shared/utils/file-size.util';
 import { previewBlob } from '../../shared/utils/file-download.util';
 import { CatalogsService } from '../../catalogs/services/catalogs.service';
 import { CatalogUploadDialogComponent } from '../../catalogs/upload-dialog/upload-dialog.component';
 import { CatalogSection } from '../../catalogs/models/catalog.models';
+import { DispatchDialogComponent, DispatchDocumentLock } from '../../dispatch/dispatch-dialog/dispatch-dialog.component';
+import { DispatchService } from '../../dispatch/services/dispatch.service';
+import { DispatchHistoryEntryDto } from '../../dispatch/models/dispatch.models';
 import { VendorsService } from '../services/vendors.service';
 import { VendorDetail } from '../models/vendor.models';
 import { VendorFormDialogComponent } from '../vendor-form-dialog/vendor-form-dialog.component';
@@ -26,6 +30,8 @@ interface DocRow {
   versionIsLatest: boolean;
   sizeLabel: string;
   uploadedLabel: string;
+  /** Pre-formatted "version · size · vendor" line for the dispatch dialog's locked document panel. */
+  dispatchMeta: string;
 }
 
 interface SectionRow {
@@ -40,14 +46,20 @@ interface SectionRow {
  * Vendor detail (ACTION_PLAN E5-09) — ported from Source/Sourcing Ops
  * Platform.dc.html `showVendorDetail` (~line 546). `GET /vendors/{id}`
  * embeds `catalogSections[]`/`documents[]` directly (E5-05) so this is a
- * single load, no `forkJoin`. "Send via WhatsApp" is ported as a
- * visually-present but inert control, same pattern `customer-detail`
- * already uses — dispatch wiring is E9 and explicitly out of scope here.
+ * single load, no `forkJoin`. "Send via WhatsApp" is wired in this pass
+ * (E9-05) to the shared `DispatchDialogComponent`, entered with the document
+ * fixed (`documentLock`) so the dialog only needs a customer picked — unlike
+ * the Catalogs screen's card (always the *latest* document), a vendor's
+ * per-row button can dispatch any version, since the row is a specific
+ * document. Each row also carries a "Sent to" toggle (E9-07) that expands an
+ * inline history panel from `GET /catalog-documents/{id}/dispatches` —
+ * gated on `Catalogs.View` (already required to see this screen at all),
+ * not `Dispatch.Send`, per that endpoint's own doc comment.
  */
 @Component({
   selector: 'app-vendor-detail',
   standalone: true,
-  imports: [RouterLink, VendorFormDialogComponent, CatalogUploadDialogComponent],
+  imports: [RouterLink, VendorFormDialogComponent, CatalogUploadDialogComponent, DispatchDialogComponent, TimelineDatePipe],
   templateUrl: './vendor-detail.component.html',
   styleUrl: './vendor-detail.component.scss'
 })
@@ -55,11 +67,13 @@ export class VendorDetailComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly vendorsService = inject(VendorsService);
   private readonly catalogsService = inject(CatalogsService);
+  private readonly dispatchService = inject(DispatchService);
   private readonly styles = inject(StatusStyleService);
   private readonly auth = inject(AuthService);
 
   readonly canEditVendor = computed(() => this.auth.hasPermission('Vendors.Edit'));
   readonly canEditCatalogs = computed(() => this.auth.hasPermission('Catalogs.Edit'));
+  readonly canDispatch = computed(() => this.auth.hasPermission('Dispatch.Send'));
 
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
@@ -70,6 +84,14 @@ export class VendorDetailComponent {
 
   readonly previewingDocId = signal<string | null>(null);
   readonly previewError = signal<string | null>(null);
+
+  readonly dispatchOpen = signal(false);
+  readonly dispatchDocumentLock = signal<DispatchDocumentLock | null>(null);
+
+  readonly historyOpenDocId = signal<string | null>(null);
+  readonly historyLoading = signal(false);
+  readonly historyError = signal<string | null>(null);
+  readonly historyEntries = signal<DispatchHistoryEntryDto[]>([]);
 
   readonly statusChip = computed(() => {
     const v = this.vendor();
@@ -139,6 +161,56 @@ export class VendorDetailComponent {
     if (id) this.load(id);
   }
 
+  openDispatch(doc: DocRow, sectionTitle: string): void {
+    this.dispatchDocumentLock.set({
+      documentId: doc.id,
+      title: sectionTitle,
+      filename: doc.fileName,
+      meta: doc.dispatchMeta
+    });
+    this.dispatchOpen.set(true);
+  }
+
+  cancelDispatch(): void {
+    this.dispatchOpen.set(false);
+    this.dispatchDocumentLock.set(null);
+  }
+
+  onDispatchLogged(): void {
+    const docId = this.dispatchDocumentLock()?.documentId;
+    this.dispatchOpen.set(false);
+    this.dispatchDocumentLock.set(null);
+    if (docId && this.historyOpenDocId() === docId) this.loadHistory(docId);
+  }
+
+  toggleHistory(docId: string): void {
+    if (this.historyOpenDocId() === docId) {
+      this.historyOpenDocId.set(null);
+      return;
+    }
+    this.historyOpenDocId.set(docId);
+    this.loadHistory(docId);
+  }
+
+  retryHistory(docId: string): void {
+    this.loadHistory(docId);
+  }
+
+  private loadHistory(docId: string): void {
+    this.historyLoading.set(true);
+    this.historyError.set(null);
+    this.dispatchService.history(docId).subscribe({
+      next: (entries) => {
+        this.historyLoading.set(false);
+        this.historyEntries.set(entries);
+      },
+      error: (err: unknown) => {
+        this.historyLoading.set(false);
+        this.historyError.set(extractErrorMessage(err, 'Could not load dispatch history. Please try again.'));
+      }
+    });
+  }
+
   previewDocument(docId: string): void {
     if (this.previewingDocId()) return;
     this.previewingDocId.set(docId);
@@ -183,7 +255,8 @@ export class VendorDetailComponent {
         versionLabel: d.versionLabel ?? '—',
         versionIsLatest: d.isLatest,
         sizeLabel: formatFileSize(d.sizeBytes),
-        uploadedLabel: `${formatDateOnly(d.uploadedAt)} · ${d.uploadedByName}`
+        uploadedLabel: `${formatDateOnly(d.uploadedAt)} · ${d.uploadedByName}`,
+        dispatchMeta: `${d.versionLabel ?? '—'} · ${formatFileSize(d.sizeBytes)} · ${section.vendorName}`
       }))
     };
   }

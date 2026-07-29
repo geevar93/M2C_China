@@ -4,6 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { CustomerDetailComponent } from './customer-detail.component';
+import { AuthService } from '../../core/services/auth.service';
 import { MasterDataResponse } from '../../core/models/master-data.models';
 import { CustomerDetail, TimelineEvent } from '../models/customer.models';
 
@@ -71,7 +72,7 @@ describe('CustomerDetailComponent', () => {
   let fixture: ComponentFixture<CustomerDetailComponent>;
   let httpMock: HttpTestingController;
 
-  function configure(id = 'cust-1'): void {
+  function configure(id = 'cust-1', permissions: string[] = []): void {
     TestBed.configureTestingModule({
       imports: [CustomerDetailComponent],
       providers: [
@@ -84,7 +85,8 @@ describe('CustomerDetailComponent', () => {
             paramMap: of(convertToParamMap({ id })),
             snapshot: { paramMap: convertToParamMap({ id }) }
           }
-        }
+        },
+        { provide: AuthService, useValue: { hasPermission: (p: string) => permissions.includes(p), currentUser$: of(null) } }
       ]
     });
     fixture = TestBed.createComponent(CustomerDetailComponent);
@@ -180,5 +182,47 @@ describe('CustomerDetailComponent', () => {
     httpMock.expectOne((r) => r.url === '/api/v1/customers/cust-1/timeline').flush(timeline);
 
     expect(fixture.componentInstance.noteOpen()).toBeFalse();
+  });
+
+  it('disables "Send Catalog via WhatsApp" without Dispatch.Send (E9-03)', () => {
+    configure('cust-1', []);
+    fixture.detectChanges();
+    flushAll();
+    fixture.detectChanges();
+
+    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.detail-actions .btn-primary');
+    expect(btn.disabled).toBeTrue();
+  });
+
+  it('opens the dispatch dialog, customer-locked, with Dispatch.Send and reloads the timeline once logged', () => {
+    configure('cust-1', ['Dispatch.Send']);
+    fixture.detectChanges();
+    flushAll();
+    fixture.detectChanges();
+
+    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.detail-actions .btn-primary');
+    expect(btn.disabled).toBeFalse();
+
+    fixture.componentInstance.openDispatch();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.dispatchCustomerLock()).toEqual({
+      id: 'cust-1',
+      businessName: 'Meena Traders',
+      subline: 'Meena Shah · +91 98250 41122',
+      serviceTypeCode: 'CIF'
+    });
+
+    // The dialog's own child-load requests (catalog sections, since no
+    // documentLock was supplied) — not under test here, just drained so
+    // httpMock.verify() doesn't fail the outer spec.
+    httpMock.expectOne((r) => r.url === '/api/v1/catalog-sections').flush({ items: [], page: 1, pageSize: 100, totalCount: 0 });
+    fixture.detectChanges();
+
+    fixture.componentInstance.onDispatchLogged();
+    expect(fixture.componentInstance.dispatchOpen()).toBeFalse();
+
+    // Reloads the timeline (the dispatch's own history surface — no second, parallel dispatch list).
+    httpMock.expectOne((r) => r.url === '/api/v1/customers/cust-1/timeline').flush(timeline);
   });
 });

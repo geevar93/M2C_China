@@ -73,9 +73,11 @@
             <button
               type="button"
               class="cat-wa-btn"
-              disabled
-              title="Wired in E9 (WhatsApp dispatch)"
+              [class.cat-wa-btn--active]="canDispatch() && k.latestDocId"
+              [disabled]="!canDispatch() || !k.latestDocId"
+              [title]="canDispatch() ? '' : 'Requires the Dispatch.Send permission'"
               aria-label="Send via WhatsApp"
+              (click)="openDispatch(k)"
             >
               ➤
             </button>
@@ -91,6 +93,7 @@
               <button type="button" class="btn btn-secondary" (click)="openEdit(k.section)">Edit</button>
             }
           </div>
+          <div class="cat-sent-meta">{{ k.sentMeta }}</div>
         </div>
       }
     </div>
@@ -110,5 +113,9 @@
       (closed)="cancelUpload()"
       (saved)="onUploadSaved($event)"
     ></app-catalog-upload-dialog>
+  }
+
+  @if (dispatchOpen() && dispatchDocumentLock(); as lock) {
+    <app-dispatch-dialog [documentLock]="lock" (closed)="cancelDispatch()" (logged)="onDispatchLogged()"></app-dispatch-dialog>
   }
 </div>

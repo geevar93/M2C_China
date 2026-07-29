@@ -2,11 +2,13 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
+import { AuthService } from '../../core/services/auth.service';
 import { MasterDataService } from '../../core/services/master-data.service';
 import { extractErrorMessage } from '../../core/services/problem-details.util';
 import { StatusStyleService } from '../../shared/services/status-style.service';
 import { TimelineStyleService } from '../../shared/services/timeline-style.service';
 import { TimelineDatePipe } from '../../shared/pipes/timeline-date.pipe';
+import { DispatchCustomerLock, DispatchDialogComponent } from '../../dispatch/dispatch-dialog/dispatch-dialog.component';
 import { CustomersService } from '../services/customers.service';
 import { CustomerDetail, TimelineEvent } from '../models/customer.models';
 
@@ -30,14 +32,18 @@ interface TimelineRow extends TimelineEvent {
  *  - "Shipments" — no shipments endpoint exists in this pass's contract
  *    (shipments are M5); rendering it would mean fabricating rows, which the
  *    task brief explicitly says not to do.
- * "Send Catalog via WhatsApp" and "Edit" are ported as visually-present but
- * inert controls (same pattern the shell already uses for its refresh
- * action) — dispatch wiring is E9, edit is a later CRM story.
+ * "Edit" is ported as a visually-present but inert control (a later CRM
+ * story). "Send Catalog via WhatsApp" is wired in this pass (E9-03) to the
+ * shared `DispatchDialogComponent`, entered with the customer fixed
+ * (`customerLock`) so the dialog only needs a catalog document picked. A
+ * successful dispatch reloads the timeline rather than a second dispatch
+ * list — per this class's own note above, `CatalogDispatched` timeline
+ * entries are the one and only dispatch history surface on this screen.
  */
 @Component({
   selector: 'app-customer-detail',
   standalone: true,
-  imports: [RouterLink, TimelineDatePipe],
+  imports: [RouterLink, TimelineDatePipe, DispatchDialogComponent],
   templateUrl: './customer-detail.component.html',
   styleUrl: './customer-detail.component.scss'
 })
@@ -47,6 +53,10 @@ export class CustomerDetailComponent {
   private readonly masterDataService = inject(MasterDataService);
   private readonly styles = inject(StatusStyleService);
   private readonly timelineStyles = inject(TimelineStyleService);
+  private readonly auth = inject(AuthService);
+
+  readonly canDispatch = computed(() => this.auth.hasPermission('Dispatch.Send'));
+  readonly dispatchOpen = signal(false);
 
   private readonly masterData = toSignal(this.masterDataService.masterData$, {
     initialValue: { status: 'idle' as const, data: null, error: null }
@@ -81,6 +91,19 @@ export class CustomerDetailComponent {
     const md = this.masterData().data;
     const row = md?.leadStatuses.find((r) => r.id === c?.statusId);
     return { ...this.styles.status(row?.code), label: row?.label ?? '—' };
+  });
+
+  readonly dispatchCustomerLock = computed<DispatchCustomerLock | null>(() => {
+    const c = this.customer();
+    if (!c) return null;
+    const md = this.masterData().data;
+    const row = md?.serviceTypes.find((r) => r.id === c.serviceTypeId);
+    return {
+      id: c.id,
+      businessName: c.businessName,
+      subline: `${c.name} · ${c.phone}`,
+      serviceTypeCode: row?.code ?? null
+    };
   });
 
   readonly profileFields = computed<ProfileField[]>(() => {
@@ -127,6 +150,20 @@ export class CustomerDetailComponent {
   retry(): void {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) this.load(id);
+  }
+
+  openDispatch(): void {
+    this.dispatchOpen.set(true);
+  }
+
+  cancelDispatch(): void {
+    this.dispatchOpen.set(false);
+  }
+
+  onDispatchLogged(): void {
+    this.dispatchOpen.set(false);
+    const c = this.customer();
+    if (c) this.reloadTimeline(c.id);
   }
 
   openNote(): void {

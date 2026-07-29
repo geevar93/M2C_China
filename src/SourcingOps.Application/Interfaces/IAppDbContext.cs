@@ -23,6 +23,7 @@ public interface IAppDbContext
     DbSet<ShipmentStatus> ShipmentStatuses { get; }
     DbSet<InvoiceStatus> InvoiceStatuses { get; }
     DbSet<VendorStatus> VendorStatuses { get; }
+    DbSet<DocumentType> DocumentTypes { get; }
 
     DbSet<Customer> Customers { get; }
     DbSet<CustomerCategory> CustomerCategories { get; }
@@ -30,6 +31,7 @@ public interface IAppDbContext
 
     DbSet<Vendor> Vendors { get; }
     DbSet<VendorCategory> VendorCategories { get; }
+    DbSet<VendorDocument> VendorDocuments { get; }
 
     DbSet<CatalogSection> CatalogSections { get; }
     DbSet<CatalogDocument> CatalogDocuments { get; }

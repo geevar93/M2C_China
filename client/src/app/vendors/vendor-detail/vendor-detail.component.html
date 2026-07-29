@@ -90,17 +90,47 @@
                         >
                           {{ previewingDocId() === d.id ? 'Opening…' : 'Preview' }}
                         </button>
+                        <button type="button" class="btn btn-secondary btn-sm" (click)="toggleHistory(d.id)">
+                          {{ historyOpenDocId() === d.id ? 'Hide Sent To' : 'Sent To' }}
+                        </button>
                         <button
                           type="button"
                           class="vd-wa-btn"
-                          disabled
-                          title="Wired in E9 (WhatsApp dispatch)"
+                          [class.vd-wa-btn--active]="canDispatch()"
+                          [disabled]="!canDispatch()"
+                          [title]="canDispatch() ? '' : 'Requires the Dispatch.Send permission'"
                           aria-label="Send via WhatsApp"
+                          (click)="openDispatch(d, sec.title)"
                         >
                           ➤
                         </button>
                       </td>
                     </tr>
+                    @if (historyOpenDocId() === d.id) {
+                      <tr class="vd-history-row">
+                        <td colspan="5">
+                          @if (historyLoading()) {
+                            <div class="muted">Loading dispatch history…</div>
+                          } @else if (historyError()) {
+                            <div class="field-error" role="alert">
+                              {{ historyError() }}
+                              <button type="button" class="btn btn-secondary btn-sm" (click)="retryHistory(d.id)">Retry</button>
+                            </div>
+                          } @else if (historyEntries().length === 0) {
+                            <div class="muted">Not sent to any customer yet.</div>
+                          } @else {
+                            <ul class="vd-history-list">
+                              @for (h of historyEntries(); track h.dispatchId) {
+                                <li>
+                                  <span class="vd-history-customer">{{ h.customerName }}</span>
+                                  <span class="muted"> · sent by {{ h.staffUserName }} · {{ h.sentAtUtc | timelineDate }}</span>
+                                </li>
+                              }
+                            </ul>
+                          }
+                        </td>
+                      </tr>
+                    }
                   }
                 </tbody>
               </table>
@@ -125,6 +155,10 @@
           (closed)="cancelUpload()"
           (saved)="onUploadSaved($event)"
         ></app-catalog-upload-dialog>
+      }
+
+      @if (dispatchOpen() && dispatchDocumentLock(); as lock) {
+        <app-dispatch-dialog [documentLock]="lock" (closed)="cancelDispatch()" (logged)="onDispatchLogged()"></app-dispatch-dialog>
       }
     }
   }

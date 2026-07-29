@@ -1,0 +1,263 @@
+// Dispatch dialog (ACTION_PLAN E9-03/04/05) — ported from the prototype's
+// `waOpen` dialog (Source/Sourcing Ops Platform.dc.html ~lines 987-1068).
+// `.dialog-backdrop`/`.dialog-panel` are the shared atoms (720px default max-
+// width, matching docs/DESIGN_TOKENS.md §8's "720px WhatsApp/vendor-edit
+// dialogs" note) — nothing overridden here.
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.dialog-close {
+  font-size: 16px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 var(--space-2);
+}
+
+.wa-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-8);
+}
+
+.wa-header-sub {
+  font-size: 13px;
+  margin-top: var(--space-2);
+}
+
+.wa-banner {
+  margin-bottom: var(--space-8);
+}
+
+.wa-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.wa-panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-8);
+}
+
+.wa-panel-label {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: var(--space-5);
+}
+
+.wa-panel-label--tight {
+  margin-bottom: 0;
+}
+
+.wa-select {
+  margin-bottom: var(--space-5);
+}
+
+// Static locked-recipient/locked-document display — carried over from the
+// prototype's `mobile` reference screen's "To"/"Catalog" panels (~lines
+// 950-964), the prototype's own precedent for a non-dropdown recipient.
+.wa-locked-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.wa-sub {
+  font-size: 13px;
+  margin-top: var(--space-2);
+}
+
+.wa-chip-row {
+  margin-top: var(--space-4);
+}
+
+.wa-file-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+}
+
+.wa-file-icon {
+  font-size: 18px;
+}
+
+.wa-file-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wa-file-name {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wa-message-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.wa-message-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-5);
+}
+
+.wa-template-label {
+  font-size: 12px;
+}
+
+.wa-compose-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.wa-textarea {
+  margin-bottom: var(--space-6);
+}
+
+.wa-preview {
+  background: var(--color-page-bg);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+}
+
+.wa-preview-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+}
+
+// 10px bubble radius / 80% width are the prototype's literal values — no
+// matching token exists for either (see docs/DESIGN_TOKENS.md §1's WA bubble
+// entry, which only defines the colour).
+.wa-bubble {
+  background: var(--color-wa-bubble);
+  border-radius: 10px;
+  padding: var(--space-4) var(--space-6);
+  font-size: 13px;
+  max-width: 80%;
+  margin-left: auto;
+}
+
+.wa-steps-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-6);
+  margin-bottom: var(--space-9);
+}
+
+.step-tile {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-7);
+  cursor: pointer;
+}
+
+// #f5f8ff is the prototype's literal "selected/active" tint used wherever an
+// accent-bordered surface needs a lighter fill than --color-info-bg — the
+// same literal already appears in intake.component.scss's `.svc-card--active`
+// / `.cat-chip--active` for the identical visual role.
+.step-tile--done {
+  border-color: var(--color-accent);
+  background: #f5f8ff;
+}
+
+.step-tile--disabled {
+  cursor: not-allowed;
+  opacity: .6;
+}
+
+.step-tile-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.step-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-circle);
+  background: var(--color-track);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+}
+
+.step-dot--done {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.step-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.step-desc {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.wa-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-8);
+}
+
+.wa-status {
+  font-size: 12px;
+  flex: 1 1 auto;
+}
+
+.wa-save-error {
+  margin-top: var(--space-5);
+  text-align: right;
+}
+
+// Phone width (E12-01 / the prototype's `mobile` reference): the two- and
+// three-column grids collapse to a single stacked column, and the footer
+// wraps instead of squeezing three items onto one row.
+@media (max-width: 640px) {
+  .wa-grid-2,
+  .wa-steps-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wa-footer {
+    flex-wrap: wrap;
+  }
+
+  .wa-status {
+    flex: 1 1 100%;
+    margin-bottom: var(--space-2);
+  }
+}

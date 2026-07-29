@@ -48,6 +48,7 @@ public sealed class DbSeeder
         await SeedLookupAsync(_db.ShipmentStatuses, SeedDefaults.ShipmentStatuses, ct);
         await SeedLookupAsync(_db.InvoiceStatuses, SeedDefaults.InvoiceStatuses, ct);
         await SeedLookupAsync(_db.VendorStatuses, SeedDefaults.VendorStatuses, ct);
+        await SeedLookupAsync(_db.DocumentTypes, SeedDefaults.DocumentTypes, ct);
 
         await _db.SaveChangesAsync(ct);
 

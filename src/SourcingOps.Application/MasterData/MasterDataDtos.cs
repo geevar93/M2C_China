@@ -26,7 +26,8 @@ public sealed record MasterDataAggregateDto(
     IReadOnlyList<LookupItemDto> LeadStatuses,
     IReadOnlyList<LookupItemDto> ShipmentStatuses,
     IReadOnlyList<LookupItemDto> InvoiceStatuses,
-    IReadOnlyList<LookupItemDto> VendorStatuses);
+    IReadOnlyList<LookupItemDto> VendorStatuses,
+    IReadOnlyList<LookupItemDto> DocumentTypes);
 
 /// <summary>
 /// Single request shape for create/update across every collection. Categories only ever
