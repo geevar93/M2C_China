@@ -1,0 +1,294 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text;
+using FluentAssertions;
+using SourcingOps.Api.Tests.TestSupport;
+using SourcingOps.Application.Catalog;
+using SourcingOps.Application.Crm;
+using SourcingOps.Application.Dispatching;
+using SourcingOps.Application.MasterData;
+using SourcingOps.Application.Vendors;
+using SourcingOps.Domain.Constants;
+
+namespace SourcingOps.Api.Tests.Dispatching;
+
+/// <summary>
+/// Exercises ACTION_PLAN E9-01, E9-02, E9-06, E9-07 over real HTTP against
+/// <see cref="AdminSeededFixture"/>'s already-provisioned Super Admin/Associate clients — real
+/// Postgres (Testcontainers), real JWT auth pipeline, real permission policies. E9-08 (the
+/// answered FSD Q4 — any staff may dispatch) is asserted here at the token level in addition to
+/// the seed-level unit test in <c>DbSeederTests</c>: <see cref="Fixture"/>'s Associate account
+/// is a completely ordinary seeded Associate, and its JWT's resolved permission set must carry
+/// <see cref="PermissionCodes.DispatchSend"/> for any of this suite's non-403 tests to pass.
+/// </summary>
+public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
+{
+    private readonly AdminSeededFixture _fixture;
+
+    public DispatchEndpointTests(AdminSeededFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    // ---- Shared setup ------------------------------------------------------------------
+
+    private async Task<MasterDataAggregateDto> GetMasterDataAsync()
+    {
+        var response = await _fixture.AssociateClient.GetAsync("/api/v1/master-data");
+        await response.EnsureSuccessOrThrowWithBodyAsync();
+        return (await response.Content.ReadFromJsonAsync<MasterDataAggregateDto>())!;
+    }
+
+    private async Task<CustomerDetailDto> CreateCustomerAsync(MasterDataAggregateDto md)
+    {
+        var request = new CreateCustomerRequest(
+            Name: "Kundan Traders", BusinessName: null, Phone: "9" + Random.Shared.Next(100000000, 999999999),
+            Email: null, City: null, Region: null, SourceChannel: null,
+            ServiceTypeId: md.ServiceTypes.Single(s => s.Code == "CIF").Id,
+            StatusId: md.LeadStatuses.OrderBy(s => s.SortOrder).First().Id,
+            CategoryIds: null, OwnerUserId: null, Tags: null, Notes: null,
+            ExternalMarketplace: null, ExternalOrderRef: null, ExternalSupplierName: null,
+            ExternalOrderValue: null, ExternalOrderCurrency: null, ExternalOrderDate: null);
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers", request);
+        await response.EnsureSuccessOrThrowWithBodyAsync();
+        return (await response.Content.ReadFromJsonAsync<CustomerDetailDto>())!;
+    }
+
+    private async Task<CatalogDocumentDto> CreateCatalogDocumentAsync(MasterDataAggregateDto md)
+    {
+        var vendorRequest = new CreateVendorRequest(
+            Name: $"Dispatch-Vendor-{Guid.NewGuid():N}", ContactPerson: null, Phone: null, Email: null,
+            Region: "Yiwu, Zhejiang", StatusId: md.VendorStatuses.Single(s => s.Code == "ACTIVE").Id,
+            CategoryIds: null, Moq: null, LeadTime: null, PaymentTerms: null, ReliabilityRating: null, Notes: null);
+        var vendorResponse = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/vendors", vendorRequest);
+        await vendorResponse.EnsureSuccessOrThrowWithBodyAsync();
+        var vendor = (await vendorResponse.Content.ReadFromJsonAsync<VendorDetailDto>())!;
+
+        var sectionResponse = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/catalog-sections",
+            new CreateCatalogSectionRequest(vendor.Id, "Spring 2026 Collection", md.Categories.First().Id, null));
+        await sectionResponse.EnsureSuccessOrThrowWithBodyAsync();
+        var section = (await sectionResponse.Content.ReadFromJsonAsync<CatalogSectionDto>())!;
+
+        using var form = new MultipartFormDataContent();
+        var pdfBytes = Encoding.ASCII.GetBytes("%PDF-1.4 dispatch test content");
+        var fileContent = new ByteArrayContent(pdfBytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        form.Add(fileContent, "file", "catalog.pdf");
+        var uploadResponse = await _fixture.AssociateClient.PostAsync($"/api/v1/catalog-sections/{section.Id}/documents", form);
+        await uploadResponse.EnsureSuccessOrThrowWithBodyAsync();
+        return (await uploadResponse.Content.ReadFromJsonAsync<CatalogDocumentDto>())!;
+    }
+
+    // ---- E9-08 (token-level check that the seeded Associate really can dispatch) -------
+
+    [Fact]
+    public void AssociateToken_CarriesDispatchSendPermission_PerFsdQ4AnsweredInOI8()
+    {
+        _fixture.AssociateAuth.User.Permissions.Should().Contain(PermissionCodes.DispatchSend);
+    }
+
+    // ---- Compose (E9-01, E9-06) ---------------------------------------------------------
+
+    [Fact]
+    public async Task Compose_ValidCustomerAndDocument_Returns200_WithRenderedMessageAndWaMeLink()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+
+        var response = await _fixture.AssociateClient.GetAsync(
+            $"/api/v1/dispatch-log/compose?customerId={customer.Id}&catalogDocumentId={document.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<DispatchComposeDto>();
+        body!.Message.Should().Contain("Kundan Traders").And.Contain("Spring 2026 Collection");
+        body.DeepLinkUrl.Should().StartWith("https://wa.me/");
+        body.DeepLinkUrl.Should().NotContain("+").And.NotContain(" ");
+    }
+
+    [Fact]
+    public async Task Compose_UnknownCustomer_Returns404()
+    {
+        var md = await GetMasterDataAsync();
+        var document = await CreateCatalogDocumentAsync(md);
+
+        var response = await _fixture.AssociateClient.GetAsync(
+            $"/api/v1/dispatch-log/compose?customerId={Guid.NewGuid()}&catalogDocumentId={document.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Compose_UnknownCatalogDocument_Returns404()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+
+        var response = await _fixture.AssociateClient.GetAsync(
+            $"/api/v1/dispatch-log/compose?customerId={customer.Id}&catalogDocumentId={Guid.NewGuid()}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // ---- Create (E9-02) ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Create_ValidDispatch_Returns201_WithStaffUserFromToken_NotFromBody()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+        var request = new CreateDispatchLogRequest(customer.Id, document.Id, "Hi, here is our catalog.");
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = await response.Content.ReadFromJsonAsync<DispatchLogDto>();
+        body!.CustomerId.Should().Be(customer.Id);
+        body.CatalogDocumentId.Should().Be(document.Id);
+        body.StaffUserId.Should().Be(_fixture.AssociateAuth.User.Id); // from the token, since the request body carries no staff field
+        body.Message.Should().Be("Hi, here is our catalog.");
+    }
+
+    [Fact]
+    public async Task Create_UnknownCustomerId_Returns400ProblemDetails()
+    {
+        var md = await GetMasterDataAsync();
+        var document = await CreateCatalogDocumentAsync(md);
+        var request = new CreateDispatchLogRequest(Guid.NewGuid(), document.Id, "Hi there");
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+    }
+
+    [Fact]
+    public async Task Create_UnknownCatalogDocumentId_Returns400ProblemDetails()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var request = new CreateDispatchLogRequest(customer.Id, Guid.NewGuid(), "Hi there");
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+    }
+
+    [Fact]
+    public async Task Create_BlankMessage_Returns400ProblemDetails()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+        var request = new CreateDispatchLogRequest(customer.Id, document.Id, "   ");
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // ---- M4 exit criterion: dispatch shows up on the customer timeline (ACTION_PLAN §5) ----
+
+    [Fact]
+    public async Task Create_ThenCustomerTimeline_ShowsCatalogDispatchedEvent()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+        var created = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log",
+            new CreateDispatchLogRequest(customer.Id, document.Id, "Hi, here is our catalog."));
+        await created.EnsureSuccessOrThrowWithBodyAsync();
+
+        var timelineResponse = await _fixture.AssociateClient.GetAsync($"/api/v1/customers/{customer.Id}/timeline");
+
+        timelineResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var timeline = await timelineResponse.Content.ReadFromJsonAsync<List<TimelineEventDto>>();
+        var dispatchEvent = timeline.Should().ContainSingle(e => e.Kind == TimelineEventKinds.CatalogDispatched).Subject;
+        dispatchEvent.RefType.Should().Be("CatalogDocument");
+        dispatchEvent.RefId.Should().Be(document.Id);
+        dispatchEvent.Body.Should().Contain("Spring 2026 Collection");
+    }
+
+    // ---- Sent-to history (E9-07) ----------------------------------------------------------
+
+    [Fact]
+    public async Task SentTo_UnknownDocument_Returns404()
+    {
+        var response = await _fixture.AssociateClient.GetAsync($"/api/v1/catalog-documents/{Guid.NewGuid()}/dispatches");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task SentTo_DocumentWithNoDispatches_Returns200_Empty()
+    {
+        var md = await GetMasterDataAsync();
+        var document = await CreateCatalogDocumentAsync(md);
+
+        var response = await _fixture.AssociateClient.GetAsync($"/api/v1/catalog-documents/{document.Id}/dispatches");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<List<DispatchHistoryEntryDto>>();
+        body.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SentTo_AfterDispatch_ListsCustomerAndStaffAndTimestamp()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+        var created = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log",
+            new CreateDispatchLogRequest(customer.Id, document.Id, "Hi, here is our catalog."));
+        await created.EnsureSuccessOrThrowWithBodyAsync();
+
+        var response = await _fixture.AssociateClient.GetAsync($"/api/v1/catalog-documents/{document.Id}/dispatches");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<List<DispatchHistoryEntryDto>>();
+        body.Should().ContainSingle(d => d.CustomerId == customer.Id && d.StaffUserId == _fixture.AssociateAuth.User.Id);
+    }
+
+    // ---- DoD: every permission-gated endpoint needs a 403-for-missing-permission test -----
+
+    private async Task<HttpClient> GetNoPermissionClientAsync()
+    {
+        var auth = await AdminApiTestHelpers.ProvisionActiveUserAsync(
+            _fixture.Factory, _fixture.AdminClient, roleIds: [], "No Perms Dispatch User", Guid.NewGuid().ToString("N")[..8], "NoPerms-Changed-Pw1!");
+        return _fixture.Factory.CreateClient().WithBearer(auth.AccessToken);
+    }
+
+    [Fact]
+    public async Task NoPermissionCaller_Gets403_OnCompose()
+    {
+        var client = await GetNoPermissionClientAsync();
+
+        var response = await client.GetAsync($"/api/v1/dispatch-log/compose?customerId={Guid.NewGuid()}&catalogDocumentId={Guid.NewGuid()}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task NoPermissionCaller_Gets403_OnCreate()
+    {
+        var client = await GetNoPermissionClientAsync();
+        var request = new CreateDispatchLogRequest(Guid.NewGuid(), Guid.NewGuid(), "Hi there");
+
+        var response = await client.PostAsJsonAsync("/api/v1/dispatch-log", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task NoPermissionCaller_Gets403_OnSentToHistory()
+    {
+        var client = await GetNoPermissionClientAsync();
+
+        var response = await client.GetAsync($"/api/v1/catalog-documents/{Guid.NewGuid()}/dispatches");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+}

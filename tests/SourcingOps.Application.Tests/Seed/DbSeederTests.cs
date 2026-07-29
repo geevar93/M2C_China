@@ -45,6 +45,33 @@ public class DbSeederTests
         associateCodes.Should().NotContain(PermissionCodes.AdminOnly);
     }
 
+    /// <summary>
+    /// ACTION_PLAN E9-08: FSD Q4 ("any staff may dispatch over WhatsApp") was answered and
+    /// recorded in TECH_SPEC §10 OI-8 as "matches the seeded Associate role already holding
+    /// Dispatch.Send, no change". The test above already covers this indirectly (Dispatch.Send
+    /// is in <see cref="PermissionCodes.All"/> and not in <see cref="PermissionCodes.AdminOnly"/>,
+    /// so it flows into "everything except AdminOnly") — but that assertion is derived from the
+    /// same <see cref="PermissionCodes.AdminOnly"/> list it's checking against, so it would keep
+    /// passing even if a future change moved <c>Dispatch.Send</c> into <c>AdminOnly</c> (the
+    /// expected set would silently shrink along with the actual one). This test hardcodes the
+    /// answered business rule directly so that specific regression cannot pass silently.
+    /// </summary>
+    [Fact]
+    public async Task SeedAsync_AssociateRole_HoldsDispatchSend_PerFsdQ4AnsweredInOI8()
+    {
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db);
+
+        await sut.SeedAsync();
+
+        var associate = db.Roles.Single(r => r.Name == RoleNames.Associate);
+        var associateCodes = db.RolePermissions.Where(rp => rp.RoleId == associate.Id)
+            .Join(db.Permissions, rp => rp.PermissionId, p => p.Id, (rp, p) => p.Code).ToList();
+
+        associateCodes.Should().Contain(PermissionCodes.DispatchSend,
+            "FSD Q4 was answered as 'any staff may dispatch' (TECH_SPEC OI-8) — the seeded Associate role must keep Dispatch.Send regardless of how AdminOnly is defined");
+    }
+
     [Fact]
     public async Task SeedAsync_CreatesTheSixCategoriesAndBothServiceTypesAndDefaultStatusLookups()
     {

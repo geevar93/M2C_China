@@ -15,6 +15,15 @@ public class Vendor
 
     public string? Moq { get; set; }
     public string? LeadTime { get; set; }
+
+    /// <summary>
+    /// FR-VEN-06/E5-06 ("MOQ, lead time, payment terms and reliability rating"). Not in
+    /// TECH_SPEC §6's `vendors` column list (a spec inconsistency of the same class as the
+    /// recorded D-2 for `vendor_statuses`) — added in the M4 pre-migration
+    /// `AddVendorPaymentTermsAndM4Indexes`. See the M4 build report.
+    /// </summary>
+    public string? PaymentTerms { get; set; }
+
     public decimal? ReliabilityRating { get; set; }
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; }

@@ -85,12 +85,14 @@ public sealed record TimelineEventDto(
     Guid? RefId);
 
 /// <summary>
-/// The full kind vocabulary the frontend switches on. Only <see cref="EnquiryCaptured"/>,
+/// The full kind vocabulary the frontend switches on. <see cref="EnquiryCaptured"/>,
 /// <see cref="NoteAdded"/>, <see cref="StatusChanged"/> and <see cref="OwnerChanged"/> are
-/// populated by this pass (sourced from `interactions`) — <see cref="CatalogDispatched"/>
-/// (E9), <see cref="ShipmentRecorded"/> (E7) and <see cref="InvoiceCreated"/>/
-/// <see cref="InvoiceStatusChanged"/> (E8) are structural placeholders in the response shape
-/// only; nothing produces them yet because those modules don't exist until M4/M5/M6.
+/// sourced from `interactions`; <see cref="CatalogDispatched"/> (M4/E9) is sourced from
+/// `dispatches` — read-only, never duplicated into `interactions` — see
+/// <c>CustomerService.GetTimelineAsync</c>/<c>MapDispatchTimelineEvent</c>.
+/// <see cref="ShipmentRecorded"/> (E7) and <see cref="InvoiceCreated"/>/
+/// <see cref="InvoiceStatusChanged"/> (E8) remain structural placeholders in the response
+/// shape only; nothing produces them yet because those modules don't exist until M5/M6.
 /// </summary>
 public static class TimelineEventKinds
 {

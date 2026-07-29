@@ -14,6 +14,12 @@ public class VendorConfiguration : IEntityTypeConfiguration<Vendor>
         b.Property(x => x.ReliabilityRating).HasPrecision(3, 2);
         b.HasIndex(x => x.Name);
 
+        // E5-04/DoD: region is a GET /vendors filter column with no relationship to piggy-back
+        // an FK index on (unlike StatusId below), so it needs an explicit index — same
+        // reasoning as CustomerConfiguration.Region (AddCustomerListFilterIndexes). Added in
+        // the M4 pre-migration AddVendorPaymentTermsAndM4Indexes.
+        b.HasIndex(x => x.Region);
+
         b.HasOne(x => x.Status).WithMany().HasForeignKey(x => x.StatusId).OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -294,18 +294,38 @@ public sealed class CustomerService : ICustomerService
             return null;
         }
 
+        // Deliberately NOT ordered here — interactions and dispatches are two independent
+        // sources that both need to land in ONE true chronological order. Sorting either
+        // source before the union (the naive approach) only happens to look right when a
+        // dispatch lands at either end of the feed; it silently produces the wrong order the
+        // moment a dispatch's SentAt falls strictly between two interactions' CreatedAt
+        // values. The single OrderByDescending below, applied to the merged list, is what
+        // actually guarantees correctness regardless of how the two source timestamps
+        // interleave.
         var interactions = await _db.Interactions
             .Include(i => i.Author)
             .Where(i => i.CustomerId == id)
-            .OrderByDescending(i => i.CreatedAt)
             .ToListAsync(ct);
 
-        // Live sources today: interactions (Note/Call/etc → NoteAdded, plus the three
-        // system-generated types below). CatalogDispatched/ShipmentRecorded/InvoiceCreated/
-        // InvoiceStatusChanged are structural only — no data exists for them until M4/M5/M6
-        // build dispatches/shipments/invoices; the response shape already accommodates them
-        // (RefType/RefId) without change.
-        return interactions.Select(MapTimelineEvent).ToList();
+        // M4/E9: CatalogDispatched is now a live source, read (not duplicated) from the
+        // `dispatches` log — a dispatch is never also written as an Interaction row, so
+        // there is exactly one source of truth and a deleted dispatch would disappear from
+        // the timeline rather than leaving an orphaned entry behind. CatalogDocument +
+        // CatalogSection are pulled in the same query (one round trip, no N+1) purely to
+        // render the catalog name into the event text below.
+        var dispatches = await _db.Dispatches
+            .Include(d => d.CatalogDocument).ThenInclude(doc => doc.CatalogSection)
+            .Include(d => d.StaffUser)
+            .Where(d => d.CustomerId == id)
+            .ToListAsync(ct);
+
+        // ShipmentRecorded/InvoiceCreated/InvoiceStatusChanged remain structural-only
+        // placeholders — no data exists for them until M5/M6 build shipments/invoices; the
+        // response shape already accommodates them (RefType/RefId) without change.
+        return interactions.Select(MapTimelineEvent)
+            .Concat(dispatches.Select(MapDispatchTimelineEvent))
+            .OrderByDescending(e => e.OccurredAtUtc)
+            .ToList();
     }
 
     // ---- Interactions / notes (E4-07) ------------------------------------------------
@@ -544,8 +564,35 @@ public sealed class CustomerService : ICustomerService
 
         // refType/refId stay null for every interaction-sourced kind — there is no
         // "Interaction" value in the RefType vocabulary the coordinator fixed
-        // (Shipment | CatalogDocument | Invoice | null); those are reserved for the
-        // structural placeholder kinds this pass does not populate.
+        // (Shipment | CatalogDocument | Invoice | null); those are reserved for kinds sourced
+        // from other tables (see MapDispatchTimelineEvent below for the first one M4 populates).
         return new TimelineEventDto(kind, AsUtc(i.CreatedAt), title, i.Text, i.AuthorUserId, i.Author?.Name, null, null);
+    }
+
+    /// <summary>
+    /// M4/E9: the first live <see cref="TimelineEventKinds.CatalogDispatched"/> event —
+    /// derived read-only from a <c>dispatches</c> row, never a duplicated <c>Interaction</c>
+    /// write (see <see cref="GetTimelineAsync"/>'s doc comment). <see cref="TimelineEventDto.RefType"/>
+    /// is "CatalogDocument" (not "Dispatch") and <see cref="TimelineEventDto.RefId"/> is the
+    /// catalog document id — deliberately, because the client already has a real, navigable
+    /// destination for a catalog document (<c>GET /catalog-documents/{id}/download</c>); there
+    /// is no equivalent "open this dispatch" destination, so pointing at the dispatch row
+    /// itself would be a dead reference. The event text names the catalog and the document by
+    /// itself, so the client never needs a second round trip to render something meaningful.
+    /// </summary>
+    private static TimelineEventDto MapDispatchTimelineEvent(Dispatch d)
+    {
+        var catalogName = d.CatalogDocument?.CatalogSection?.Title ?? "(unknown catalog)";
+        var documentName = d.CatalogDocument?.OriginalFilename ?? "(unknown document)";
+
+        return new TimelineEventDto(
+            TimelineEventKinds.CatalogDispatched,
+            AsUtc(d.SentAt),
+            "Catalog sent",
+            $"Sent \"{catalogName}\" ({documentName}) via WhatsApp.",
+            d.StaffUserId,
+            d.StaffUser?.Name,
+            "CatalogDocument",
+            d.CatalogDocumentId);
     }
 }

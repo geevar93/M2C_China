@@ -6,6 +6,7 @@ using SourcingOps.Application.Interfaces;
 using SourcingOps.Infrastructure.Audit;
 using SourcingOps.Infrastructure.Auth;
 using SourcingOps.Infrastructure.Caching;
+using SourcingOps.Infrastructure.Dispatching;
 using SourcingOps.Infrastructure.Persistence;
 using SourcingOps.Infrastructure.Persistence.Seed;
 using SourcingOps.Infrastructure.Storage;
@@ -44,6 +45,7 @@ public static class DependencyInjection
             new JwtTokenGenerator(sp.GetRequiredService<JwtOptions>(), sp.GetRequiredService<AuthOptions>()));
         services.AddScoped<IAuditLogger, EfAuditLogger>();
         services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
+        services.AddSingleton<IDispatchMessageSender, WhatsAppDeepLinkSender>();
 
         services.AddScoped<DbSeeder>();
 

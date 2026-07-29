@@ -559,6 +559,104 @@ public class CustomerServiceTests
         timeline!.Single().OccurredAtUtc.Kind.Should().Be(DateTimeKind.Utc);
     }
 
+    // ---- Timeline: M4/E9 dispatch merge --------------------------------------------------
+
+    /// <summary>Minimal catalog fixture for seeding a <see cref="Dispatch"/> row directly (mirrors DispatchServiceTests.SeedData).</summary>
+    private static CatalogDocument SeedCatalogDocument(AppDbContext db, User staff)
+    {
+        var vendorStatus = new VendorStatus { Id = Guid.NewGuid(), Code = "ACTIVE", Label = "Active", IsActive = true, SortOrder = 1 };
+        var category = new Category { Id = Guid.NewGuid(), Name = "Jewellery", IsActive = true, SortOrder = 1 };
+        var vendor = new Vendor { Id = Guid.NewGuid(), Name = "Golden Dragon Manufacturing", StatusId = vendorStatus.Id, CreatedAt = DateTime.UtcNow };
+        var section = new CatalogSection
+        {
+            Id = Guid.NewGuid(), VendorId = vendor.Id, Vendor = vendor, Title = "Spring 2026 Collection",
+            CategoryId = category.Id, Category = category, CreatedAt = DateTime.UtcNow
+        };
+        var document = new CatalogDocument
+        {
+            Id = Guid.NewGuid(), CatalogSectionId = section.Id, CatalogSection = section,
+            FilePath = "catalog-docs/x/y.pdf", OriginalFilename = "spring-2026.pdf", SizeBytes = 1024,
+            IsLatest = true, UploadedByUserId = staff.Id, UploadedBy = staff, UploadedAt = DateTime.UtcNow
+        };
+        db.VendorStatuses.Add(vendorStatus);
+        db.Categories.Add(category);
+        db.Vendors.Add(vendor);
+        db.CatalogSections.Add(section);
+        db.CatalogDocuments.Add(document);
+        db.SaveChanges();
+        return document;
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_IncludesDispatchedCatalogEvent_WithCatalogAndDocumentNameInBody_AndCatalogDocumentRef()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var staff = db.Users.Single(u => u.Id == Actor);
+        var sut = CreateSut(db, out _);
+        var created = await sut.CreateAsync(ValidCifRequest(f), Actor);
+        var document = SeedCatalogDocument(db, staff);
+        db.Dispatches.Add(new Dispatch
+        {
+            Id = Guid.NewGuid(), CustomerId = created.Created!.Id, CatalogDocumentId = document.Id,
+            StaffUserId = Actor, Message = "Hi, here is our catalog.", SentAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var timeline = await sut.GetTimelineAsync(created.Created.Id);
+
+        var dispatchEvent = timeline!.Single(e => e.Kind == TimelineEventKinds.CatalogDispatched);
+        dispatchEvent.Body.Should().Contain("Spring 2026 Collection").And.Contain("spring-2026.pdf");
+        dispatchEvent.RefType.Should().Be("CatalogDocument");
+        dispatchEvent.RefId.Should().Be(document.Id);
+        dispatchEvent.ActorUserId.Should().Be(Actor);
+        dispatchEvent.ActorName.Should().Be("Acting Staff");
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_DispatchInterleavedBetweenTwoInteractions_MergesIntoTrueChronologicalOrder()
+    {
+        // The regression this guards against: sorting each source independently before
+        // concatenating (interactions desc, then appending dispatches) would place every
+        // dispatch at the tail no matter its actual timestamp — this only fails when a
+        // dispatch's SentAt falls strictly BETWEEN two interaction timestamps, which is
+        // exactly what this test constructs.
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var staff = db.Users.Single(u => u.Id == Actor);
+        var sut = CreateSut(db, out _);
+        var created = await sut.CreateAsync(ValidCifRequest(f), Actor);
+        var customerId = created.Created!.Id;
+        var document = SeedCatalogDocument(db, staff);
+
+        // Wipe the auto-generated EnquiryCaptured interaction's timestamp noise by controlling
+        // all three events' timestamps explicitly and directly.
+        var t1 = new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 1, 1, 11, 0, 0, DateTimeKind.Utc); // dispatch — must land strictly between t1 and t3
+        var t3 = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        var earliestInteraction = db.Interactions.Single(i => i.CustomerId == customerId);
+        earliestInteraction.CreatedAt = t1;
+
+        db.Interactions.Add(new Interaction
+        {
+            Id = Guid.NewGuid(), CustomerId = customerId, AuthorUserId = Actor,
+            Type = "Note", Text = "Latest note", CreatedAt = t3
+        });
+        db.Dispatches.Add(new Dispatch
+        {
+            Id = Guid.NewGuid(), CustomerId = customerId, CatalogDocumentId = document.Id,
+            StaffUserId = Actor, Message = "Hi, here is our catalog.", SentAt = t2
+        });
+        await db.SaveChangesAsync();
+
+        var timeline = await sut.GetTimelineAsync(customerId);
+
+        timeline!.Select(e => e.Kind).Should().ContainInOrder(
+            TimelineEventKinds.NoteAdded, TimelineEventKinds.CatalogDispatched, TimelineEventKinds.EnquiryCaptured);
+        timeline!.Select(e => e.OccurredAtUtc).Should().BeInDescendingOrder();
+    }
+
     // ---- List / search / filter (E4-06) ----------------------------------------------
 
     [Fact]
