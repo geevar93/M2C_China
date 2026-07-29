@@ -8,7 +8,7 @@ Source documents (authoritative — this plan invents no scope beyond them):
 
 > **Source-of-truth note.** The readable mirror at `C:\work\DevZone\Hermes\China_M2C\Source\uploads\spec.txt` (and `spec_document.xml`) were found stale during this planning pass — they predated the invoicing addition. Both have since been regenerated from the current `.docx` and now include §6.8/FR-BIL-*/A9/Q9. Re-run the same regeneration after any future edit to the `.docx` so the mirrors don't drift again (see DR-13).
 
-> **Delivery status is tracked in §9–§13.** This document is now a living tracker, not only a plan. Each close-out section records per-story status with what was actually verified and how: §9 M1, §10 M2, §11 M3, §12 the E0 design pass, §13 the M4 pass and **§14 the M4 close-out (supersedes §13's partial status)**. Statuses there are set from executed commands, never from intent — and where a story is closed on test evidence alone rather than live verification, that is stated on the story rather than left for the reader to infer.
+> **Delivery status is tracked in §9–§15.** This document is now a living tracker, not only a plan. Each close-out section records per-story status with what was actually verified and how: §9 M1, §10 M2, §11 M3, §12 the E0 design pass, §13 the M4 pass, **§14 the M4 close-out (supersedes §13's partial status)** and **§15 the M5 backend pass — a deliberate mid-milestone checkpoint, not an M5 close-out: E7-11…E7-13 are still outstanding**. Statuses there are set from executed commands, never from intent — and where a story is closed on test evidence alone rather than live verification, that is stated on the story rather than left for the reader to infer.
 
 ## 1. Scope framing
 
@@ -887,3 +887,173 @@ Relatedly, **Log Dispatch is deliberately not gated on completing the three step
 **Before M5, two cheap corrections worth folding in:** TECH_SPEC §6's `vendors` row still omits `payment_terms` (D-19), and E9-04's story text still contradicts the prototype (§14.4).
 
 **Still needing the business owner, unchanged:** FSD Q9c (gates M6 entirely), FSD Q6 + Q8 (ask together — the legacy data *is* the initial volume), the deployment track, N-10, and D-18. **E5-07 is no longer on this list** — it was answered and is built.
+
+---
+
+## 15. M5 backend pass — Inventory & shipments (E7-01…E7-10)
+
+**Last updated:** 2026-07-29, end of the M5 **backend** implementation pass. Same evidentiary standard as §9–§14: `Done` means an executed command backs it.
+
+**This is a deliberate mid-milestone checkpoint, not an M5 close-out.** The ten backend stories E7-01…E7-10 are Done; the three screen ports **E7-11, E7-12 and E7-13 are Not started** and were explicitly held out of this pass. **M5 is therefore 10 of 13 stories and cannot be called complete** — §5's M5 exit criterion is written against demonstrable behaviour ("UC-06 and UC-07 are demonstrable"), and that is met at the API level only.
+
+The two corrections §14.6 required were folded in first, in commit `62d2588`: TECH_SPEC §6's `vendors` row now carries `payment_terms` (D-19), and E9-04's story text in §4 now matches the prototype and the built flow (§14.4). The **same wrong dispatch-step wording was also found in TECH_SPEC §5.2** and corrected there — it existed in two places, and fixing one would have left the next reader to rediscover it. E7-01's stale "blocked on FSD Q3" marker was removed at the same time, since Q3 is answered.
+
+### 15.1 Story status
+
+| ID | Status | Verification |
+| --- | --- | --- |
+| E7-01 | **Done** | `InventoryController` full CRUD, `Inventory.View`/`.Edit` gated with a 403 test per endpoint, mutations audit-logged. Per-SKU with `sku` optional, matching the answered FSD Q3. |
+| E7-02 | **Done** | `POST /inventory/{id}/inbound` writes an `inventory_inbound_entries` row and increments `on_hand_qty` in the same transaction, audit-logged. Returns the updated item alongside the entry so the caller re-renders both without a second round trip. |
+| E7-03 | **Done** | List with `search` (name + sku), `categoryId`, `vendorId`, `stockLevel` and paging. `low` means below reorder **or** negative — one option, matching the prototype's single "Low or negative" dropdown entry and its `i.qty < i.reorder` predicate. |
+| E7-04 | **Done** | `stockLevel` (`HEALTHY`/`LOW`/`NEGATIVE`) returned by the API per the story, classified exactly as the prototype's `invRows()` does. Raw `onHandQty`/`reorderThreshold` returned alongside it so the visual bar's ratio maths stays in the component, where presentation belongs. |
+| E7-05 | **Done** | `ShipmentsController` shipment + line CRUD, `Shipments.View`/`.Edit` gated, audit-logged. `reference` generated server-side as `SHP-YYMM-NNN` and never accepted from the caller (D-37). |
+| E7-06 | **Done** | Decrement happens in the same transaction as the lines. Negative-stock guard is D-35: 409 by default with the offending items named, `allowNegativeStock: true` to override deliberately. |
+| E7-07 | **Done** | `PUT /shipments/{id}/status` is the **only** path that writes status, and it writes both a `shipment_status_history` row (D-33) and an audit entry. Any status in the lookup may be set — a hard-coded transition graph would break the moment the business adds a stage — but transitioning to the status already held is rejected. |
+| E7-08 | **Done** | List filtered by `statusId`, `customerId`, `from`/`to` on dispatch date, plus `search` on reference and paging. Returns `statusCounts` across the whole filtered set **excluding the status filter itself**, or every tab would read its own total or zero. |
+| E7-09 | **Done** | Upload/list/download/delete reusing the E1-05 validator and `IFileStorage` unchanged. `filePath` never crosses the service boundary, matching `VendorDocumentDto`. `awbOrBl` stored on the shipment. |
+| E7-10 | **Done** | A `FREIGHT_ONLY` shipment with lines is rejected 400; without lines it moves no stock (FSD A8). Switches on `ServiceType.Code`, which is immutable per D-12 — label and id are not. |
+| E7-11, E7-12, E7-13 | **Not started** | The three screen ports. **Deliberately deferred, not dropped** — this pass was scoped to the backend so the API contract is settled and diffable before any screen is built against it, which is the D-22 lesson. See §15.6. |
+
+### 15.2 Verified on this machine, this pass
+
+| Check | Result |
+| --- | --- |
+| `dotnet build` | 0 warnings, 0 errors. **Re-run by the coordinator**, not taken on report. |
+| `dotnet test` | **557 passing, 0 failed** (340 unit + 217 integration on Testcontainers Postgres), up from 375 at the M4 close — +105 unit, +77 integration. **Re-run by the coordinator.** |
+| Migration builds standalone | Commit `99df421` was staged alone and built with the services and tests stashed, confirming 0 warnings — so the schema commit does not depend on the code commit and `git bisect` cannot land on a non-building tree. |
+| Migration reversibility | `Up`/`Down` hand-checked as a true structural inverse, then exercised as a generated SQL script applied **inside the container** with `ON_ERROR_STOP=1`: down reverted every object, up restored full M5 state, API returned Healthy. **Not** run via `dotnet ef database update` — see N-17. |
+| Live `docker compose` (api+db, clean volume) | Performed by the delegated build agent and reported: migration applied from scratch, shipment document types seeded, inbound/decrement/409-override/freight-only/status-history/upload/anonymous-401 all exercised over real HTTP. **Not re-run by the coordinator** — see N-21, which is why this row is not written in the same voice as the two above. |
+
+### 15.3 The API contract (the handoff artifact for E7-11…E7-13)
+
+Recorded here rather than left in a build report, because the frontend pass happens later and **a screen built against an assumed DTO instead of the real one is this project's most-repeated defect** (D-22, and M1's only two real defects). Shapes below are as the API actually serialises them.
+
+**Routes.** All under `/api/v1`, all policy-gated:
+
+- `GET|POST /inventory`, `GET|PUT|DELETE /inventory/{id}` — `Inventory.View` / `Inventory.Edit`
+- `POST|GET /inventory/{id}/inbound` — `Inventory.Edit` / `Inventory.View`
+- `GET|POST /shipments`, `GET|PUT|DELETE /shipments/{id}` — `Shipments.View` / `Shipments.Edit`
+- `PUT /shipments/{id}/status` — `Shipments.Edit`
+- `GET|POST /shipments/{id}/documents` — `Shipments.View` / `Shipments.Edit`
+- `GET /shipment-documents/{id}/download`, `DELETE /shipment-documents/{id}` — `Shipments.View` / `Shipments.Edit`
+
+**Embedded lookup convention.** This track follows the **M4 vendor/catalog convention** (embed the resolved lookup object), *not* the CRM track's bare-id convention. `StatusRefDto` is `{id, code, label}`; `CategoryRefDto` is `{id, name}` — categories use `name`, everything else uses `code`+`label`, the same deliberate asymmetry §10.3 confirmed live. `VendorRefDto`/`CustomerRefDto` are `{id, name}`.
+
+```jsonc
+// InventoryItemDto
+{ "id": "guid", "name": "string", "sku": "string|null", "description": "string|null",
+  "category": { "id": "guid", "name": "string" },
+  "vendor":   { "id": "guid", "name": "string" },   // nullable
+  "unit": "string", "onHandQty": 0, "reorderThreshold": 0,
+  "unitCost": "number|null",
+  "stockValue": "number|null",   // COMPUTED onHandQty*unitCost; null = not costed, not "worth zero"
+  "stockLevel": "HEALTHY|LOW|NEGATIVE" }
+
+// GET /inventory  -> InventoryListResultDto
+{ "items": [ /* InventoryItemDto */ ], "page": 1, "pageSize": 20, "totalCount": 0,
+  "summary": { "onHandValue": 0, "itemCount": 0, "lowStockCount": 0, "negativeStockCount": 0 } }
+  // summary is over the WHOLE filtered set, not the page — it backs the four stat tiles
+
+// POST /inventory/{id}/inbound -> RecordInboundResultDto
+{ "entry": { "id": "guid", "inventoryItemId": "guid", "quantity": 0, "entryDate": "2026-07-29",
+             "reference": "string|null", "recordedByUserId": "guid", "recordedByName": "string",
+             "createdAt": "iso-8601" },
+  "item": { /* InventoryItemDto, already re-computed */ } }
+
+// GET /shipments -> ShipmentListResultDto
+{ "items": [ { "id": "guid", "reference": "SHP-2607-014|null",
+               "customer": { "id": "guid", "name": "string" }, "destination": "string|null",
+               "serviceType": { "id": "guid", "code": "CIF|FREIGHT_ONLY", "label": "string" },
+               "dispatchDate": "iso-8601|null",
+               "status": { "id": "guid", "code": "string", "label": "string" },
+               "freightCost": "number|null", "totalValue": "number|null",
+               "mode": "string|null", "awbOrBl": "string|null", "eta": "iso-8601|null",
+               "lineCount": 0 } ],
+  "page": 1, "pageSize": 20, "totalCount": 0,
+  "statusCounts": [ { "statusId": "guid", "code": "string", "label": "string",
+                      "sortOrder": 0, "count": 0 } ] }   // backs the status tabs
+
+// GET /shipments/{id} -> ShipmentDetailDto = every list-item field above, plus these five:
+{ "createdAt": "iso-8601", "recordedByName": "string|null",
+  "lines": [ { "id": "guid", "inventoryItemId": "guid", "inventoryItemName": "string",
+               "inventoryItemSku": "string|null", "unit": "string", "quantity": 0,
+               "unitCost": "number|null", "lineTotal": "number|null" } ],
+  "statusHistory": [ { "id": "guid", "status": { "id": "guid", "code": "string", "label": "string" },
+                       "changedByUserId": "guid", "changedByName": "string",
+                       "changedAt": "iso-8601", "note": "string|null" } ],  // renders the stepper's "when"
+  "documents": [ { "id": "guid", "shipmentId": "guid", "originalFilename": "string",
+                   "sizeBytes": 0,
+                   "documentType": { "id": "guid", "code": "string", "label": "string" },
+                   "uploadedByUserId": "guid", "uploadedByName": "string",
+                   "uploadedAt": "iso-8601" } ] }
+
+// 409 from POST/PUT /shipments when a decrement would go negative (D-35)
+{ "type": "https://tools.ietf.org/html/rfc9110#section-15.5.10",
+  "title": "Insufficient stock.", "status": 409,
+  "detail": "Recording this shipment would drive on-hand quantity negative for one or more items. Retry with allowNegativeStock: true to override deliberately.",
+  "instance": "/api/v1/shipments",
+  "insufficientStock": [ { "inventoryItemId": "guid", "itemName": "string", "sku": "string|null",
+                           "requestedQty": 0, "availableQty": 0 } ] }
+```
+
+**Two request-shape traps the screens must respect**, both deliberate:
+
+- `UpdateInventoryItemRequest` has **no `onHandQty`** (D-42). Stock moves only through an inbound entry or a shipment line. An edit form that renders an editable on-hand field will silently drop it.
+- `UpdateShipmentRequest` has **no `statusId`** (D-43). Status moves only through `PUT /shipments/{id}/status`, the one path that writes history. An edit form that includes a status dropdown will silently fail to change it.
+
+### 15.4 Deviations and additions from this pass
+
+Continuing the document's D-# sequence from D-29. The build report used provisional letters; the mapping is given in each row so its reasoning stays traceable. D-30…D-39 were settled by the coordinator **before** delegation, from diffing the E7 story text against the approved prototype; D-40…D-49 arose during the build.
+
+| # | Deviation | Rationale |
+| --- | --- | --- |
+| D-30 *(a,b)* | **`unit_cost` added to both `inventory_items` and `shipment_lines`**, the latter snapshotted at line creation. | The approved inventory screen renders a **Stock Value** column and an "On-Hand Value" tile, and the shipment detail screen renders per-line "Unit Cost"/"Line Total" — no cost column existed anywhere, so both screens were unportable. Snapshotted on the line rather than read live because **E8 (M6) raises CIF invoices against a shipment**: a later item price change would otherwise silently rewrite the basis of an already-issued invoice. Stock value and line total are always computed, never stored. |
+| D-31 *(c)* | **`shipments.total_value` is server-computed when the shipment has lines**, and accepted from the caller only when it has none. | Never trust a client total that contradicts the lines. The no-lines case is the freight-only one, which genuinely has no lines to compute from. |
+| D-32 *(d)* | **New table `inventory_inbound_entries`.** | E7-02's criteria say "an inbound entry **with date and reference**" — a durable business record. The audit log is a cross-cutting concern with a jsonb detail blob, not a queryable business table, so it could not be the only home for this. |
+| D-33 *(e)* | **New table `shipment_status_history`.** | The approved shipment detail screen renders a 4-step stepper with a **`when` under each step**, unrenderable without transition timestamps, and E7-07 requires transitions be "audit-logged **and timestamped**". Both are written — they serve different readers. An opening row is seeded at shipment creation. |
+| D-34 *(f)* | **`shipment_documents.doc_type` → `document_type_id` FK, and `document_types` gains `scope`.** | The DoD and **D-25** (which created `document_types` for exactly this shape) require it; the entity comment that argued for free text is superseded and was updated rather than left contradicting the code. `scope` exists because mixing shipment types into one undifferentiated lookup would make the **vendor** upload dropdown offer "Packing List". Existing rows backfilled to `Vendor`; four shipment-scoped defaults seeded (Packing List, Bill of Lading, Airway Bill, Invoice), all `isSystemDefault` and therefore retire-only per N-8. |
+| D-35 *(g)* | **Negative stock: reject 409 by default, `allowNegativeStock: true` to override**, with the override recorded in the audit detail. | FSD says "prevent **or** flag" and E7-06 says "rejected **or** explicitly flagged" — this is both halves, and it is not splitting the difference. **The approved prototype's own seed data contains an item at `qty: -40`, a `NEGATIVE` badge, a "Low or negative" filter and a "Negative Stock: 1" tile** — the design demonstrably expects negative stock to be reachable and visible, so a hard block alone would contradict the screen E7-11 must port. 409 not 400: the request is well-formed and may legitimately be retried unchanged with the flag. |
+| D-36 *(h)* | **Freight-only shipments reject supplied lines with 400** and move no stock (FSD A8). | Switches on `ServiceType.Code`. Codes are immutable by design (D-12); labels and ids are not, so switching on either would break the first time the business renames a service type. |
+| D-37 *(i)* | **`reference` generated server-side as `SHP-YYMM-NNN`**, per-month sequence, never accepted from the caller, with a retry on unique violation. | The partial unique index already existed from the M1 pass, which anticipated exactly this. See N-18 — the retry branch is not proven to have fired. |
+| D-38 *(j)* | **Stock movement on shipment update is delta-based**; deleting a shipment restores what its lines consumed. | Re-decrementing from scratch on every edit would compound. Note there is **no "Cancelled" shipment status** in the seeded set, so status transitions never restore stock — only line edits and deletion do. |
+| D-39 *(k)* | **The inventory list response carries a `summary` block** over the whole filtered set. | The approved screen has exactly these four stat tiles. Deliberately duplicates a little of what **E10-05** (analytics, M7) will aggregate: E10-05 aggregates by category across the business, this is screen-local and must honour the caller's active filters, so neither can serve the other's job without a parameter both would rather not have. Recorded so the overlap is a choice, not an accident. |
+| D-40 *(l)* | **`inventory_items.description` added.** | Named by E7-01's own criteria, absent from TECH_SPEC §6 — the same class of spec inconsistency as D-2 and D-19. |
+| D-41 *(m)* | **`shipment_documents` gains `size_bytes` and `uploaded_by_user_id`.** | The approved screen's document rows show "184 KB · 21 Jul 2026", and uploader attribution is parity with `vendor_documents` plus the FSD's Auditability NFR. |
+| D-42 *(n)* | **`UpdateInventoryItemRequest` cannot change `onHandQty`.** | Stock moves only through the two recorded paths, so a plain edit can never silently rewrite a balance that an inbound entry or a shipment is the audit record for. An opening balance is settable once, at create. **Leaves stock-take correction unserved — see N-19.** |
+| D-43 *(o)* | **`UpdateShipmentRequest` cannot change `statusId`.** | `PUT /{id}/status` is the only path that writes history; letting a general edit set status too would produce transitions with no history row and a stepper with gaps. |
+| D-44 *(p)* | **`document_types.scope` is plain text, not an FK to a lookup.** | A deliberate narrow exception to the FK rule: `scope` is a **code-path discriminator** the application switches on, not business data a Super Admin should be able to add rows to. Inventing a third scope at runtime would have no code path to serve it. |
+| D-45 *(q)* | **`LookupItemDto.scope` is a trailing nullable across all six master-data collections**, null for the five that have no scope. | One shape for all collections keeps `MasterDataService`'s generic machinery generic. Trailing, so no existing positional consumer breaks. |
+| D-46 *(r)* | **A composite `(status_id, dispatch_date)` index replaces `ix_shipments_status_id`.** | A btree composite serves any leading-column predicate, so keeping both would cost write throughput for no read benefit. |
+| D-47 *(s)* | **`recordedByName` reads the earliest `shipment_status_history` row.** | The approved detail screen shows a "Recorded by" field and `shipments` has no `created_by_user_id`. Rather than add a column, this reads a fact D-33's table already stores. |
+| D-48 *(t,u)* | **`DELETE` guards**: 409 rather than orphaning stored files, 400 rather than leaving a dangling FK. | Same reasoning as D-29 — fail in a recoverable direction. |
+| D-49 *(v)* | **`UniqueViolationDetector` duck-types Npgsql's `SqlState` via reflection.** | `Application` must not reference Npgsql (TECH_SPEC §4.1 keeps the provider in Infrastructure). Reflection is the seam that preserves that boundary without introducing a new abstraction for one string comparison. |
+
+**Two real bugs were found and fixed during the build**, both diagnosed to root cause rather than patched:
+
+1. `ShipmentService.UpdateAsync` called `Remove()` on line entities and then `Clear()` on the navigation collection, which flipped the ChangeTracker entries from `Deleted` back to `Modified` and failed `SaveChanges`. Diagnosed by inspecting the ChangeTracker. `VendorService`'s superficially similar pattern does **not** have the bug, because `VendorCategory`'s FK is part of its composite primary key — worth knowing before anyone "fixes" the vendor code to match.
+2. `ChangeStatusAsync` wrote duplicate history rows by adding to both the `DbSet` and the navigation collection.
+
+### 15.5 Open items after the M5 backend pass
+
+| # | Item |
+| --- | --- |
+| **N-17** | **`dotnet ef database update` cannot run on this machine** — a host-installed Postgres occupies port 5432 and collides with Docker's published port. Reversibility was verified instead by generating the migration SQL and applying it **inside the container** with `ON_ERROR_STOP=1` (down reverted every object, up restored full M5 state, API Healthy). That is genuine evidence, but it is a **different tool path from the one E2-07's deploy job uses**, and E2-07 is already the least-validated story in the plan (§9: "Draft — never executed"). Worth resolving before the deployment track starts, not during it. |
+| **N-18** | **D-37's reference-retry branch has never actually fired.** The `SHP-YYMM-NNN` format and its uniqueness are proven; the 23505 collision-catch path is not, because nothing generated a genuine concurrent collision. It is a real code path guarding a real race, currently untested by execution. Cheap to close with a forced-collision test — worth doing before shipments are created concurrently in the field. |
+| **N-19** | **Stock-take correction has no path**, as a direct consequence of D-42. Stock moves only via inbound entries and shipment lines, so when a physical count disagrees with the system there is **no way to correct it** short of inventing a fake inbound entry — which would corrupt the very audit record D-42 exists to protect. **This needs a business answer, not an engineering one:** does the owner do periodic physical stock-takes? If yes, the natural shape is `POST /inventory/{id}/adjustment` with a mandatory reason — a small story and one more recorded movement type. Deliberately not built unasked. |
+| **N-20** | **The D-34 scope change has three frontend must-dos that are not yet done**, and one is a live FSD §3.3 risk. (a) The `LookupItem` TypeScript interface needs `scope?: string \| null`. (b) The admin master-data **create-document-type form needs a scope selector** — without it every new type silently defaults to `Vendor` and **can never back a shipment upload**, which is precisely the quiet configurability violation **DR-6** exists to catch and **D-26** already had to close once for this same screen. (c) Both upload dropdowns need client-side scope filtering. All three land in the E7-11…E7-13 pass. |
+| **N-21** | **M5's live verification is second-hand.** `dotnet build` and `dotnet test` were re-run by the coordinator; the clean-volume `docker compose` HTTP run was performed by the delegated build agent and is recorded on its report, not re-executed. That is weaker evidence than §13/§14 carry for M4, where the live pass was run directly. It should be re-run first thing in the E7-11…E7-13 pass, when the screens give it a reason to exist anyway. **Do not read §15.2's live row as equal in weight to the two rows above it.** |
+| N-16 | **Extended, not closed.** M4's screens have still never been driven in a browser, and M5 now adds ten endpoints whose screens do not exist yet. |
+| N-10 | **Unchanged and still undecided.** Initial bundle 303.36 kB against a 300 kB warning budget. **This pass touched no Angular at all**, so it is untouched by definition. |
+| N-12, N-13, N-14 | **Unchanged**, all from §13.5. N-12 (a seed test deriving its expectation from the constant it was meant to protect) is still worth auditing the wider suite for — this pass added 77 integration tests without that audit having happened. |
+| N-15 | **Unchanged**, and worth re-reading now: M5 introduces `Shipments.View`, whose detail screen renders inventory-item names. A role holding one of `Shipments.View`/`Inventory.View` without the other has the same latent mismatch N-15 records for vendors/catalogs. Still unreachable with the two seeded roles. |
+| N-1, N-3, N-5, N-9, N-11 | **Unchanged.** |
+
+### 15.6 Next
+
+**To finish M5:** the three screen ports **E7-11** (Inventory), **E7-12** (Shipments list), **E7-13** (Shipment detail), against the contract recorded in §15.3 — plus the three D-34 frontend must-dos in N-20, which are not optional polish: (b) is a configurability violation of the kind DR-6 exists to catch.
+
+The API contract should be **diffed against a live response before the screens are wired**, not assumed from §15.3. That diff is exactly what D-22 and M1's two defects were caused by skipping, and §15.3 is a written record, not an executed one. Sequence the live `docker compose` run (N-21) into that pass rather than after it, so the screens and the endpoints are proven together.
+
+**Then M6 — Invoicing (E8)**, which M5 was a prerequisite for: E8-01 references a shipment for the CIF case, and D-30's snapshotted line cost exists specifically so that invoice basis cannot drift. M6 remains **fully gated on FSD Q9c** and still needs **DR-3** (no PDF library chosen) settled *before* it starts, not during it.
+
+**Still needing the business owner:** FSD **Q9c** (gates M6 entirely), FSD **Q6 + Q8** (ask together — the legacy data *is* the initial volume), the **deployment track** (N-17 now adds a reason to settle it), **N-10**, **D-18**, and newly **N-19** (stock-take corrections).
