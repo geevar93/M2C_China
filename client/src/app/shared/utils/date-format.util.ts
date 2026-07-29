@@ -23,6 +23,23 @@ export function formatTimelineDate(isoUtc: string | null | undefined): string {
   return `${day} ${month} ${year} · ${hh}:${mm}`;
 }
 
+/**
+ * Date-only variant of `formatTimelineDate` (no `· HH:mm` suffix), e.g.
+ * `14 Jul 2026` — used where the source only carries a date's worth of
+ * meaning (a catalog document's upload date, a vendor's created date), so
+ * showing a time would imply more precision than the field has.
+ */
+export function formatDateOnly(isoUtc: string | null | undefined): string {
+  if (!isoUtc) return '—';
+  const d = new Date(isoUtc);
+  if (Number.isNaN(d.getTime())) return '—';
+
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = MONTHS[d.getMonth()];
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
 export interface FollowUpDue {
   /** True once the due date's *calendar day* (local time) is before today's. */
   overdue: boolean;

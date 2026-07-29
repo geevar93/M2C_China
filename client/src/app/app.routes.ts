@@ -70,6 +70,13 @@ export const routes: Routes = [
         loadComponent: () => import('./vendors/vendors.component').then((m) => m.VendorsComponent)
       },
       {
+        path: 'vendors/:id',
+        canActivate: [permissionGuard],
+        data: { title: 'Vendor', permission: 'Vendors.View' },
+        loadComponent: () =>
+          import('./vendors/vendor-detail/vendor-detail.component').then((m) => m.VendorDetailComponent)
+      },
+      {
         path: 'catalogs',
         canActivate: [permissionGuard],
         data: { title: 'Catalogs', permission: 'Catalogs.View' },

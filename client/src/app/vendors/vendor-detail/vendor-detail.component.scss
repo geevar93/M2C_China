@@ -1,0 +1,131 @@
+.back-link {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.vd-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin: 6px 0 var(--space-9);
+  gap: var(--space-8);
+}
+
+.vd-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.vd-sub {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
+}
+
+.vd-actions {
+  display: flex;
+  gap: var(--space-4);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
+.vd-banner {
+  margin-bottom: var(--space-8);
+}
+
+.vd-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.vd-section-heading {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: var(--space-6);
+}
+
+.vd-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.vd-sec-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.vd-sec-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.vd-sec-meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 3px;
+}
+
+.vd-sec-tags {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.vd-tag-chip {
+  background: var(--color-track);
+  color: var(--color-text-muted);
+}
+
+.vd-chip-latest {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.vd-chip-old {
+  background: var(--color-neutral-chip-bg);
+  color: var(--color-text-strong-muted);
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.nowrap {
+  white-space: nowrap;
+
+  .btn {
+    margin-right: var(--space-4);
+  }
+}
+
+.vd-wa-btn {
+  width: 30px;
+  height: 30px;
+  background: var(--color-success);
+  color: #fff;
+  border: 1px solid var(--color-success);
+  border-radius: 15px;
+  font-size: 13px;
+  cursor: not-allowed;
+  padding: 0;
+  vertical-align: middle;
+  opacity: 0.55;
+}
+
+@media (max-width: 640px) {
+  .vd-head {
+    flex-direction: column;
+  }
+}

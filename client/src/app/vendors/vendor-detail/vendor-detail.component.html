@@ -1,0 +1,131 @@
+<div>
+  <a routerLink="/vendors" class="back-link">← Back to vendors</a>
+
+  @if (loading()) {
+    <div class="state-panel">
+      <div class="spinner"></div>
+      <span>Loading vendor…</span>
+    </div>
+  } @else if (error()) {
+    <div class="state-panel">
+      <span>{{ error() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+    </div>
+  } @else {
+    @if (vendor(); as v) {
+      <div class="vd-head">
+        <div>
+          <h1 class="vd-title">
+            {{ v.name }}
+            <span class="chip" [style.background]="statusChip().bg" [style.color]="statusChip().fg">{{ v.status.label }}</span>
+          </h1>
+          <div class="vd-sub">{{ subline() }}</div>
+        </div>
+        <div class="vd-actions">
+          @if (canEditCatalogs()) {
+            <button type="button" class="btn btn-primary" (click)="openUpload()">+ Upload Catalog PDF</button>
+          }
+          @if (canEditVendor()) {
+            <button type="button" class="btn btn-secondary" (click)="openEdit()">Edit Vendor</button>
+          }
+        </div>
+      </div>
+
+      @if (previewError()) {
+        <div class="field-error vd-banner" role="alert">{{ previewError() }}</div>
+      }
+
+      <div class="vd-stats-grid">
+        @for (s of stats(); track s.label) {
+          <div class="card stat-tile">
+            <div class="stat-tile__label">{{ s.label }}</div>
+            <div class="stat-tile__value">{{ s.value }}</div>
+          </div>
+        }
+      </div>
+
+      <div class="vd-section-heading">Catalog Sections</div>
+      <div class="vd-sections">
+        @for (sec of sections(); track sec.id) {
+          <div class="card">
+            <div class="vd-sec-head">
+              <div>
+                <div class="vd-sec-title">{{ sec.title }}</div>
+                <div class="vd-sec-meta">{{ sec.metaLabel }}</div>
+              </div>
+              <div class="vd-sec-tags">
+                @for (t of sec.tags; track t) {
+                  <span class="chip vd-tag-chip">{{ t }}</span>
+                }
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Document</th>
+                    <th>Version</th>
+                    <th>Size</th>
+                    <th>Uploaded</th>
+                    <th class="align-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (d of sec.docs; track d.id) {
+                    <tr>
+                      <td>📄 {{ d.fileName }}</td>
+                      <td>
+                        <span class="chip" [class.vd-chip-latest]="d.versionIsLatest" [class.vd-chip-old]="!d.versionIsLatest">
+                          {{ d.versionLabel }}{{ d.versionIsLatest ? ' · LATEST' : '' }}
+                        </span>
+                      </td>
+                      <td class="muted">{{ d.sizeLabel }}</td>
+                      <td class="muted">{{ d.uploadedLabel }}</td>
+                      <td class="align-right nowrap">
+                        <button
+                          type="button"
+                          class="btn btn-secondary btn-sm"
+                          [disabled]="previewingDocId() === d.id"
+                          (click)="previewDocument(d.id)"
+                        >
+                          {{ previewingDocId() === d.id ? 'Opening…' : 'Preview' }}
+                        </button>
+                        <button
+                          type="button"
+                          class="vd-wa-btn"
+                          disabled
+                          title="Wired in E9 (WhatsApp dispatch)"
+                          aria-label="Send via WhatsApp"
+                        >
+                          ➤
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              @if (sec.docs.length === 0) {
+                <div class="state-panel">No documents uploaded to this section yet.</div>
+              }
+            </div>
+          </div>
+        }
+        @if (sections().length === 0) {
+          <div class="card state-panel">No catalog sections yet. Use "+ Upload Catalog PDF" to add the first one.</div>
+        }
+      </div>
+
+      @if (editOpen()) {
+        <app-vendor-form-dialog [vendor]="v" (closed)="cancelEdit()" (saved)="onVendorSaved($event)"></app-vendor-form-dialog>
+      }
+
+      @if (uploadOpen()) {
+        <app-catalog-upload-dialog
+          [vendorLock]="{ id: v.id, name: v.name }"
+          (closed)="cancelUpload()"
+          (saved)="onUploadSaved($event)"
+        ></app-catalog-upload-dialog>
+      }
+    }
+  }
+</div>

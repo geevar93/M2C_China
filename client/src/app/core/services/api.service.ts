@@ -33,6 +33,25 @@ export class ApiService {
     return this.http.delete<T>(this.url(path));
   }
 
+  /**
+   * Multipart upload (ACTION_PLAN E6-02). `FormData` bodies must not have a
+   * `Content-Type` header set manually — the browser adds the multipart
+   * boundary itself, which is why this doesn't reuse `post()`'s JSON path.
+   */
+  postFormData<T>(path: string, formData: FormData): Observable<T> {
+    return this.http.post<T>(this.url(path), formData);
+  }
+
+  /**
+   * Authenticated binary download (TECH_SPEC §8 — documents are only ever
+   * served through this endpoint, never a public static path). The
+   * `authInterceptor` attaches the bearer token to this request exactly like
+   * any other, since it still goes through `HttpClient`/this service.
+   */
+  getBlob(path: string): Observable<Blob> {
+    return this.http.get(this.url(path), { responseType: 'blob' });
+  }
+
   private url(path: string): string {
     return `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
   }

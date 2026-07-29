@@ -1,0 +1,114 @@
+<div>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Catalogs</h1>
+      <div class="cat-subtitle">Every vendor catalog section across the roster. Pick a PDF and dispatch it to a customer.</div>
+    </div>
+    @if (canEdit()) {
+      <button type="button" class="btn btn-primary" (click)="openUpload()">+ Upload Catalog PDF</button>
+    }
+  </div>
+
+  <div class="card filter-bar">
+    <div class="field filter-search">
+      <label for="cat-search">Search</label>
+      <input
+        id="cat-search"
+        class="field-input"
+        [value]="search()"
+        (input)="onSearchInput($any($event.target).value)"
+        placeholder="Catalog title or vendor"
+      />
+    </div>
+    <div class="field">
+      <label for="cat-category">Category</label>
+      <select id="cat-category" class="field-input" [value]="categoryId()" (change)="setCategory($any($event.target).value)">
+        <option value="">All categories</option>
+        @for (opt of categoryOptions(); track opt.id) {
+          <option [value]="opt.id">{{ opt.name }}</option>
+        }
+      </select>
+    </div>
+  </div>
+
+  @if (previewError()) {
+    <div class="field-error cat-banner" role="alert">{{ previewError() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="state-panel">
+      <div class="spinner"></div>
+      <span>Loading catalogs…</span>
+    </div>
+  } @else if (error()) {
+    <div class="state-panel">
+      <span>{{ error() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+    </div>
+  } @else if (noResults()) {
+    <div class="state-panel">No catalog sections match these filters.</div>
+  } @else {
+    <div class="cat-grid">
+      @for (k of cards(); track k.id) {
+        <div class="card cat-card">
+          <div class="catalog-cover-placeholder">📚</div>
+          <div class="cat-card-top">
+            <div>
+              <div class="cat-card-title">{{ k.title }}</div>
+              <div class="cat-card-sub">
+                <a [routerLink]="['/vendors', k.vendorId]">{{ k.vendorName }}</a>
+                · {{ k.categoryName }}
+              </div>
+            </div>
+            <span class="chip cat-count-chip">{{ k.docCountLabel }}</span>
+          </div>
+          <div class="cat-latest-file">
+            <span class="cat-file-icon">📄</span>
+            <div class="cat-latest-info">
+              <div class="cat-latest-name">{{ k.latestFileName }}</div>
+              <div class="muted">{{ k.latestMeta }}</div>
+            </div>
+          </div>
+          <div class="cat-card-actions">
+            <button
+              type="button"
+              class="cat-wa-btn"
+              disabled
+              title="Wired in E9 (WhatsApp dispatch)"
+              aria-label="Send via WhatsApp"
+            >
+              ➤
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary cat-preview-btn"
+              [disabled]="!k.latestDocId || previewingDocId() === k.latestDocId"
+              (click)="previewDocument(k.latestDocId)"
+            >
+              {{ previewingDocId() === k.latestDocId ? 'Opening…' : 'Preview' }}
+            </button>
+            @if (canEdit()) {
+              <button type="button" class="btn btn-secondary" (click)="openEdit(k.section)">Edit</button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    @if (totalCount() > 0) {
+      <div class="pager">
+        <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() <= 1" (click)="prevPage()">← Prev</button>
+        <span class="muted">Page {{ page() }} of {{ totalPages() }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() >= totalPages()" (click)="nextPage()">Next →</button>
+      </div>
+    }
+  }
+
+  @if (uploadOpen()) {
+    <app-catalog-upload-dialog
+      [editSection]="editSection()"
+      (closed)="cancelUpload()"
+      (saved)="onUploadSaved($event)"
+    ></app-catalog-upload-dialog>
+  }
+</div>

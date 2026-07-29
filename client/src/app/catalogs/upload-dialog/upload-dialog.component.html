@@ -1,0 +1,124 @@
+<div class="dialog-backdrop">
+  <div class="dialog-panel upload-dialog-panel">
+    <div class="upload-dialog-header">
+      <div class="section-title">{{ dialogTitle() }}</div>
+      <div class="dialog-close" (click)="cancel()">✕</div>
+    </div>
+
+    @if (error()) {
+      <div class="field-error upload-banner" role="alert">{{ error() }}</div>
+    }
+
+    @if (!isEdit()) {
+      <div class="tabs upload-mode-tabs">
+        <button type="button" class="tab" [class.tab--active]="mode() === 'existing'" (click)="setMode('existing')">
+          Add to existing section
+        </button>
+        <button type="button" class="tab" [class.tab--active]="mode() === 'new'" (click)="setMode('new')">
+          Create new section
+        </button>
+      </div>
+    }
+
+    @if (isEdit() || mode() === 'new') {
+      <div class="field">
+        <label for="ud-title">Catalog Title</label>
+        <input
+          id="ud-title"
+          class="field-input"
+          [value]="titleInput()"
+          (input)="titleInput.set($any($event.target).value)"
+        />
+      </div>
+      <div class="upload-grid-2">
+        <div class="field">
+          <label for="ud-category">Category</label>
+          <select id="ud-category" class="field-input" [value]="categoryId()" (change)="categoryId.set($any($event.target).value)">
+            <option value="">Choose a category</option>
+            @for (opt of categoryOptions(); track opt.id) {
+              <option [value]="opt.id">{{ opt.name }}</option>
+            }
+          </select>
+        </div>
+        @if (isEdit()) {
+          <div class="field">
+            <label>Vendor <span class="muted">(cannot be changed)</span></label>
+            <div class="field-static">{{ lockedVendorName() }}</div>
+          </div>
+        } @else if (vendorLock) {
+          <div class="field">
+            <label>Vendor</label>
+            <div class="field-static">{{ vendorLock.name }}</div>
+          </div>
+        } @else {
+          <div class="field">
+            <label for="ud-vendor">Vendor</label>
+            <select id="ud-vendor" class="field-input" [value]="vendorId()" (change)="vendorId.set($any($event.target).value)">
+              <option value="">Choose a vendor</option>
+              @for (v of vendorOptions(); track v.id) {
+                <option [value]="v.id">{{ v.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      </div>
+      <div class="field">
+        <label for="ud-tags">Tags <span class="muted">(comma-separated, optional)</span></label>
+        <input
+          id="ud-tags"
+          class="field-input"
+          placeholder="e.g. NEW ARRIVALS, BEST SELLERS"
+          [value]="tagsInput()"
+          (input)="tagsInput.set($any($event.target).value)"
+        />
+      </div>
+    } @else {
+      <div class="field">
+        <label for="ud-section">Catalog Section</label>
+        @if (sectionsLoading()) {
+          <div class="muted">Loading catalog sections…</div>
+        } @else if (sectionsError()) {
+          <div class="field-error">{{ sectionsError() }}</div>
+        } @else {
+          <select
+            id="ud-section"
+            class="field-input"
+            [value]="selectedSectionId()"
+            (change)="selectedSectionId.set($any($event.target).value)"
+          >
+            @for (s of sectionOptions(); track s.id) {
+              <option [value]="s.id">{{ s.title }}</option>
+            }
+          </select>
+        }
+      </div>
+    }
+
+    <div class="field">
+      <label for="ud-file">
+        PDF Document
+        @if (isEdit()) {
+          <span class="muted">(optional — adds a new version)</span>
+        }
+      </label>
+      <input id="ud-file" type="file" accept="application/pdf" (change)="onFileSelected($event)" />
+      <div class="field-hint">PDF only · maximum 25 MB</div>
+    </div>
+
+    @if (selectedFile(); as f) {
+      <div class="upload-staged-file">
+        <span class="upload-staged-icon">📄</span>
+        <div class="upload-staged-info">
+          <div class="upload-staged-name">{{ f.name }}</div>
+          <div class="muted">{{ (f.size / 1024 / 1024).toFixed(1) }} MB</div>
+        </div>
+        <span class="chip upload-chip-ready">READY</span>
+      </div>
+    }
+
+    <div class="upload-dialog-actions">
+      <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">{{ saveCta() }}</button>
+    </div>
+  </div>
+</div>

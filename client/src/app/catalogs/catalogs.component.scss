@@ -1,0 +1,141 @@
+.cat-subtitle {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-4);
+}
+
+.filter-bar {
+  display: flex;
+  gap: var(--space-6);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-8);
+
+  .field {
+    margin-bottom: 0;
+  }
+}
+
+.filter-search {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.cat-banner {
+  margin-bottom: var(--space-8);
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-8);
+}
+
+.cat-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+// Neutral, token-built stand-in for the prototype's `k.coverImg` — see the
+// class doc in catalogs.component.ts for why there is no real cover image.
+.catalog-cover-placeholder {
+  height: 140px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-track);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  color: var(--color-text-muted);
+}
+
+.cat-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.cat-card-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cat-card-sub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 3px;
+}
+
+.cat-count-chip {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+  white-space: nowrap;
+}
+
+.cat-latest-file {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.cat-file-icon {
+  font-size: 18px;
+}
+
+.cat-latest-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cat-latest-name {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-card-actions {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.cat-preview-btn {
+  flex: 1 1 auto;
+}
+
+.cat-wa-btn {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  background: var(--color-success);
+  color: #fff;
+  border: 1px solid var(--color-success);
+  border-radius: 19px;
+  font-size: 15px;
+  cursor: not-allowed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0.55;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-top: var(--space-8);
+  font-size: 13px;
+}

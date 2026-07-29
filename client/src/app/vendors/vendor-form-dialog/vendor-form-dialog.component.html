@@ -1,0 +1,107 @@
+<div class="dialog-backdrop">
+  <div class="dialog-panel">
+    <div class="vfd-header">
+      <div>
+        <div class="section-title">{{ dialogTitle() }}</div>
+        <div class="muted">Changes are time-stamped in the audit trail.</div>
+      </div>
+      <div class="dialog-close" (click)="cancel()">✕</div>
+    </div>
+
+    @if (error()) {
+      <div class="field-error vfd-banner" role="alert">{{ error() }}</div>
+    }
+
+    <div class="vfd-grid-2">
+      <div class="field">
+        <label for="vf-name">Vendor Name</label>
+        <input id="vf-name" class="field-input" [value]="name()" (input)="name.set($any($event.target).value)" />
+      </div>
+      <div class="field">
+        <label for="vf-contact">Contact Person</label>
+        <input id="vf-contact" class="field-input" [value]="contactPerson()" (input)="contactPerson.set($any($event.target).value)" />
+      </div>
+    </div>
+
+    <div class="vfd-grid-2">
+      <div class="field">
+        <label for="vf-phone">Phone / WhatsApp</label>
+        <input id="vf-phone" class="field-input" [value]="phone()" (input)="phone.set($any($event.target).value)" />
+      </div>
+      <div class="field">
+        <label for="vf-region">Region <span class="muted">(city, province)</span></label>
+        <input id="vf-region" class="field-input" [value]="region()" (input)="region.set($any($event.target).value)" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="vf-email">Email <span class="muted">(optional)</span></label>
+      <input id="vf-email" type="email" class="field-input" [value]="email()" (input)="email.set($any($event.target).value)" />
+    </div>
+
+    <div class="field">
+      <label>Product Categories</label>
+      <div class="vfd-chip-row">
+        @for (c of categoryOptions(); track c.id) {
+          <div
+            class="vfd-cat-chip"
+            [class.vfd-cat-chip--selected]="selectedCategoryIds().includes(c.id)"
+            (click)="toggleCategory(c.id)"
+          >
+            {{ selectedCategoryIds().includes(c.id) ? '✓ ' : '' }}{{ c.name }}
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="vfd-grid-3">
+      <div class="field">
+        <label for="vf-status">Status</label>
+        <select id="vf-status" class="field-input" [value]="statusId()" (change)="statusId.set($any($event.target).value)">
+          <option value="">Choose a status</option>
+          @for (opt of vendorStatusOptions(); track opt.id) {
+            <option [value]="opt.id">{{ opt.label }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="vf-moq">MOQ</label>
+        <input id="vf-moq" class="field-input" [value]="moq()" (input)="moq.set($any($event.target).value)" />
+      </div>
+      <div class="field">
+        <label for="vf-lead">Lead Time</label>
+        <input id="vf-lead" class="field-input" [value]="leadTime()" (input)="leadTime.set($any($event.target).value)" />
+      </div>
+    </div>
+
+    <!-- E5-06 commercial metadata — no prototype precedent, added per the class doc. -->
+    <div class="vfd-grid-2">
+      <div class="field">
+        <label for="vf-terms">Payment Terms <span class="muted">(optional)</span></label>
+        <input id="vf-terms" class="field-input" [value]="paymentTerms()" (input)="paymentTerms.set($any($event.target).value)" />
+      </div>
+      <div class="field">
+        <label for="vf-rating">Reliability Rating <span class="muted">(0–5, optional)</span></label>
+        <input
+          id="vf-rating"
+          class="field-input"
+          inputmode="decimal"
+          [value]="reliabilityRating()"
+          (input)="reliabilityRating.set($any($event.target).value)"
+        />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="vf-notes">Notes <span class="muted">(optional)</span></label>
+      <textarea id="vf-notes" class="field-input" rows="2" [value]="notes()" (input)="notes.set($any($event.target).value)"></textarea>
+    </div>
+
+    <div class="vfd-actions">
+      <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        {{ saving() ? 'Saving…' : 'Save Vendor' }}
+      </button>
+    </div>
+  </div>
+</div>

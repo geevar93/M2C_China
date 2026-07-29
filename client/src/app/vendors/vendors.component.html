@@ -1,0 +1,99 @@
+<div>
+  <div class="page-header">
+    <h1 class="page-title">Vendors</h1>
+    @if (canEdit()) {
+      <button type="button" class="btn btn-primary" (click)="openCreate()">+ Add Vendor</button>
+    }
+  </div>
+
+  <div class="card filter-bar">
+    <div class="field filter-search">
+      <label for="ven-search">Search</label>
+      <input
+        id="ven-search"
+        class="field-input"
+        [value]="search()"
+        (input)="onSearchInput($any($event.target).value)"
+        placeholder="Vendor or contact name"
+      />
+    </div>
+    <div class="field">
+      <label for="ven-cat">Category</label>
+      <select id="ven-cat" class="field-input" [value]="categoryId()" (change)="setCategory($any($event.target).value)">
+        <option value="">All categories</option>
+        @for (opt of categoryOptions(); track opt.id) {
+          <option [value]="opt.id">{{ opt.name }}</option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="ven-status">Status</label>
+      <select id="ven-status" class="field-input" [value]="statusId()" (change)="setStatus($any($event.target).value)">
+        <option value="">All statuses</option>
+        @for (opt of vendorStatusOptions(); track opt.id) {
+          <option [value]="opt.id">{{ opt.label }}</option>
+        }
+      </select>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Vendor</th>
+          <th>Region</th>
+          <th>Categories</th>
+          <th>MOQ / Lead Time</th>
+          <th>Catalogs</th>
+          <th>Status</th>
+          <th class="align-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (v of rows(); track v.id) {
+          <tr>
+            <td>
+              <a [routerLink]="['/vendors', v.id]" class="row-link">{{ v.name }}</a>
+              <div class="row-sub">{{ v.contactPerson }} · {{ v.phone }}</div>
+            </td>
+            <td class="muted">{{ v.region }}</td>
+            <td class="muted">{{ v.categoriesLabel }}</td>
+            <td class="muted">{{ v.termsLabel }}</td>
+            <td>{{ v.catalogCount }}</td>
+            <td><span class="chip" [style.background]="v.stBg" [style.color]="v.stFg">{{ v.statusLabel }}</span></td>
+            <td class="align-right">
+              <a class="btn btn-secondary btn-sm" [routerLink]="['/vendors', v.id]">Open →</a>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (loading()) {
+      <div class="state-panel">
+        <div class="spinner"></div>
+        <span>Loading vendors…</span>
+      </div>
+    } @else if (error()) {
+      <div class="state-panel">
+        <span>{{ error() }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+      </div>
+    } @else if (noResults()) {
+      <div class="state-panel">No vendors match these filters.</div>
+    }
+  </div>
+
+  @if (!loading() && !error() && totalCount() > 0) {
+    <div class="pager">
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() <= 1" (click)="prevPage()">← Prev</button>
+      <span class="muted">Page {{ page() }} of {{ totalPages() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() >= totalPages()" (click)="nextPage()">Next →</button>
+    </div>
+  }
+
+  @if (createOpen()) {
+    <app-vendor-form-dialog (closed)="cancelCreate()" (saved)="onVendorCreated($event)"></app-vendor-form-dialog>
+  }
+</div>
