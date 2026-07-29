@@ -8,7 +8,7 @@ Source documents (authoritative — this plan invents no scope beyond them):
 
 > **Source-of-truth note.** The readable mirror at `C:\work\DevZone\Hermes\China_M2C\Source\uploads\spec.txt` (and `spec_document.xml`) were found stale during this planning pass — they predated the invoicing addition. Both have since been regenerated from the current `.docx` and now include §6.8/FR-BIL-*/A9/Q9. Re-run the same regeneration after any future edit to the `.docx` so the mirrors don't drift again (see DR-13).
 
-> **Delivery status is tracked in §9–§13.** This document is now a living tracker, not only a plan. Each close-out section records per-story status with what was actually verified and how: §9 M1, §10 M2, §11 M3, §12 the E0 design pass, §13 M4. Statuses there are set from executed commands, never from intent — and where a story is closed on test evidence alone rather than live verification, that is stated on the story rather than left for the reader to infer.
+> **Delivery status is tracked in §9–§13.** This document is now a living tracker, not only a plan. Each close-out section records per-story status with what was actually verified and how: §9 M1, §10 M2, §11 M3, §12 the E0 design pass, §13 the M4 pass and **§14 the M4 close-out (supersedes §13's partial status)**. Statuses there are set from executed commands, never from intent — and where a story is closed on test evidence alone rather than live verification, that is stated on the story rather than left for the reader to infer.
 
 ## 1. Scope framing
 
@@ -821,3 +821,69 @@ The merge ordering was fixed rather than papered over: both sources are fetched 
 **M4 cannot be called complete** until those screens land and the full exit criterion — onboard a vendor, upload a versioned catalog PDF, open WhatsApp pre-addressed to a customer, and see the dispatch on the customer timeline — is demonstrated end-to-end through the UI. The backend half of that chain is already proven live.
 
 **Still needing the business owner, unchanged from §12.7:** FSD Q9c (gates M6), FSD Q6 and Q8 (ask together), the deployment track, N-10, and D-18 — plus **E5-07** above.
+
+---
+
+## 14. M4 close-out — all 26 stories done
+
+**Last updated:** 2026-07-29, end of the M4 implementation pass. Supersedes §13's "screens partially landed" status. Same evidentiary standard as §9–§13.
+
+**M4 is complete: 26 of 26 stories Done**, including E5-07, which §13 had held open for a scope decision. The owner confirmed on 2026-07-29 that FSD Q5 puts it in scope and that building it now beat the mid-flight retrofit DR-4 warns about. **DR-4 is now closed** — the `vendor_documents` schema gap it tracked since planning no longer exists.
+
+**Exit criterion met.** Onboard a vendor, upload a versioned catalog PDF, open WhatsApp pre-addressed to a customer, and see the dispatch on the customer timeline — the backend chain is proven live end to end (§14.3). The one residual gap is that the *screens* have not been driven in a browser; see N-16.
+
+### 14.1 Stories closed since §13
+
+| ID | Status | Verification |
+| --- | --- | --- |
+| E5-07 | **Done** | `vendor_documents` + `document_types` lookup, migration `AddVendorDocuments`. Four endpoints, all permission-gated with a 403 test each, all audit-logged. Verified live: upload 201; a file declaring `application/pdf` whose bytes were `GIF89a` rejected 400; download 200 authenticated / **401 anonymous**; `DELETE` removed the stored file **from disk**, not only the row. `filePath` never leaves the service boundary. |
+| E9-03 | **Done** | Customer detail's previously-inert "Send Catalog via WhatsApp" button now opens the shared dialog, gated on `Dispatch.Send`, and reloads the timeline on log. No parallel dispatch list added — the timeline is the single surface, per that component's existing decision. |
+| E9-04 | **Done** | 3-step dialog ported from the prototype's **actual** order (Download PDF → Open WhatsApp → Attach & send) with **Log Dispatch as a separate action**. See §14.4 on the story text being wrong. |
+| E9-05 | **Done** | Dispatch launches from a catalog card and from any document row on vendor detail — the same component, not a fork. |
+| E9-07 | **Done** | Backend sub-resource from §13, now surfaced twice: the catalogs card's "Sent to N customers · last DATE" footer (restoring a prototype element dropped in the E6-08 pass for want of a data source) and an expandable per-row history panel on vendor detail. |
+
+### 14.2 Deviations and additions from this pass
+
+| # | Deviation | Rationale |
+| --- | --- | --- |
+| D-25 | **`doc_type` is a seeded `document_types` lookup with an FK, not a column.** | The §7 DoD requires category-like values to be FKs to a lookup table, never enums or free text (FSD §3.3), and **D-2** set the precedent by adding `vendor_statuses` for exactly this reason. `MasterDataService` and `DbSeeder.SeedLookupAsync<TEntity>` are already generic over `ILookupEntity`, so this was one mechanical case per switch rather than special-casing. Seeded: Business Licence, Quality Certificate, Test Report, Other — all `isSystemDefault`, therefore retire-only under N-8. |
+| D-26 | **`document_types` added to the admin master-data screen — a small edit to the closed story E11-08.** | The frontend hand-enumerates its collections in **four** places (`MasterDataAggregate`, `COLLECTION_KEYS`, `COLLECTION_SEGMENTS`, `COLLECTION_LABELS`), so a new lookup ships seeded and API-editable but **invisible in the UI** — meaning the business could not add a document type without a deploy. That is precisely the quiet FSD §3.3 violation **DR-6** exists to catch ("breaks FSD §3.3 without failing a test"), so it was closed rather than deferred. TypeScript caught the one stale test fixture immediately, which is the interface doing its job. |
+| D-27 | **No version history on vendor documents.** | `catalog_documents` has `is_latest` because FR-CAT-03 requires it. E5-07's criteria say only "attached and downloaded", and FSD Q5 says filed for reference only. Deliberately not built rather than assumed — if a renewed licence needs supersession semantics later, that is a new story. |
+| D-28 | **One shared `DispatchDialogComponent` with `customerLock`/`documentLock` inputs.** | Entering from a customer you pick a document; entering from a document you pick a customer. Whichever side is known renders as a locked panel. The prototype's desktop dialog only ever needed the one direction, but its own **`mobile` reference screen** already shows the locked "To"/"Catalog" shape, so the styling is carried over rather than invented. |
+| D-29 | **`DELETE` removes the stored file before the DB row**, matching `CatalogService`. | A storage failure then leaves a recoverable orphaned row rather than a row whose only access path is already gone. Minor cosmetic note: the per-vendor directory is left behind empty. |
+
+### 14.3 Verified on this machine, this pass
+
+| Check | Result |
+| --- | --- |
+| `dotnet build` | 0 warnings, 0 errors. |
+| `dotnet test` | **375 passing, 0 failed** (235 unit + 140 integration on Testcontainers Postgres), up from 345 at §13. |
+| `NODE_OPTIONS= npx ng test` | **198 passing, 0 failed**, up from 176. |
+| `NODE_OPTIONS= npx ng build` | Succeeds. Initial bundle **303.36 kB — unchanged**, so the dispatch dialog is correctly lazy-chunked and N-10 is untouched. |
+| Live `docker compose` (api+db, clean volume) | Both migrations applied from scratch; `document_types` seeded with 4 system defaults; vendor-document upload/spoof-rejection/download/anonymous-401/delete-removes-file all as above; an Associate-only token carries **15** permissions, downloads successfully via `Vendors.View`, and is **403** creating a document type; and the full dispatch chain still lands `CatalogDispatched` on the customer timeline with "sent to" history resolving. Stack and volumes torn down afterwards. |
+
+### 14.4 A story text that is wrong, left recorded
+
+**E9-04's acceptance criteria contradict the prototype they instruct porting.** The text says "open chat → download PDF → mark sent". The approved prototype does **Download PDF → Open WhatsApp → Attach & send in chat**, with **Log Dispatch as a separate action** rather than a third step. The prototype is the port source and won. Both the E6-08 and E9 passes independently hit this. **The story text should be corrected in §4**, not carried forward — the next reader should not have to rediscover it.
+
+Relatedly, **Log Dispatch is deliberately not gated on completing the three steps.** The prototype's own handler never checks step state, and its footer wording ("N of 3 steps done") reads as informational. Gating it would invent a constraint the approved design does not have.
+
+### 14.5 Open items after M4
+
+| # | Item |
+| --- | --- |
+| **N-15** | **A latent permission mismatch on vendor detail.** The route is gated on `Vendors.View`, but the catalog-document endpoints it calls (`/download`, `/dispatches`) are gated server-side on `Catalogs.View`. A role holding `Vendors.View` **without** `Catalogs.View` would see document rows whose Preview and history actions 403. **Unreachable today** — both seeded roles hold both permissions — and it **pre-dates this pass** (the existing Preview button already had it). Left as-is rather than widened unasked, because "should a vendors-only role see catalog documents" is a permission-scope question of the same kind FSD Q4 was, i.e. a business decision. Worth asking alongside any future role beyond the seeded two. |
+| **N-16** | **The M4 screens have never been driven in a browser.** Backend is live-verified; the UI has only been exercised under Karma against mocked HTTP. The dispatch dialog is the highest-value thing to click through, since it is explicitly a phone-first flow (the prototype's `mobile` reference calls dispatch one of "the two tasks staff do from a phone while WhatsApp is open"). This is also what E12-08's per-screen visual sign-off requires, which DR-5 says should happen **at the time, not batched into M8**. |
+| N-12, N-13, N-14 | **Unchanged**, all from §13.5. N-12 (a seed test that derived its expectation from the constant it was meant to protect) is still worth auditing the wider suite for. |
+| N-10 | **Unchanged and still undecided.** Initial bundle 303.36 kB against a 300 kB warning budget; this pass added 0.00 kB. |
+| N-1, N-3, N-5 | **Unchanged.** |
+| N-9, N-11 | **Still only partially addressed.** M4's backend is live-verified, but M3 and the E0 surface remain unverified live, and N-16 now records the same gap for M4's screens. **Do not read M4's completion as closing these.** |
+| **DR-4** | **CLOSED.** The `vendor_documents` schema gap it tracked since planning is built, as one reviewed migration with the surrounding upload machinery already proven — which is exactly the outcome the mitigation aimed at. |
+
+### 14.6 Next
+
+**M5 — Inventory & shipments (E7).** Independent of M4 and unblocked. FSD **Q3 is answered** (TECH_SPEC OI-8: inventory per-SKU with SKU optional, matching what is already built), so E7-01's stated blocker is gone. Note E7 needs no new lookup work — `shipment_statuses` was seeded at E3-06.
+
+**Before M5, two cheap corrections worth folding in:** TECH_SPEC §6's `vendors` row still omits `payment_terms` (D-19), and E9-04's story text still contradicts the prototype (§14.4).
+
+**Still needing the business owner, unchanged:** FSD Q9c (gates M6 entirely), FSD Q6 + Q8 (ask together — the legacy data *is* the initial volume), the deployment track, N-10, and D-18. **E5-07 is no longer on this list** — it was answered and is built.
