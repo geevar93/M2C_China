@@ -8,7 +8,7 @@ Source documents (authoritative — this plan invents no scope beyond them):
 
 > **Source-of-truth note.** The readable mirror at `C:\work\DevZone\Hermes\China_M2C\Source\uploads\spec.txt` (and `spec_document.xml`) were found stale during this planning pass — they predated the invoicing addition. Both have since been regenerated from the current `.docx` and now include §6.8/FR-BIL-*/A9/Q9. Re-run the same regeneration after any future edit to the `.docx` so the mirrors don't drift again (see DR-13).
 
-> **Delivery status is tracked in §9 (added 2026-07-27).** This document is now a living tracker, not only a plan. §9 records per-story status with what was actually verified and how. Statuses there are set from executed commands, never from intent.
+> **Delivery status is tracked in §9–§13.** This document is now a living tracker, not only a plan. Each close-out section records per-story status with what was actually verified and how: §9 M1, §10 M2, §11 M3, §12 the E0 design pass, §13 M4. Statuses there are set from executed commands, never from intent — and where a story is closed on test evidence alone rather than live verification, that is stated on the story rather than left for the reader to infer.
 
 ## 1. Scope framing
 
@@ -735,3 +735,89 @@ Building a live Invoicing UI this pass would have produced a screen with no real
 - **D-18** — whether an 8-character minimum with no complexity rule is the intended password policy.
 
 **Engineering-side, whenever M6 is picked up:** E8 is untouched. E8-01…E8-07 (entity, migration, controller, PDF, lifecycle) all remain to be built before E8-09/E8-10 can wire the now-designed screens to anything real. **DR-3** (no PDF library chosen) is still open and should be settled before M6 starts, not during it.
+
+---
+
+## 13. M4 pass — Sourcing side: vendors, catalogs, dispatch
+
+**Last updated:** 2026-07-29, backend complete and live-verified; screens partially landed. Same evidentiary standard as §9–§12: `Done` means an executed command backs it.
+
+**This pass breaks the N-9/N-11 pattern deliberately.** M3 and the E0 pass were both closed on test evidence alone. The M4 **backend** was verified live over HTTP against the `docker-compose` `api`+`db` stack on a **clean volume**, so the migration is known to apply from scratch rather than assumed to. What has *not* had that treatment is called out explicitly in §13.5 rather than left implicit.
+
+### 13.1 Story status
+
+| ID | Status | Verification |
+| --- | --- | --- |
+| E5-01 | **Done** | `VendorsController` full CRUD, `Vendors.View`/`.Edit` gated, mutations audit-logged. Vendor created live with every field persisting. |
+| E5-02 | **Done** | `vendor_categories` many-to-many via `categoryIds`; verified live returning `Jewellery`. |
+| E5-03 | **Done** | FK to `vendor_statuses`, never an enum; `ACTIVE` resolved live as `{id, code, label}`. |
+| E5-04 | **Done** | List with `search`/`page`/`pageSize` + `categoryId`/`region`/`statusId`. |
+| E5-05 | **Done** | Vendor detail embeds `catalogSections[]` with their `documents[]` — one call, no second round trip. |
+| E5-06 | **Done** | MOQ, lead time, **payment terms** and reliability rating. Needed a schema addition — see D-19. |
+| E5-07 | **Not started — held for a scope decision** | **Not a silent drop.** See §13.5; this is the one genuinely open question from this pass. |
+| E5-08 | **Done** | Vendors list screen ported; category/region/status filters wired to E5-04. |
+| E5-09 | **Done** | Vendor detail screen ported: profile, catalog sections, commercial metadata, edit dialog. |
+| E6-01 | **Done** | Catalog section CRUD under a vendor. |
+| E6-02 | **Done** | Upload via `IFileStorage` recording filename, size, uploader, upload date. Verified live: 201. |
+| E6-03 | **Done** | Verified live — uploading v2 set `isLatest=true` and demoted v1 to `false`; v1 remains listable and downloadable. |
+| E6-04 | **Done** | Verified live: authenticated download 200 `application/pdf`; **anonymous 401**; static-path probe **404**. Never a public path (TECH_SPEC §8). |
+| E6-05 | **Done** | Cross-vendor browse/search by `search`/`categoryId`/`vendorId`/`tag`, paged. |
+| E6-06 | **Done** | Reuses the E1-05 validator. Verified live against a **real spoofing attempt** — a file declaring `application/pdf` whose bytes were `GIF89a` was rejected `400` with `ProblemDetails`. Extension checking alone would have passed it. |
+| E6-07 | **Done** | Tags normalised exactly as `CustomerService` does. Verified live: `['NEW ARRIVALS','new arrivals',' ']` collapsed to `['NEW ARRIVALS']`. |
+| E6-08 | **Done** | Catalogs screen + upload dialog ported. Cover images — see D-21. |
+| E9-01 | **Done** | `WhatsAppDeepLinkSender` behind `IDispatchMessageSender`. Verified live: a stored `+91…` number produced `https://wa.me/91…?text=…`, digits only, correctly URL-encoded. No Business API dependency (FSD A2). |
+| E9-02 | **Done** | `POST /dispatch-log`, gated on `Dispatch.Send`, audit-logged. Staff user comes from the token — the request DTO has **no** staff field, so a caller cannot attribute a dispatch to someone else. |
+| E9-03 | **Not started** | Frontend. In flight at the time of writing — see §13.6. |
+| E9-04 | **Not started** | Frontend. Same. |
+| E9-05 | **Not started** | Frontend. Same. |
+| E9-06 | **Done** | `DispatchOptions` bound from config, `{CustomerName}`/`{CatalogName}` placeholders, exposed via `GET /dispatch-log/compose` so the text stays user-editable. Verified live: both placeholders resolved. |
+| E9-07 | **Done (backend)** | `GET /catalog-documents/{id}/dispatches`, newest first. Chosen as an additive sub-resource rather than widening `CatalogDocumentDto`, which a concurrent frontend track was consuming. UI half is outstanding. |
+| E9-08 | **Done — confirmed, not assumed** | FSD Q4 **is answered** (TECH_SPEC OI-8): any staff may dispatch. Verified in seed code **and live** — an Associate-only token carries exactly 15 permissions *including* `Dispatch.Send`. See N-12 for the regression trap this exposed. |
+| E9-09 | **Done** | `IDispatchMessageSender` is the sole seam; `DispatchService` never builds a URL itself, so a Business-API sender can replace the deep-link builder without touching the dispatch log or the calling screens. |
+
+### 13.2 E4-07 correction
+
+**E4-07 was closed slightly overstated.** Its acceptance criteria say the timeline returns "interactions, status changes, **catalog dispatches** and invoices in one chronological feed", and it was marked **Done** in §11.2 — but dispatches could not exist until this pass. It was *Done for what existed at the time*. `TimelineEventKinds.CatalogDispatched` is now genuinely populated, sourced by **reading** the `dispatches` log rather than by writing a second `interactions` row, so there remains exactly one source of truth. `ShipmentRecorded` / `InvoiceCreated` / `InvoiceStatusChanged` are still unproduced placeholders pending E7/E8 (M5/M6) — the same caveat now applies to them and should not be forgotten a second time.
+
+The merge ordering was fixed rather than papered over: both sources are fetched **unsorted** and a single sort is applied **after** the union. Sorting either source first is correct only when a dispatch happens to land at one end of the feed. Verified live — a dispatch at 11:30:53 sorted strictly between interactions at 11:30:51 and 11:30:55.
+
+### 13.3 Verified on this machine, this pass
+
+| Check | Result |
+| --- | --- |
+| `dotnet build` | 0 warnings, 0 errors. |
+| `dotnet test` | **345 passing, 0 failed** (219 unit + 126 integration on Testcontainers Postgres), up from 246 at the E0 close. |
+| `NODE_OPTIONS= npx ng test` | **176 passing, 0 failed**, up from 136. |
+| `NODE_OPTIONS= npx ng build` | Succeeds. Initial bundle 303.36 kB vs. the 303.01 kB N-10 baseline — **+0.35 kB**, no new dependency. |
+| Live `docker compose` (api+db, clean volume) | Migration applied from scratch (`payment_terms` and `ix_vendors_region` both present); login to forced password change to full-scope token; vendor, section, upload, versioning, download, dispatch and timeline all exercised over real HTTP; Associate-only permission boundary confirmed at 15 permissions with admin endpoints 403. Stack and volumes torn down afterwards. |
+
+### 13.4 Deviations and additions from this pass
+
+| # | Deviation | Rationale |
+| --- | --- | --- |
+| D-19 | **`vendors.payment_terms` added.** | FR-VEN-06/E5-06 names "MOQ, lead time, **payment terms** and reliability rating", but TECH_SPEC §6's `vendors` row omits it. **TECH_SPEC §6 should be corrected**, exactly as D-2 corrected it for `vendor_statuses`. This is a spec inconsistency, not a build decision. |
+| D-20 | **One migration, `AddVendorPaymentTermsAndM4Indexes`.** | Keeps the M1 schema freeze (DR-2) breaking once, with review, as the pre-M3 migration did. Adds `ix_vendors_region`, a **GIN** index on `catalog_sections.tags` (array containment cannot use btree), and a composite `(catalog_section_id, is_latest)` replacing two weaker indexes. `Up`/`Down` reviewed by hand and confirmed reversible. |
+| D-21 | **Catalog cards render a token-built placeholder, not a cover image.** | The prototype's cards show `k.coverImg` photos, but **no cover-image field exists** anywhere in the schema or API. Rather than invent one or request a schema change for decoration, the card renders a neutral placeholder at the same box size. If the business wants real cover images that is a new story with a migration, not a styling tweak. |
+| D-22 | **Catalog sections require a vendor at creation and it is immutable thereafter.** | The prototype's upload dialog labels the vendor field "optional — editable later", but `UpdateCatalogSectionRequest` has no `VendorId` at all. The **API is the binding contract**; the dialog now requires a vendor on create and shows it read-only on edit. Caught by diffing assumed DTOs against the real backend — the same seam that produced M1's only two real defects. |
+| D-23 | **New routes beyond the one TECH_SPEC §4.7 names.** | §4.7 names only `POST /dispatch-log`. Added `GET /dispatch-log/compose` (E9-06's template plus E9-01's link, both needed before a send) and `GET /catalog-documents/{id}/dispatches` (E9-07). Both additive; neither changes an existing contract. |
+| D-24 | **Namespaces are `Dispatching`, not `Dispatch`.** | `Dispatch` collides with the `Domain.Entities.Dispatch` class and breaks unqualified references project-wide, since C# sibling-namespace lookup outranks `using` resolution. |
+
+### 13.5 Open items after M4
+
+| # | Item |
+| --- | --- |
+| **N-12** | **The seed test for role permissions could not catch the regression it existed to catch.** `SeedAsync_GrantsSuperAdminEveryPermission_AndAssociateEverythingExceptAdminOnly` derived its expected set **from `AdminOnly` itself**, so moving `Dispatch.Send` into `AdminOnly` would have silently kept it green while reversing an answered business decision (FSD Q4). Now covered by a test that hardcodes the permission code, plus a live JWT-claim assertion. **Worth auditing whether other tests derive their expectations from the same constant they are meant to protect** — this is a test-design smell, not a one-off. |
+| **N-13** | **The bootstrap admin's password silently diverges from `.env`.** After the first forced password change the seeded admin no longer matches `BOOTSTRAP_ADMIN_PASSWORD`, and because seeding is idempotent it never reconverges — a later `docker compose up` against an existing `pgdata` volume then fails login with no explanation. Cost real debugging time this pass. Closely related to N-5 but distinct, and belongs in the same E12-09 operating-guide note. |
+| **N-14** | **List search is not served by its indexes.** `ix_vendors_name` and `ix_catalog_sections_title` exist, but the query is `LOWER(col) LIKE '%term%'`, which no btree index can serve. **Pre-existing, not a regression** — `customers` search has the identical shape — but it means the DoD's "filter columns are indexed" is satisfied in letter and not in effect for substring search. Belongs to E12-02; if it matters at real volumes the answer is a trigram (`pg_trgm`) index, which is a dependency decision under C1. |
+| **E5-07** | **Held for a business scope decision, deliberately not silently dropped.** The PA-4 default is to drop Could-haves — but **FSD Q5's recorded answer names it explicitly**: compliance documents are filed for reference only, and "scope is vendor-level (FR-VEN-07/E5-07, needs the `vendor_documents` table DR-4 already flags)". The owner's answered question and the descope default therefore point opposite ways. Building it now is materially cheaper than later, since E6's validated upload/download machinery is fresh and it would still be one reviewed migration rather than the mid-flight retrofit DR-4 exists to warn about. **Needs a yes/no.** |
+| N-10 | **Unchanged and still undecided.** Initial bundle 303.36 kB against a 300 kB warning budget. This pass added +0.35 kB, so it is not the cause. The §12.6 recommendation (raise the budget with a written justification) still stands. |
+| N-1, N-3, N-5 | **Unchanged.** |
+| N-9, N-11 | **Partially addressed.** The M4 **backend** now has live HTTP verification, breaking the two-pass pattern. But the M3 and E0 surface those items originally described is **still** unverified live, and the M4 *screens* have not been exercised in a browser — only under Karma. **Do not read this pass as closing N-9/N-11.** |
+
+### 13.6 Next
+
+**Engineering, to finish M4:** E9-03, E9-04 and E9-05 — the "Send via WhatsApp" launch point, the 3-step dispatch dialog, and launching dispatch from a catalog section — plus the UI half of E9-07. Note that the ACTION_PLAN's own E9-04 text ("open chat → download PDF → mark sent") **does not match the prototype**, whose actual step order is **Download PDF → Open WhatsApp → Attach & send in chat**, with a separate "Log Dispatch" action. The prototype is the port source and wins; that story text should be corrected rather than followed.
+
+**M4 cannot be called complete** until those screens land and the full exit criterion — onboard a vendor, upload a versioned catalog PDF, open WhatsApp pre-addressed to a customer, and see the dispatch on the customer timeline — is demonstrated end-to-end through the UI. The backend half of that chain is already proven live.
+
+**Still needing the business owner, unchanged from §12.7:** FSD Q9c (gates M6), FSD Q6 and Q8 (ask together), the deployment track, N-10, and D-18 — plus **E5-07** above.
