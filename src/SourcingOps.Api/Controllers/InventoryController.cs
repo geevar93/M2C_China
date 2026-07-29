@@ -1,0 +1,97 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using SourcingOps.Api.Extensions;
+using SourcingOps.Application.Inventory;
+using SourcingOps.Domain.Constants;
+
+namespace SourcingOps.Api.Controllers;
+
+/// <summary>
+/// ACTION_PLAN E7-01…E7-04 (FR-INV-01, FR-INV-02, FR-INV-06, FR-INV-07). Reads require
+/// <see cref="PermissionCodes.InventoryView"/>, writes <see cref="PermissionCodes.InventoryEdit"/>
+/// — both already existed in the seeded catalog, so this pass added no permission. Every
+/// mutation writes through <c>IAuditLogger</c> inside <see cref="InventoryService"/>.
+///
+/// Follows <see cref="VendorsController"/>'s shape exactly, including hosting the nested
+/// inbound-stock sub-resource here rather than on a separate root — an inbound entry has no
+/// life outside its item, unlike a document, which is downloadable by its own id.
+/// </summary>
+[ApiController]
+[Route("api/v1/inventory")]
+[Authorize]
+public sealed class InventoryController : ControllerBase
+{
+    private readonly IInventoryService _service;
+
+    public InventoryController(IInventoryService service)
+    {
+        _service = service;
+    }
+
+    /// <summary>E7-03/E7-04: search (name + sku), category/vendor/stock-level filters, paging, plus the D-k summary block.</summary>
+    [HttpGet]
+    [Authorize(Policy = PermissionCodes.InventoryView)]
+    public async Task<IActionResult> List(
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] Guid? categoryId = null,
+        [FromQuery] Guid? vendorId = null,
+        [FromQuery] string? stockLevel = null,
+        CancellationToken ct = default)
+    {
+        var query = new InventoryListQuery(search, page, pageSize, categoryId, vendorId, stockLevel);
+        var result = await _service.ListAsync(query, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("{id:guid}")]
+    [Authorize(Policy = PermissionCodes.InventoryView)]
+    public async Task<IActionResult> Get(Guid id, CancellationToken ct)
+    {
+        var result = await _service.GetAsync(id, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpPost]
+    [Authorize(Policy = PermissionCodes.InventoryEdit)]
+    public async Task<IActionResult> Create([FromBody] CreateInventoryItemRequest request, CancellationToken ct)
+    {
+        var result = await _service.CreateAsync(request, User.GetRequiredUserId(), ct);
+        return StatusCode(StatusCodes.Status201Created, result);
+    }
+
+    [HttpPut("{id:guid}")]
+    [Authorize(Policy = PermissionCodes.InventoryEdit)]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateInventoryItemRequest request, CancellationToken ct)
+    {
+        var result = await _service.UpdateAsync(id, request, User.GetRequiredUserId(), ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Policy = PermissionCodes.InventoryEdit)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var deleted = await _service.DeleteAsync(id, User.GetRequiredUserId(), ct);
+        return deleted ? NoContent() : NotFound();
+    }
+
+    /// <summary>E7-02: records an inbound entry and raises on-hand quantity in one transaction.</summary>
+    [HttpPost("{id:guid}/inbound")]
+    [Authorize(Policy = PermissionCodes.InventoryEdit)]
+    public async Task<IActionResult> RecordInbound(Guid id, [FromBody] RecordInboundRequest request, CancellationToken ct)
+    {
+        var result = await _service.RecordInboundAsync(id, request, User.GetRequiredUserId(), ct);
+        return result is null ? NotFound() : StatusCode(StatusCodes.Status201Created, result);
+    }
+
+    /// <summary>E7-02: the item's inbound entries, newest first.</summary>
+    [HttpGet("{id:guid}/inbound")]
+    [Authorize(Policy = PermissionCodes.InventoryView)]
+    public async Task<IActionResult> ListInbound(Guid id, CancellationToken ct)
+    {
+        var result = await _service.ListInboundEntriesAsync(id, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+}

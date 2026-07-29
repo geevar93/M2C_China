@@ -14,3 +14,20 @@ namespace SourcingOps.Application.Common;
 public sealed record StatusRefDto(Guid Id, string Code, string Label);
 
 public sealed record CategoryRefDto(Guid Id, string Name);
+
+/// <summary>
+/// Resolved vendor reference for the M5 (E7) inventory track, which embeds its source vendor
+/// the same way vendors/catalog-sections embed their status and category. A vendor has a
+/// <c>Name</c> and no Code/Label pair, so it needs its own shape rather than reusing
+/// <see cref="StatusRefDto"/>; deliberately distinct from <see cref="CategoryRefDto"/> despite
+/// the identical field list, because collapsing them would make the two interchangeable at a
+/// call site where they are not.
+/// </summary>
+public sealed record VendorRefDto(Guid Id, string Name);
+
+/// <summary>
+/// Resolved customer reference for the M5 shipment track — same reasoning as
+/// <see cref="VendorRefDto"/>. <c>Name</c> carries the customer's business name when set,
+/// falling back to the contact name, so a list row never renders blank.
+/// </summary>
+public sealed record CustomerRefDto(Guid Id, string Name);

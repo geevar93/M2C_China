@@ -5,7 +5,9 @@ using SourcingOps.Application.Auth;
 using SourcingOps.Application.Catalog;
 using SourcingOps.Application.Crm;
 using SourcingOps.Application.Dispatching;
+using SourcingOps.Application.Inventory;
 using SourcingOps.Application.MasterData;
+using SourcingOps.Application.Shipments;
 using SourcingOps.Application.Vendors;
 
 namespace SourcingOps.Application;
@@ -40,6 +42,11 @@ public static class DependencyInjection
         configuration.GetSection("Storage").Bind(vendorUploadOptions);
         services.AddSingleton(vendorUploadOptions);
 
+        // E7-09 — same "Storage" section again, same per-feature-POCO reasoning.
+        var shipmentUploadOptions = new ShipmentUploadOptions();
+        configuration.GetSection("Storage").Bind(shipmentUploadOptions);
+        services.AddSingleton(shipmentUploadOptions);
+
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IMasterDataService, MasterDataService>();
         services.AddScoped<IAdminUserService, AdminUserService>();
@@ -49,6 +56,9 @@ public static class DependencyInjection
         services.AddScoped<IVendorDocumentService, VendorDocumentService>();
         services.AddScoped<ICatalogService, CatalogService>();
         services.AddScoped<IDispatchService, DispatchService>();
+        services.AddScoped<IInventoryService, InventoryService>();
+        services.AddScoped<IShipmentService, ShipmentService>();
+        services.AddScoped<IShipmentDocumentService, ShipmentDocumentService>();
 
         return services;
     }
