@@ -1057,3 +1057,105 @@ The API contract should be **diffed against a live response before the screens a
 **Then M6 — Invoicing (E8)**, which M5 was a prerequisite for: E8-01 references a shipment for the CIF case, and D-30's snapshotted line cost exists specifically so that invoice basis cannot drift. M6 remains **fully gated on FSD Q9c** and still needs **DR-3** (no PDF library chosen) settled *before* it starts, not during it.
 
 **Still needing the business owner:** FSD **Q9c** (gates M6 entirely), FSD **Q6 + Q8** (ask together — the legacy data *is* the initial volume), the **deployment track** (N-17 now adds a reason to settle it), **N-10**, **D-18**, and newly **N-19** (stock-take corrections).
+
+---
+
+## 16. M5 close-out — the three screen ports (E7-11, E7-12, E7-13)
+
+**Last updated:** 2026-07-30, end of the M5 **frontend** pass. Supersedes §15's "10 of 13 stories" status. Same evidentiary standard as §9–§15: `Done` means an executed command backs it.
+
+**M5 is complete: 13 of 13 stories Done.** The three screen ports landed against a contract that was **diffed against a live response before any component was wired**, which is what §15.6 required and what D-22 and M1's two defects were caused by skipping. That diff found one real defect (D-50) that no test in the suite could have caught, because the suite's own fixtures encoded the same wrong assumption — see §16.3.
+
+**N-21 is closed.** §15.2's live row was reported by a delegated build agent and not re-executed; this pass re-ran the clean-volume `docker compose` stack **first-hand as the coordinator**, before delegating any frontend work, and every row in §16.4 was likewise re-run directly rather than taken on an agent's report.
+
+**M5's exit criterion is met at the UI level with one stated exception.** UC-06 and UC-07 are demonstrable through the screens against live endpoints. The exception is that the screens have still never been driven in a **browser** — see N-16, which this pass attempted to close and could not.
+
+### 16.1 Story status
+
+| ID | Status | Verification |
+| --- | --- | --- |
+| E7-11 | **Done** | Inventory screen ported: search + category + stock-level filters, the four `summary`-driven stat tiles, and the low-stock visual bar with its ratio maths ported verbatim from the prototype's `invRows()` (plus a zero-threshold guard the prototype never needed — D-53). Wired to `GET /inventory`; add/edit and record-inbound dialogs wired to E7-01/E7-02. |
+| E7-12 | **Done** | Shipments list ported: status tabs built from the live `statusCounts[]` in `sortOrder` — including zero-count statuses, and correctly showing each tab's true total because the API computes counts *excluding* the active status filter (E7-08). Stock Impact derives from `serviceType.code`, never the label (D-36). |
+| E7-13 | **Done** | Shipment detail ported: the 4-step stepper, shipment lines, details panel and reference-documents section. The stepper's per-step "when" reads the real `shipment_status_history` (D-33) rather than the prototype's invented `stepWhen` array. Invoice document left as a slot (D-52). |
+| **N-20 (a)** | **Done** | `scope?: string \| null` added to `LookupRow` in **both** `core/models/master-data.models.ts` and `admin/models/admin-master-data.models.ts`. Live-confirmed the API serialises `scope` on every collection, null for all but `documentTypes`. |
+| **N-20 (b)** | **Done** | The admin create-document-type form now has a **Scope** selector (`Vendor`/`Shipment`), shown only for the `documentTypes` collection. This closes a live DR-6-class configurability violation: `UpsertMasterDataRequest.Scope` **defaults to `"Vendor"` when omitted**, so before this every type a Super Admin created was silently vendor-scoped and could never back a shipment upload. Read-only on edit — see D-51. |
+| **N-20 (c)** | **Done for the shipment side; the vendor side has no consumer to fix** — see N-22. `MasterDataService.documentTypeOptions(scope)` takes a **required** `'Vendor' \| 'Shipment'` parameter, so a caller cannot ask for an unscoped list and get the wrong one. The shipment upload dialog consumes it. |
+
+### 16.2 The live-contract diff (the §15.6 gate)
+
+Run first, before any component was wired, against `docker compose` (api+db) on a **clean volume**, over real HTTP, by the coordinator.
+
+**Outcome: §15.3's recorded contract is substantially accurate.** Every embedded lookup shape, `stockValue: null` semantics, the filtered `summary` block, `statusCounts` behaviour, the 409 `insufficientStock` extension and the freight-only 400 matched exactly as documented. Four imprecisions were found in §15.3's **example JSON** (not in the API), and are corrected here rather than left to mislead the next reader:
+
+| # | §15.3 says | The API actually does |
+| --- | --- | --- |
+| 1 | `"onHandQty": 0`, `"quantity": 0` — integers | **Decimals.** `onHandQty: 1840.0`, `quantity: 500.0`, and the 409's `availableQty: 10.000`. TypeScript models them as `number` either way, but a screen must not assume whole numbers when formatting. |
+| 2 | `"pageSize": 20` | Default is **25**. §15.3's `20` was an example literal from a request that passed `pageSize=20` explicitly. |
+| 3 | `dispatchDate`/`eta`/`entryDate` all as "iso-8601" | `dispatchDate`/`eta` are **full ISO-8601 with time** (`2026-07-22T00:00:00Z`) despite being logical dates; `entryDate` is a **bare date string** (`2026-07-29`). Two different shapes, modelled distinctly. |
+| 4 | (silent) | `POST /shipments` returns the **full `ShipmentDetailDto`**, not the list-item shape, and auto-seeds one `statusHistory` row noted `"Shipment created."` |
+
+**The two request-shape traps were verified by attack, not by reading.** `PUT /inventory/{id}` with `onHandQty: 999999` left the stored value at 2000 (D-42 holds). `PUT /shipments/{id}` with a different `statusId` left the status at `PACKED`, and only `PUT /shipments/{id}/status` moved it — writing a history row as it went (D-43 holds). Both screens are built so the field cannot be rendered in the first place, and both have a regression test asserting its **absence**.
+
+### 16.3 The defect the diff caught — and why no test could have
+
+`StatusStyleService`'s `SVC` map was keyed on **`'Freight-only'`**, the prototype's display label. The live API's `serviceType.code` is **`FREIGHT_ONLY`** (its *label* is `Freight-only`). Every caller passes `code`. Consequences, all live and all pre-dating this pass:
+
+- Every freight-only chip app-wide fell through to the grey default instead of the orange freight pair.
+- `intake.component.ts`'s `showExtRef` compared `code === 'Freight-only'`, so **the lead-intake form's external-purchase fields never appeared** against the real API — a functional break on a closed M3 story.
+- `customer-detail.component.ts` branched on the *presentation label* `'FREIGHT-ONLY'`, so its freight fields never rendered either.
+
+**The whole suite was green throughout, because every spec fixture in the client declared `code: 'Freight-only'`.** The fixtures encoded the same wrong assumption as the code, so the tests confirmed the bug rather than catching it. This is exactly the failure mode **N-12** recorded ("a test that derives its expectation from the constant it is meant to protect"), generalised from one seed test to a whole suite's fixtures — and it was only findable by diffing against a live response. **N-12 should now be read as a suite-wide concern, not a single-test one.**
+
+Fixed: the map is keyed on the API `code`, both functional branches compare `code` (customer-detail gained a private `serviceTypeCode` computed so no branch can reach for the label again), every fixture uses the real code, and a new regression test hardcodes the literal `FREIGHT_ONLY` rather than deriving it from the map it guards.
+
+### 16.4 Verified on this machine, this pass
+
+Every row re-run by the coordinator. None taken on a delegated agent's report — that distinction is why N-21 existed.
+
+| Check | Result |
+| --- | --- |
+| Live `docker compose` (api+db, **clean volume**) | Migration applied from scratch; 8 document types seeded with correct `Vendor`/`Shipment` scopes; login → forced password change → full-scope token; inventory create/list/filter/inbound, shipment create/detail/list/status-change, negative-stock **409** with named items, freight-only-with-lines **400**, freight-only-without-lines **201**, and both D-42/D-43 traps all exercised over real HTTP. Stack and volumes torn down afterwards. |
+| `dotnet build` | 0 warnings, 0 errors. |
+| `dotnet test` | **557 passing, 0 failed** (340 unit + 217 integration on Testcontainers Postgres) — unchanged from §15.2, as expected: this pass touched **no C# at all** (verified against `git status`; every changed path is under `client/` or `docs/`). |
+| `NODE_OPTIONS= npx ng build` | Succeeds. All three screens correctly lazy-chunked (`inventory-component` 27.50 kB, `shipment-detail-component` 16.51 kB, `shipments-component` in the tail). |
+| `NODE_OPTIONS= npx ng test` | **284 passing, 0 failed**, up from 198 at the M4 close (§14.3) — +86. |
+| Bundle budget (N-10) | Initial **304.87 kB** vs a **rebuilt-not-recalled** baseline of **303.36 kB** → **+1.51 kB**. The baseline was re-measured by stashing this pass's work and building `HEAD` directly rather than trusting §15.5's recorded figure; it came back at exactly 303.36 kB, so the record was accurate and the delta is honestly attributable to this pass. |
+
+### 16.5 Deviations and additions from this pass
+
+Continuing the document's D-# sequence from D-49.
+
+| # | Deviation | Rationale |
+| --- | --- | --- |
+| D-50 | **`StatusStyleService`'s `SVC` map is keyed on the API `code`, not the prototype's label.** | The prototype's own `SVC` constant is label-keyed; ported faithfully, that was wrong against a live API whose `code` is `FREIGHT_ONLY`. The **API is the binding contract** — the same conclusion D-22 reached about the catalog upload dialog. Full impact, and why the suite stayed green, in §16.3. |
+| D-51 | **The admin scope selector is create-only; on edit, scope renders read-only.** | Not a UI shortcut — verified against the actual C# DTO: `UpsertMasterDataRequest.Scope` is *"honoured on create and ignored on update"*, on the same reasoning as `Code` under **D-12** (a type whose scope changed after documents referenced it would silently move those documents into the other module's dropdown). Rendering an editable control the server ignores would have been the worse lie. |
+| D-52 | **The shipment detail invoice document stays a plain slot.** | `document_types` really does seed an `INVOICE` type scoped to `Shipment` (D-34) and the prototype's mock data has an invoice row, but the actual invoice *link* is E8/M6 and out of scope. An uploaded invoice renders like any other document row; no generation, linking or navigation was built. **M6 remains gated on FSD Q9c.** |
+| D-53 | **The low-stock bar formula gained a zero-reorder-threshold guard.** | Ported verbatim from `invRows()`, the formula is `clamp(round((qty / (reorder * 2.5)) * 100), 0, 100)` — which divides by zero when `reorderThreshold` is 0. The prototype's mock data never seeds a zero threshold; live data can, and the API imposes no minimum. A zero-threshold item has no "below reorder" concept, so the bar reads full when there is any stock and empty when there is none. |
+| D-54 | **Stock-level colours live in a feature-local `stock-level.util.ts`, not `StatusStyleService`.** | `HEALTHY`/`LOW`/`NEGATIVE` are not lead/vendor/shipment statuses and have no entry in the shared `ST` map — routing them through it would have silently returned `ST.NEW`'s grey for every row. The prototype makes the same split for the same reason, computing this triple locally in `invRows()` rather than through its own shared `ST` constant. The values are the existing success/warning/danger tokens, so no new palette was invented. |
+| D-55 | **`--color-danger-bg-subtle` (`#fff8f8`) added, distinct from `--color-danger-bg` (`#ffebee`).** | The prototype tints a negative-stock **row** with `#fff8f8` and a danger **chip** with `#ffebee`; they are not interchangeable, and the stronger tint behind a full-width row reads as an error state rather than the quiet flag the approved screen intends. Caught on review of delegated work that had reached for the nearest existing token. `docs/DESIGN_TOKENS.md` updated in the same edit, per that file's own "change one, change the other" rule. |
+| D-56 | **Three new shared atoms — `.pill-tab`, `.stock-bar`, `.stepper` — settled by the coordinator *before* delegation.** | `.pill-tab` is deliberately a **second** tab atom rather than a variant of the existing underline `.tab`: the prototype uses two unrelated tab treatments that share no declarations beyond font size. Fixing these centrally up front is what stopped two parallel agents from each inventing their own; both reported needing no further shared atom. |
+| D-57 | **Currency formatting consolidated into `shared/utils/money.util.ts`.** | Three byte-identical `Intl.NumberFormat('en-IN', …)` copies had accumulated (invoices, inventory, shipments). The last two were an **artefact of this pass's own file-ownership split** — each agent was told to stay inside its feature folder — not a design decision, so the coordinator merged them afterwards rather than shipping the duplication. Sits beside `date-format.util.ts`, already the established home for cross-feature formatters. |
+| D-58 | **The inventory screen gained a third header button, "+ Add Item", and per-row Inbound/Edit actions.** | The prototype's inventory screen has **zero wired actions** — every button is a static mock. E7-01/E7-02 require create, edit and inbound to be reachable, and the prototype offers no entry point for them. Row actions sit inside the Item cell rather than in a new column, so the table still has exactly the seven columns the approved design specifies. |
+
+### 16.6 Open items after M5
+
+| # | Item |
+| --- | --- |
+| **N-22** | **E5-07's vendor-document UI does not exist.** N-20(c) asks for scope filtering on "both the vendor-upload and shipment-upload dropdowns" — but there is no vendor upload dropdown. All four vendor-document endpoints are live and permission-gated (`VendorDocumentsController`, plus `GET`/`POST /vendors/{id}/documents`), and §14.1 marked E5-07 **Done** on verification that is **entirely backend/HTTP** — the client has *zero* consumers of any of them (grep for `vendorDocument`/`docType` returns nothing). So E5-07 is Done as an API and absent as a feature. The scope-filtering half is already built and reusable (`documentTypeOptions('Vendor')` needs only a caller). **This is the same "closed slightly overstated" pattern §13.2 recorded for E4-07** and should be resolved the same way: either a small story to build the UI, or an explicit note that vendor documents are API-only by intent. |
+| **N-16** | **Extended again, and this time deliberately attempted.** This pass tried to drive the screens in a browser — the API stack and `ng serve` were both up and healthy — but the Chrome extension was not connected, so it could not be done. M4's screens and now M5's three have **still never been rendered in a real browser**; all UI evidence remains Karma-against-mocked-HTTP plus a live API diff at the contract level. **DR-5 says this sign-off should happen at the time, not batched into M8**, and it has now slipped three passes. Worth treating as a blocker for the next pass rather than a nice-to-have. |
+| **N-12** | **Widened, not unchanged.** §16.3 shows the "test derives its expectation from the thing it guards" smell was not confined to the one seed test N-12 named — it ran through **every service-type fixture in the client suite**, keeping 284 tests green over a live functional break. The wider audit N-12 has asked for since §13.5 is now demonstrably overdue. |
+| **N-10** | **Still undecided; this pass is +1.51 kB.** Initial 304.87 kB against a 300 kB warning budget, over a **rebuilt** 303.36 kB baseline. The three screens are correctly lazy-chunked, so the delta is the shared foundation (money util, three atoms, the `documentTypes` accessors), not the screens. The §12.6 recommendation — raise the budget with a written justification — still stands and is now 4.87 kB overdue. |
+| **N-19** | **Unchanged and still needs a business answer.** Stock-take correction has no path (a consequence of D-42). Now more visible, not less: the inventory screen renders an on-hand figure a user can see is wrong and has no way to correct. |
+| **N-17, N-18** | **Unchanged**, both from §15.5. N-17 (EF tooling cannot run on this machine; a host Postgres holds 5432) was worked around again this pass by publishing the container's Postgres on 55432 via a scratchpad-only compose override — **not committed**, so the repo's compose files still assume a free 5432. |
+| N-13, N-14, N-15 | **Unchanged.** N-15 is worth re-reading now that both screens exist: a role holding `Shipments.View` without `Inventory.View` sees shipment lines naming inventory items — the same latent mismatch N-15 records for vendors/catalogs. Still unreachable with the two seeded roles. |
+| N-1, N-3, N-5, N-9, N-11 | **Unchanged.** |
+
+### 16.7 Next
+
+**M6 — Invoicing (E8). Do not start it yet.** It remains **fully gated on FSD Q9c**, and **DR-3** (no PDF library chosen) must be settled *before* it starts, not during it. M5 was its prerequisite and that prerequisite is now genuinely met: E8-01 can reference a real shipment, and D-30's snapshotted `unit_cost` on `shipment_lines` exists precisely so an issued invoice's basis cannot drift when an item price later changes.
+
+**Two things worth doing before M6 rather than inside it**, both cheap now and awkward later:
+1. **N-16** — get one browser pass over the M4 and M5 screens. It has slipped three passes, DR-5 explicitly warns against batching it into M8, and E0-05's invoicing screens will pile more unverified surface on top.
+2. **N-12's suite-wide fixture audit** — §16.3 is direct evidence that green tests are not currently sufficient evidence of a working screen. M6 will be written against the same fixture conventions.
+
+**Still needing the business owner:** FSD **Q9c** (gates M6 entirely), FSD **Q6 + Q8** (ask together), the **deployment track** (N-17), **N-10** (now 4.87 kB over budget), **D-18**, **N-19** (stock-take corrections), and newly **N-22** (is E5-07 meant to have a UI, or is it API-only by intent?).

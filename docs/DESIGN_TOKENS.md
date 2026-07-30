@@ -41,7 +41,8 @@ The real, buildable version of these tokens lives in `client/src/app/shared/styl
 | `--color-warning-bg` | `#fff3e0` | Warning banner / chip background pair for `--color-warning` |
 | `--color-warning-border` | `#ffcc80` | Warning banner border (freight-only info banner on intake form) |
 | `--color-danger` | `#e53935` | Negative stock, LOST status, in-transit-overdue KPI sub-text |
-| `--color-danger-bg` | `#ffebee` | Danger chip/row background |
+| `--color-danger-bg` | `#ffebee` | Danger **chip** background |
+| `--color-danger-bg-subtle` | `#fff8f8` | Negative-stock **row** tint (inventory table, E7-11). Deliberately distinct from `--color-danger-bg`: the prototype uses both, and `#ffebee` behind a full-width row reads as an error state rather than the quiet flag the approved screen intends |
 | `--color-success` | `#2e7d32` | ACTIVE/WON/DELIVERED status fg, positive KPI sub-text |
 | `--color-success-bg` | `#e8f5e9` | Success chip background |
 | `--color-info` | `#1565c0` | CIF service-type fg, QUALIFIED/DISPATCHED status fg, user-avatar-initials fg |
@@ -197,6 +198,17 @@ Label: `display:block;font-size:13px;font-weight:500;margin-bottom:6px`. Input/s
 
 ### Dialog
 Backdrop: `position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;padding:64px 24px;overflow-y:auto;z-index:50` (z-index `60` for the command palette, which sits above other dialogs). Panel: `background:#fff;border-radius:8px;padding:24px;width:100%;max-width:720px;box-shadow:0 8px 32px rgba(0,0,0,.2)` (max-width varies: `560px` upload dialog, `720px` WhatsApp/vendor-edit dialogs, `560px` command palette with no padding on the panel itself — the search input and results scroll inside instead).
+
+### Pill tab (added by the M5 screen pass, E7-12)
+`border:1px solid #e5e7eb; background:#fff; color:#1a2332; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:500` — active state `border-color:#2d5be3; background:#f5f8ff; color:#2d5be3`. The per-tab count stays `#6b7280` even when active.
+
+**Deliberately a second tab atom, not a variant of the underline `.tab` above.** The prototype uses two unrelated tab treatments — underline tabs on the admin master-data screen, bordered count-carrying pills on the shipments status filter. They share no declarations beyond font size, so a modifier would have had to override almost every property.
+
+### Stock level bar (added by the M5 screen pass, E7-11)
+Track `width:40px; height:6px; border-radius:3px; background:#e5e7eb; overflow:hidden`. Fill `height:6px; border-radius:3px` with width and colour bound per row. Width formula is ported verbatim from the prototype's `invRows()`: `clamp(round((qty / (reorder * 2.5)) * 100), 0, 100)`, full width when negative — plus a zero-threshold guard the prototype never needed against its mock data.
+
+### Status stepper (added by the M5 screen pass, E7-13)
+Equal-width flex columns; each step draws its own trailing connector line so the markup stays a flat loop with no separator elements. Dot `22px` circle, `border-radius:11px`, `font-size:11px; font-weight:600`; connector `height:2px`; label `13px/600`; "when" line `12px` muted. Dot/line/label colours bind per step — reached steps use `--color-accent`, unreached use `--color-border`/`--color-text-muted`.
 
 ### Sidebar nav item
 `display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer` — active state `background:#2d5be3;color:#fff`, inactive `background:transparent;color:rgba(255,255,255,.75)`, hover (inactive only) `background:#243044`.
