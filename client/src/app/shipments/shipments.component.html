@@ -1,0 +1,86 @@
+<div>
+  <div class="page-header">
+    <h1 class="page-title">Shipments</h1>
+    @if (canEdit()) {
+      <button type="button" class="btn btn-primary" (click)="openCreate()">+ Record Outbound Shipment</button>
+    }
+  </div>
+
+  <div class="card filter-bar">
+    <div class="field filter-search">
+      <label for="ship-search">Search</label>
+      <input
+        id="ship-search"
+        class="field-input"
+        [value]="search()"
+        (input)="onSearchInput($any($event.target).value)"
+        placeholder="Reference or customer"
+      />
+    </div>
+  </div>
+
+  <div class="pill-tabs">
+    @for (t of tabs(); track t.key) {
+      <div class="pill-tab" [class.pill-tab--active]="t.active" (click)="selectTab(t.key)">
+        {{ t.label }} <span class="pill-tab__count">{{ t.count }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Ref</th>
+          <th>Customer</th>
+          <th>Service Type</th>
+          <th>Stock Impact</th>
+          <th>Destination</th>
+          <th>Dispatched</th>
+          <th>Status</th>
+          <th class="align-right">Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (s of rows(); track s.id) {
+          <tr>
+            <td><a [routerLink]="['/shipments', s.id]" class="row-link">{{ s.reference }}</a></td>
+            <td>{{ s.customer }}</td>
+            <td><span class="chip" [style.background]="s.svcBg" [style.color]="s.svcFg">{{ s.svcLabel }}</span></td>
+            <td class="muted">{{ s.stockImpact }}</td>
+            <td class="muted">{{ s.destination }}</td>
+            <td class="muted">{{ s.dispatchedLabel }}</td>
+            <td><span class="chip" [style.background]="s.stBg" [style.color]="s.stFg">{{ s.statusLabel }}</span></td>
+            <td class="align-right"><strong>{{ s.valueLabel }}</strong></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (loading()) {
+      <div class="state-panel">
+        <div class="spinner"></div>
+        <span>Loading shipments…</span>
+      </div>
+    } @else if (error()) {
+      <div class="state-panel">
+        <span>{{ error() }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+      </div>
+    } @else if (noResults()) {
+      <div class="state-panel">No shipments match these filters.</div>
+    }
+  </div>
+
+  @if (!loading() && !error() && totalCount() > 0) {
+    <div class="pager">
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() <= 1" (click)="prevPage()">← Prev</button>
+      <span class="muted">Page {{ page() }} of {{ totalPages() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() >= totalPages()" (click)="nextPage()">Next →</button>
+    </div>
+  }
+
+  @if (createOpen()) {
+    <app-shipment-form-dialog (closed)="cancelCreate()" (saved)="onShipmentCreated()"></app-shipment-form-dialog>
+  }
+</div>

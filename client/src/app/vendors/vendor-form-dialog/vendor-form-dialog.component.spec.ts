@@ -17,7 +17,8 @@ const MASTER_DATA: MasterDataResponse = {
   vendorStatuses: [
     { id: 'vst-active', code: 'ACTIVE', label: 'Active', sortOrder: 1, isActive: true },
     { id: 'vst-hold', code: 'ON-HOLD', label: 'On Hold', sortOrder: 2, isActive: true }
-  ]
+  ],
+  documentTypes: []
 };
 
 const existingVendor: VendorDetail = {

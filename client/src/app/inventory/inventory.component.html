@@ -1,0 +1,156 @@
+<div>
+  <div class="page-header">
+    <h1 class="page-title">Inventory</h1>
+    <div class="toolbar">
+      @if (canEdit()) {
+        <!-- Not in the prototype (its inventory screen has no create action at all) — added for the
+             same reason VendorFormDialogComponent's create mode was: E7-01's POST endpoint exists and
+             must not be left unreachable from the UI just because the mock never wired one. -->
+        <button type="button" class="btn btn-secondary" (click)="openCreate()">+ Add Item</button>
+        <button type="button" class="btn btn-secondary" (click)="openInboundFromHeader()">+ Record Inbound Stock</button>
+      }
+      <a class="btn btn-primary" routerLink="/shipments">+ Record Shipment</a>
+    </div>
+  </div>
+
+  @if (showLowStockBanner()) {
+    <div class="banner-warning inv-banner">
+      <strong>{{ bannerText() }}</strong>
+      <div class="inv-banner-spacer"></div>
+      <span class="inv-banner-action" (click)="filterLowStock()">Show only low stock</span>
+    </div>
+  }
+
+  <div class="inv-stats">
+    <div class="stat-tile">
+      <div class="stat-tile__label">On-Hand Value</div>
+      <div class="stat-tile__value">{{ onHandValueLabel() }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile__label">Distinct Items</div>
+      <div class="stat-tile__value">{{ itemCountLabel() }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile__label">Below Reorder</div>
+      <div class="stat-tile__value" style="color: var(--color-warning)">{{ belowReorderLabel() }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile__label">Negative Stock</div>
+      <div class="stat-tile__value" style="color: var(--color-danger)">{{ negativeStockLabel() }}</div>
+    </div>
+  </div>
+
+  <div class="card filter-bar">
+    <div class="field filter-search">
+      <label for="inv-search">Search</label>
+      <input
+        id="inv-search"
+        class="field-input"
+        [value]="search()"
+        (input)="onSearchInput($any($event.target).value)"
+        placeholder="Item or SKU"
+      />
+    </div>
+    <div class="field">
+      <label for="inv-cat">Category</label>
+      <select id="inv-cat" class="field-input" [value]="categoryId()" (change)="setCategory($any($event.target).value)">
+        <option value="">All categories</option>
+        @for (opt of categoryOptions(); track opt.id) {
+          <option [value]="opt.id">{{ opt.name }}</option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="inv-level">Stock Level</label>
+      <select id="inv-level" class="field-input" [value]="stockLevel()" (change)="setStockLevel($any($event.target).value)">
+        <option value="">All stock levels</option>
+        <option value="LOW">Low or negative</option>
+        <option value="HEALTHY">Healthy</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Category</th>
+          <th>Source Vendor</th>
+          <th class="align-right">On Hand</th>
+          <th class="align-right">Reorder At</th>
+          <th>Level</th>
+          <th class="align-right">Stock Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (r of rows(); track r.id) {
+          <tr [style.background]="r.rowBg">
+            <td>
+              <div class="row-name">{{ r.name }}</div>
+              <div class="row-sub">{{ r.skuUnitLabel }}</div>
+              <div class="row-actions">
+                @if (canEdit()) {
+                  <button type="button" class="row-action-link" (click)="openInboundForRow(r)">+ Inbound</button>
+                  <button type="button" class="row-action-link" (click)="openEdit(r)">Edit</button>
+                }
+              </div>
+            </td>
+            <td class="muted">{{ r.categoryName }}</td>
+            <td class="muted">{{ r.vendorName }}</td>
+            <td class="align-right"><strong [style.color]="r.qtyColor">{{ r.qtyLabel }}</strong></td>
+            <td class="align-right muted">{{ r.reorderLabel }}</td>
+            <td>
+              <div class="level-cell">
+                <div class="stock-bar">
+                  <div class="stock-bar__fill" [style.width.%]="r.barWidth" [style.background]="r.barColor"></div>
+                </div>
+                <span class="chip" [style.background]="r.chipBg" [style.color]="r.chipFg">{{ r.level }}</span>
+              </div>
+            </td>
+            <td class="align-right"><strong>{{ r.valueLabel }}</strong></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (loading()) {
+      <div class="state-panel">
+        <div class="spinner"></div>
+        <span>Loading inventory…</span>
+      </div>
+    } @else if (error()) {
+      <div class="state-panel">
+        <span>{{ error() }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+      </div>
+    } @else if (noResults()) {
+      <div class="state-panel">No inventory items match these filters.</div>
+    }
+  </div>
+
+  @if (!loading() && !error() && totalCount() > 0) {
+    <div class="pager">
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() <= 1" (click)="prevPage()">← Prev</button>
+      <span class="muted">Page {{ page() }} of {{ totalPages() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() >= totalPages()" (click)="nextPage()">Next →</button>
+    </div>
+  }
+
+  @if (createOpen()) {
+    <app-inventory-item-form-dialog (closed)="cancelCreate()" (saved)="onItemCreated($event)"></app-inventory-item-form-dialog>
+  }
+
+  @if (editItem(); as ei) {
+    <app-inventory-item-form-dialog [item]="ei" (closed)="cancelEdit()" (saved)="onItemSaved($event)"></app-inventory-item-form-dialog>
+  }
+
+  @if (inboundOpen()) {
+    <app-inbound-dialog
+      [presetItem]="inboundPresetItem()"
+      [candidateItems]="inboundCandidates()"
+      (closed)="cancelInbound()"
+      (recorded)="onInboundRecorded($event)"
+    ></app-inbound-dialog>
+  }
+</div>

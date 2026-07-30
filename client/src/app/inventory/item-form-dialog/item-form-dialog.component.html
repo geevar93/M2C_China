@@ -1,0 +1,89 @@
+<div class="dialog-backdrop">
+  <div class="dialog-panel">
+    <div class="ifd-header">
+      <div>
+        <div class="section-title">{{ dialogTitle() }}</div>
+        <div class="muted">Changes are time-stamped in the audit trail.</div>
+      </div>
+      <div class="dialog-close" (click)="cancel()">✕</div>
+    </div>
+
+    @if (error()) {
+      <div class="field-error ifd-banner" role="alert">{{ error() }}</div>
+    }
+
+    <div class="ifd-grid-2">
+      <div class="field">
+        <label for="if-name">Item Name</label>
+        <input id="if-name" class="field-input" [value]="name()" (input)="name.set($any($event.target).value)" />
+      </div>
+      <div class="field">
+        <label for="if-sku">SKU <span class="muted">(optional)</span></label>
+        <input id="if-sku" class="field-input" [value]="sku()" (input)="sku.set($any($event.target).value)" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="if-desc">Description <span class="muted">(optional)</span></label>
+      <textarea id="if-desc" class="field-input" rows="2" [value]="description()" (input)="description.set($any($event.target).value)"></textarea>
+    </div>
+
+    <div class="ifd-grid-2">
+      <div class="field">
+        <label for="if-cat">Category</label>
+        <select id="if-cat" class="field-input" [value]="categoryId()" (change)="categoryId.set($any($event.target).value)">
+          <option value="">Choose a category</option>
+          @for (opt of categoryOptions(); track opt.id) {
+            <option [value]="opt.id">{{ opt.name }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="if-vendor">Source Vendor <span class="muted">(optional)</span></label>
+        <select id="if-vendor" class="field-input" [value]="vendorId()" (change)="vendorId.set($any($event.target).value)">
+          <option value="">No vendor</option>
+          @for (opt of vendorOptions(); track opt.id) {
+            <option [value]="opt.id">{{ opt.name }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <div class="ifd-grid-3">
+      <div class="field">
+        <label for="if-unit">Unit <span class="muted">(e.g. pcs, kg, box)</span></label>
+        <input id="if-unit" class="field-input" [value]="unit()" (input)="unit.set($any($event.target).value)" />
+      </div>
+      <div class="field">
+        <label for="if-reorder">Reorder Threshold</label>
+        <input id="if-reorder" class="field-input" inputmode="decimal" [value]="reorderThreshold()" (input)="reorderThreshold.set($any($event.target).value)" />
+      </div>
+      <div class="field">
+        <label for="if-cost">Unit Cost <span class="muted">(optional)</span></label>
+        <input id="if-cost" class="field-input" inputmode="decimal" [value]="unitCost()" (input)="unitCost.set($any($event.target).value)" />
+      </div>
+    </div>
+
+    @if (isEdit()) {
+      <!-- D-42: on-hand quantity is READ-ONLY on edit — there is no editable input here by design. -->
+      <div class="field">
+        <label>On Hand</label>
+        <div class="field-static" id="if-onhand-static">{{ onHandDisplay() }}</div>
+        <div class="field-hint">Stock only changes via a recorded inbound entry or a shipment — it can't be edited directly here.</div>
+      </div>
+    } @else {
+      <div class="field">
+        <label for="if-onhand">Opening On Hand Quantity <span class="muted">(optional, defaults to 0)</span></label>
+        <input id="if-onhand" class="field-input" inputmode="decimal" [value]="onHandQty()" (input)="onHandQty.set($any($event.target).value)" />
+        <div class="field-hint">Settable once, here. After creation, stock only moves via an inbound entry or a shipment.</div>
+      </div>
+    }
+
+    <div class="ifd-actions">
+      <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        {{ saving() ? 'Saving…' : 'Save Item' }}
+      </button>
+    </div>
+  </div>
+</div>

@@ -15,10 +15,19 @@ export interface ServiceTypeColor extends StatusColor {
  * (Source/Sourcing Ops Platform.dc.html, ~line 1233). Do not edit these values
  * without updating docs/DESIGN_TOKENS.md §2 first — this is the single source
  * of truth for service-type colours; no screen may redefine it locally.
+ *
+ * Keyed by the real API `serviceType.code` (`CIF` / `FREIGHT_ONLY`), NOT the
+ * display label. The prototype's own `SVC` constant was keyed by its label
+ * `Freight-only` — faithful to the prototype, but wrong once ported against
+ * the live API, whose `code` is `FREIGHT_ONLY` and whose `label` is
+ * `Freight-only`. Every caller passes `code`, so a label-keyed map silently
+ * fell through to the grey default for every freight-only row. Fixed as part
+ * of the M5 frontend pass's live-API diff; the rendered colour/label output
+ * is unchanged, only the lookup key.
  */
 const SVC: Record<string, ServiceTypeColor> = {
   CIF: { label: 'CIF', bg: '#e3f2fd', fg: '#1565c0' },
-  'Freight-only': { label: 'FREIGHT-ONLY', bg: '#fff3e0', fg: '#f57f17' }
+  FREIGHT_ONLY: { label: 'FREIGHT-ONLY', bg: '#fff3e0', fg: '#f57f17' }
 };
 
 /**
@@ -61,7 +70,7 @@ const ST: Record<string, StatusColor> = {
  */
 @Injectable({ providedIn: 'root' })
 export class StatusStyleService {
-  /** Colour + label for a service-type code (`CIF`, `Freight-only`). */
+  /** Colour + label for a service-type API `code` (`CIF`, `FREIGHT_ONLY`). */
   serviceType(code: string | null | undefined): ServiceTypeColor {
     return (code && SVC[code]) || { label: code ?? '—', bg: '#e5e7eb', fg: '#374151' };
   }

@@ -1,0 +1,148 @@
+<div>
+  <a routerLink="/shipments" class="back-link">← Back to shipments</a>
+
+  @if (loading()) {
+    <div class="state-panel">
+      <div class="spinner"></div>
+      <span>Loading shipment…</span>
+    </div>
+  } @else if (error()) {
+    <div class="state-panel">
+      <span>{{ error() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+    </div>
+  } @else {
+    @if (shipment(); as s) {
+      <div class="sd-head">
+        <div>
+          <h1 class="sd-title">
+            {{ s.reference }}
+            <span class="chip" [style.background]="svcChip().bg" [style.color]="svcChip().fg">{{ svcChip().label }}</span>
+            <span class="chip" [style.background]="statusChip().bg" [style.color]="statusChip().fg">{{ s.status.label }}</span>
+          </h1>
+          <div class="sd-sub">{{ subline() }}</div>
+        </div>
+        <div class="sd-actions">
+          @if (canEdit()) {
+            <button
+              type="button"
+              class="btn btn-primary"
+              [disabled]="!canAdvance() || advancing()"
+              (click)="advanceStatus()"
+            >
+              {{ advancing() ? 'Updating…' : advanceLabel() }}
+            </button>
+            <button type="button" class="btn btn-secondary" (click)="openUpload()">Attach Document</button>
+            <button type="button" class="btn btn-secondary" (click)="openEdit()">Edit</button>
+          }
+        </div>
+      </div>
+
+      @if (advanceError()) {
+        <div class="field-error sd-banner" role="alert">{{ advanceError() }}</div>
+      }
+      @if (openError()) {
+        <div class="field-error sd-banner" role="alert">{{ openError() }}</div>
+      }
+
+      <div class="card sd-stepper-card">
+        <div class="stepper">
+          @for (st of steps(); track st.id) {
+            <div class="stepper__step">
+              <div class="stepper__row">
+                <span
+                  class="stepper__dot"
+                  [style.background]="st.dotBg"
+                  [style.color]="st.dotFg"
+                  [style.border-color]="st.dotBorder"
+                >{{ st.mark }}</span>
+                <span class="stepper__line" [style.background]="st.lineColor"></span>
+              </div>
+              <div class="stepper__label" [style.color]="st.labelColor">{{ st.label }}</div>
+              <div class="stepper__when">{{ st.when }}</div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="sd-grid">
+        <div class="card">
+          <div class="section-title">Shipment Lines</div>
+          @if (noLines()) {
+            <div class="state-panel">Freight-only shipment — no inventory lines, no stock movement.</div>
+          } @else {
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th class="align-right">Qty</th>
+                    <th class="align-right">Unit Cost</th>
+                    <th class="align-right">Line Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (l of lines(); track l.id) {
+                    <tr>
+                      <td>
+                        <div>{{ l.name }}</div>
+                        <div class="row-sub">{{ l.meta }}</div>
+                      </td>
+                      <td class="align-right">{{ l.qty }}</td>
+                      <td class="align-right muted">{{ l.unitCost }}</td>
+                      <td class="align-right"><strong>{{ l.lineTotal }}</strong></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+          <div class="sd-totals">
+            <span class="muted">Freight &amp; handling <strong class="sd-totals-value">{{ freightLabel() }}</strong></span>
+            <span class="muted">Shipment value <strong class="sd-totals-value sd-totals-value--lg">{{ valueLabel() }}</strong></span>
+          </div>
+        </div>
+
+        <div class="sd-side">
+          <div class="card">
+            <div class="section-title">Details</div>
+            @for (f of fields(); track f.k) {
+              <div class="sd-field-row">
+                <span class="muted">{{ f.k }}</span><span class="sd-field-value">{{ f.v }}</span>
+              </div>
+            }
+          </div>
+          <div class="card">
+            <div class="section-title">Reference Documents</div>
+            @for (d of docs(); track d.id) {
+              <div class="sd-doc-row">
+                <span class="sd-doc-icon">📄</span>
+                <div class="sd-doc-info">
+                  <div class="sd-doc-name">{{ d.fileName }}</div>
+                  <div class="muted">{{ d.meta }}</div>
+                </div>
+                <span class="sd-doc-open" [class.sd-doc-open--busy]="openingDocId() === d.id" (click)="openDocument(d)">
+                  {{ openingDocId() === d.id ? 'Opening…' : 'Open' }}
+                </span>
+              </div>
+            }
+            @if (docs().length === 0) {
+              <div class="state-panel">No documents attached yet.</div>
+            }
+          </div>
+        </div>
+      </div>
+
+      @if (editOpen()) {
+        <app-shipment-form-dialog [shipment]="s" (closed)="cancelEdit()" (saved)="onShipmentSaved($event)"></app-shipment-form-dialog>
+      }
+      @if (uploadOpen()) {
+        <app-shipment-document-upload-dialog
+          [shipmentId]="s.id"
+          (closed)="cancelUpload()"
+          (saved)="onDocumentUploaded($event)"
+        ></app-shipment-document-upload-dialog>
+      }
+    }
+  }
+</div>

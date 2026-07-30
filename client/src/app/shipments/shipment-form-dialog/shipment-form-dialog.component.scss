@@ -1,0 +1,87 @@
+.sfd-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-8);
+}
+
+.dialog-close {
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--color-text-muted);
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.sfd-banner {
+  margin-bottom: var(--space-8);
+}
+
+.sfd-stock-warning {
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  padding: var(--space-8);
+  margin-bottom: var(--space-8);
+
+  &__title {
+    font-weight: 600;
+    margin-bottom: var(--space-4);
+    color: var(--color-danger);
+  }
+}
+
+.sfd-stock-list {
+  margin: 0 0 var(--space-6);
+  padding-left: var(--space-8);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.sfd-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-8);
+}
+
+.sfd-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-8);
+}
+
+.sfd-line-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  align-items: center;
+}
+
+.sfd-line-qty {
+  text-align: right;
+}
+
+.sfd-freight-note {
+  font-size: 13px;
+  margin-bottom: var(--space-8);
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.field-static {
+  padding: 9px 12px;
+  font-size: 14px;
+}
+
+.sfd-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  margin-top: var(--space-8);
+}

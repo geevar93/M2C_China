@@ -16,11 +16,12 @@
  * aggregate (`invoiceStatuses` / `serviceTypes`) and MUST be resolved through
  * `MasterDataService` by the components that consume this file — never
  * hard-coded. This file only supplies the code values (`DRAFT`/`ISSUED`/
- * `PAID`/`CANCELLED`, `CIF`/`Freight-only`) that get matched against the real
+ * `PAID`/`CANCELLED`, `CIF`/`FREIGHT_ONLY` — the real API `code`, not the
+ * `Freight-only` display label) that get matched against the real
  * master-data rows; it does not define labels or colours for them.
  */
 
-export type MockServiceTypeCode = 'CIF' | 'Freight-only';
+export type MockServiceTypeCode = 'CIF' | 'FREIGHT_ONLY';
 export type MockInvoiceStatusCode = 'DRAFT' | 'ISSUED' | 'PAID' | 'CANCELLED';
 
 export interface MockInvoiceCustomer {
@@ -147,7 +148,7 @@ export const MOCK_INVOICES: MockInvoice[] = [
     id: 'inv-0002',
     invoiceNumber: 'INV-PREVIEW-0002',
     customerId: 'cust-shah-overseas',
-    serviceTypeCode: 'Freight-only',
+    serviceTypeCode: 'FREIGHT_ONLY',
     statusCode: 'DRAFT',
     issueDate: '2026-07-22',
     lines: [{ description: 'Freight forwarding — Handbags shipment', amount: 68000 }],
@@ -172,7 +173,7 @@ export const MOCK_INVOICES: MockInvoice[] = [
     id: 'inv-0004',
     invoiceNumber: 'INV-PREVIEW-0004',
     customerId: 'cust-global-trims',
-    serviceTypeCode: 'Freight-only',
+    serviceTypeCode: 'FREIGHT_ONLY',
     statusCode: 'CANCELLED',
     issueDate: '2026-05-30',
     lines: [{ description: 'Freight forwarding — cancelled order', amount: 52000 }],
@@ -210,7 +211,7 @@ export const MOCK_INVOICES: MockInvoice[] = [
     id: 'inv-0007',
     invoiceNumber: 'INV-PREVIEW-0007',
     customerId: 'cust-zenith-leather',
-    serviceTypeCode: 'Freight-only',
+    serviceTypeCode: 'FREIGHT_ONLY',
     statusCode: 'DRAFT',
     issueDate: '2026-07-24',
     lines: [{ description: 'Freight forwarding — Bags & wallets shipment', amount: 39000 }],
@@ -220,7 +221,7 @@ export const MOCK_INVOICES: MockInvoice[] = [
     id: 'inv-0008',
     invoiceNumber: 'INV-PREVIEW-0008',
     customerId: 'cust-krishna-handicrafts',
-    serviceTypeCode: 'Freight-only',
+    serviceTypeCode: 'FREIGHT_ONLY',
     statusCode: 'ISSUED',
     issueDate: '2026-07-05',
     lines: [{ description: 'Freight forwarding — Handicrafts export batch', amount: 58500 }],

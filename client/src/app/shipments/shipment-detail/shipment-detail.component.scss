@@ -1,0 +1,146 @@
+.back-link {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.sd-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin: 6px 0 var(--space-9);
+  gap: var(--space-8);
+}
+
+.sd-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.sd-sub {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
+}
+
+.sd-actions {
+  display: flex;
+  gap: var(--space-4);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
+.sd-banner {
+  margin-bottom: var(--space-8);
+}
+
+.sd-stepper-card {
+  margin-bottom: var(--space-8);
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: var(--space-8);
+}
+
+.sd-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--space-8);
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sd-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.sd-totals {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-9);
+  padding-top: var(--space-8);
+  font-size: 14px;
+}
+
+.sd-totals-value {
+  color: var(--color-text);
+
+  &--lg {
+    font-size: 16px;
+  }
+}
+
+.sd-field-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-track);
+  font-size: 13px;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.sd-field-value {
+  font-weight: 500;
+  text-align: right;
+}
+
+.sd-doc-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--color-track);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.sd-doc-icon {
+  font-size: 16px;
+}
+
+.sd-doc-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sd-doc-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.sd-doc-open {
+  font-size: 13px;
+  color: var(--color-accent);
+  cursor: pointer;
+
+  &--busy {
+    cursor: default;
+    opacity: 0.6;
+  }
+}
+
+.row-sub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}

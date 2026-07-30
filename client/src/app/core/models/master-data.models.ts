@@ -26,6 +26,13 @@ export interface CategoryRow {
 /**
  * A `code`/`label` lookup row — the shape shared by `serviceTypes` and every
  * `*Statuses` collection (TECH_SPEC §6).
+ *
+ * `scope` (D-34/D-44/D-45) is a trailing nullable field the API serialises
+ * on every collection: `null` for everything except `documentTypes`, where
+ * it is `"Vendor"` or `"Shipment"` — the discriminator that keeps a vendor
+ * upload dropdown from offering a shipment-only document type and vice
+ * versa. Trailing and nullable so this one shape still fits every
+ * collection without forking `MasterDataService`'s generic machinery.
  */
 export interface LookupRow {
   id: string;
@@ -33,6 +40,7 @@ export interface LookupRow {
   label: string;
   sortOrder: number;
   isActive: boolean;
+  scope?: string | null;
 }
 
 /** The full aggregate response body. One HTTP call backs every lookup in the app. */
@@ -43,6 +51,7 @@ export interface MasterDataResponse {
   shipmentStatuses: LookupRow[];
   invoiceStatuses: LookupRow[];
   vendorStatuses: LookupRow[];
+  documentTypes: LookupRow[];
 }
 
 /** Every key of `MasterDataResponse` — used to keep `MasterDataService`'s per-collection helpers generic. */

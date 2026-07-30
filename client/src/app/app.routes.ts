@@ -94,6 +94,13 @@ export const routes: Routes = [
         data: { title: 'Shipments', permission: 'Shipments.View' },
         loadComponent: () => import('./shipments/shipments.component').then((m) => m.ShipmentsComponent)
       },
+      {
+        path: 'shipments/:id',
+        canActivate: [permissionGuard],
+        data: { title: 'Shipment', permission: 'Shipments.View' },
+        loadComponent: () =>
+          import('./shipments/shipment-detail/shipment-detail.component').then((m) => m.ShipmentDetailComponent)
+      },
       // Invoicing (E0-05). DESIGN PREVIEW ON MOCKED DATA — there is no
       // invoicing backend (no InvoicesController, no entity, no migration;
       // epic E8 is not started). E8-09/E8-10, the live implementation, stay

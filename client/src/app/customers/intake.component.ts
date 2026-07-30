@@ -26,7 +26,7 @@ const SERVICE_TYPE_COPY: Record<string, ServiceTypeCardCopy> = {
     description:
       'We source from our vendor roster and deliver landed goods. Platform holds product, vendor, pricing, insurance and landed cost.'
   },
-  'Freight-only': {
+  FREIGHT_ONLY: {
     headline: 'Transport only',
     description: 'Customer already bought the goods elsewhere. Platform holds shipment details, external purchase reference and freight fee.'
   }
@@ -181,7 +181,7 @@ export class CustomerIntakeComponent {
   }
 
   get showExtRef(): boolean {
-    return this.selectedServiceTypeRow()?.code === 'Freight-only';
+    return this.selectedServiceTypeRow()?.code === 'FREIGHT_ONLY';
   }
 
   get formMeta(): string {

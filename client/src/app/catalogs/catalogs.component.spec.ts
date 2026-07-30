@@ -17,7 +17,8 @@ const MASTER_DATA: MasterDataResponse = {
   leadStatuses: [],
   shipmentStatuses: [],
   invoiceStatuses: [],
-  vendorStatuses: []
+  vendorStatuses: [],
+  documentTypes: []
 };
 
 function section(overrides: Partial<CatalogSection> = {}): CatalogSection {

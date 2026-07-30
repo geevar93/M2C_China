@@ -13,7 +13,7 @@ const MASTER_DATA: MasterDataResponse = {
   ],
   serviceTypes: [
     { id: 'svc-cif', code: 'CIF', label: 'CIF', sortOrder: 1, isActive: true },
-    { id: 'svc-freight', code: 'Freight-only', label: 'Freight-only', sortOrder: 2, isActive: true }
+    { id: 'svc-freight', code: 'FREIGHT_ONLY', label: 'Freight-only', sortOrder: 2, isActive: true }
   ],
   leadStatuses: [
     { id: 'lead-new', code: 'NEW', label: 'New', sortOrder: 1, isActive: true },
@@ -21,7 +21,8 @@ const MASTER_DATA: MasterDataResponse = {
   ],
   shipmentStatuses: [],
   invoiceStatuses: [],
-  vendorStatuses: []
+  vendorStatuses: [],
+  documentTypes: []
 };
 
 const existingCustomer: CustomerListItem = {

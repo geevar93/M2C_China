@@ -17,7 +17,8 @@ const MASTER_DATA: MasterDataResponse = {
   ],
   shipmentStatuses: [],
   invoiceStatuses: [],
-  vendorStatuses: []
+  vendorStatuses: [],
+  documentTypes: []
 };
 
 const detail: CustomerDetail = {

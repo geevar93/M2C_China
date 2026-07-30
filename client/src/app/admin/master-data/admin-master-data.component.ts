@@ -6,6 +6,7 @@ import {
   COLLECTION_KEYS,
   COLLECTION_LABELS,
   CategoryRow,
+  DOCUMENT_TYPE_SCOPES,
   LookupRow,
   MasterDataAggregate,
   MasterDataCollectionKey,
@@ -28,6 +29,18 @@ import {
  * Reorder is Move-up/Move-down, not drag-and-drop (no new library — C1 /
  * TECH_SPEC §11 forbid one, and buttons are also what actually works at
  * phone width, E12-01).
+ *
+ * N-20(b): the `documentTypes` tab additionally gets a **Scope** selector
+ * (Vendor/Shipment), shown for no other collection since the API confirms
+ * `scope` is `null` everywhere else. Without this selector every new
+ * document type silently defaults to `Vendor` server-side and can never back
+ * a shipment upload — the same class of quiet configurability violation
+ * DR-6 exists to catch, and D-26 already had to close once for this exact
+ * screen. `scope` follows the same disabled-on-edit treatment as `code`
+ * (D-12): confirmed against the backend's `MasterDataService.UpdateLookupAsync`
+ * that `PUT` never applies a scope change even if one is sent, so the form
+ * renders it read-only on edit rather than offering a control that silently
+ * does nothing.
  */
 @Component({
   selector: 'app-admin-master-data',
@@ -51,6 +64,9 @@ export class AdminMasterDataComponent {
   private readonly aggregate = signal<MasterDataAggregate | null>(null);
 
   readonly isCategoryTab = computed(() => isCategoryCollection(this.activeCollection()));
+  /** Only `documentTypes` carries a `scope` — every other collection is confirmed `null` live. */
+  readonly isDocumentTypeTab = computed(() => this.activeCollection() === 'documentTypes');
+  readonly documentTypeScopes = DOCUMENT_TYPE_SCOPES;
 
   /** Rows of the active collection, filtered by "Show retired" and sorted by
    * `sortOrder`. Retired rows are never silently hidden — dimmed via
@@ -76,6 +92,8 @@ export class AdminMasterDataComponent {
   readonly formName = signal('');
   readonly formCode = signal('');
   readonly formLabel = signal('');
+  /** Only meaningful when `isDocumentTypeTab()` — read-only on edit, see class doc (N-20(b), D-12). */
+  readonly formScope = signal<string>(DOCUMENT_TYPE_SCOPES[0]);
   readonly formSaving = signal(false);
   readonly formError = signal<string | null>(null);
 
@@ -106,6 +124,14 @@ export class AdminMasterDataComponent {
 
   lookupLabel(row: MasterDataRow): string {
     return (row as LookupRow).label;
+  }
+
+  lookupScope(row: MasterDataRow): string {
+    return (row as LookupRow).scope ?? DOCUMENT_TYPE_SCOPES[0];
+  }
+
+  setScope(value: string): void {
+    this.formScope.set(value);
   }
 
   // ---- Reorder (Move up/down buttons — see class doc for why not drag-and-drop) ----
@@ -227,6 +253,7 @@ export class AdminMasterDataComponent {
     this.formName.set('');
     this.formCode.set('');
     this.formLabel.set('');
+    this.formScope.set(DOCUMENT_TYPE_SCOPES[0]);
     this.formError.set(null);
     this.formOpen.set(true);
   }
@@ -239,10 +266,12 @@ export class AdminMasterDataComponent {
       this.formName.set(this.categoryName(row));
       this.formCode.set('');
       this.formLabel.set('');
+      this.formScope.set(DOCUMENT_TYPE_SCOPES[0]);
     } else {
       this.formName.set('');
       this.formCode.set(this.lookupCode(row));
       this.formLabel.set(this.lookupLabel(row));
+      this.formScope.set(this.lookupScope(row));
     }
     this.formOpen.set(true);
   }
@@ -272,10 +301,13 @@ export class AdminMasterDataComponent {
       this.formError.set('Code and label are required.');
       return;
     }
-    this.saveForm(key, { code, label });
+    // scope is create-only (D-12-style: the backend ignores it on update) —
+    // only ever sent when creating a documentTypes row, per the class doc.
+    const scope = this.isDocumentTypeTab() && this.formMode() === 'create' ? this.formScope() : undefined;
+    this.saveForm(key, { code, label, ...(scope ? { scope } : {}) });
   }
 
-  private saveForm(key: MasterDataCollectionKey, request: { name?: string; code?: string; label?: string }): void {
+  private saveForm(key: MasterDataCollectionKey, request: { name?: string; code?: string; label?: string; scope?: string }): void {
     this.formSaving.set(true);
     this.formError.set(null);
     const editing = this.formEditingRow();

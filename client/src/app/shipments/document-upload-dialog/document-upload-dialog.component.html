@@ -1,0 +1,38 @@
+<div class="dialog-backdrop">
+  <div class="dialog-panel">
+    <div class="dud-header">
+      <div class="section-title">Attach Document</div>
+      <div class="dialog-close" (click)="cancel()">✕</div>
+    </div>
+
+    @if (error()) {
+      <div class="field-error dud-banner" role="alert">{{ error() }}</div>
+    }
+
+    <div class="field">
+      <label for="dud-type">Document Type</label>
+      <select id="dud-type" class="field-input" [value]="documentTypeId()" (change)="documentTypeId.set($any($event.target).value)">
+        <option value="">Choose a document type</option>
+        @for (opt of documentTypeOptions(); track opt.id) {
+          <option [value]="opt.id">{{ opt.label }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="dud-file">File</label>
+      <input id="dud-file" type="file" (change)="onFileSelected($event)" />
+    </div>
+
+    @if (selectedFile(); as f) {
+      <div class="muted">{{ f.name }}</div>
+    }
+
+    <div class="dud-actions">
+      <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        {{ saving() ? 'Uploading…' : 'Upload' }}
+      </button>
+    </div>
+  </div>
+</div>

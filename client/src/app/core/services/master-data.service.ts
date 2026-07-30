@@ -170,6 +170,34 @@ export class MasterDataService {
     return this.byIdOf('vendorStatuses', id);
   }
 
+  // ---- Document types (N-20(a)/(c); D-34/D-44/D-45) ----------------------
+
+  /**
+   * Active document-type rows only, sorted by `sortOrder`, filtered to the
+   * given `scope` — the API serialises `documentTypes` rows for BOTH
+   * `Vendor` and `Shipment` scopes in one collection, so an unscoped caller
+   * would otherwise get a vendor document type back for a shipment upload
+   * dropdown (or vice versa) and offer a type that can never actually attach.
+   *
+   * `scope` is deliberately a **required** parameter, not optional/defaulted,
+   * unlike every other `*Options()` accessor above. ACTION_PLAN N-20(b)
+   * exists precisely because a document type silently defaults to `Vendor`
+   * server-side when a caller omits scope on create — an unscoped accessor
+   * here would let the frontend repeat that same silent-default mistake one
+   * layer up, for a caller who simply forgot to ask. Making the parameter
+   * required and narrowly typed (`'Vendor' | 'Shipment'`) means a screen
+   * cannot compile a call that leaves it out; a caller is forced to state
+   * which module it is populating a dropdown for.
+   */
+  documentTypeOptions(scope: 'Vendor' | 'Shipment'): Observable<LookupRow[]> {
+    return this.optionsOf('documentTypes').pipe(map((rows) => rows.filter((r) => r.scope === scope)));
+  }
+
+  /** Resolves a document-type id to its row, retired included, scope included as-is on the row. */
+  documentTypeById(id: string | null | undefined): Observable<LookupRow | undefined> {
+    return this.byIdOf('documentTypes', id);
+  }
+
   // ---- Internals ----------------------------------------------------------
 
   private load(): Observable<MasterDataResponse> {

@@ -1,0 +1,79 @@
+.ifd-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-8);
+}
+
+.dialog-close {
+  font-size: 16px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 var(--space-2);
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.ifd-banner {
+  margin-bottom: var(--space-8);
+}
+
+.ifd-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+
+  .field {
+    margin-bottom: 0;
+  }
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ifd-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+
+  .field {
+    margin-bottom: 0;
+  }
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+// Read-only on-hand display in edit mode (D-42) — styled like a disabled
+// field-input so it reads consistently with the rest of the form despite not
+// being an actual input.
+.field-static {
+  width: 100%;
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  background: var(--color-page-bg);
+  color: var(--color-text-muted);
+}
+
+.ifd-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  justify-content: flex-end;
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-8);
+}

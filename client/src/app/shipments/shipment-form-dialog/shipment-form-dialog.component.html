@@ -1,0 +1,141 @@
+<div class="dialog-backdrop">
+  <div class="dialog-panel">
+    <div class="sfd-header">
+      <div class="section-title">{{ dialogTitle() }}</div>
+      <div class="dialog-close" (click)="cancel()">✕</div>
+    </div>
+
+    @if (error()) {
+      <div class="field-error sfd-banner" role="alert">{{ error() }}</div>
+    }
+
+    @if (insufficientStock(); as items) {
+      <div class="sfd-stock-warning" role="alert">
+        <div class="sfd-stock-warning__title">This would drive the following items negative:</div>
+        <ul class="sfd-stock-list">
+          @for (i of items; track i.inventoryItemId) {
+            <li>{{ i.itemName }} ({{ i.sku ?? '—' }}) — requested {{ i.requestedQty }}, available {{ i.availableQty }}</li>
+          }
+        </ul>
+        <button type="button" class="btn btn-secondary btn-sm" [disabled]="saving()" (click)="confirmOverride()">
+          Record Anyway
+        </button>
+      </div>
+    }
+
+    <div class="sfd-grid-2">
+      <div class="field">
+        <label for="sf-customer">Customer</label>
+        <select id="sf-customer" class="field-input" [value]="customerId()" (change)="customerId.set($any($event.target).value)">
+          <option value="">Choose a customer</option>
+          @for (c of customerOptions(); track c.id) {
+            <option [value]="c.id">{{ c.name }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="sf-destination">Destination</label>
+        <input id="sf-destination" class="field-input" [value]="destination()" (input)="destination.set($any($event.target).value)" />
+      </div>
+    </div>
+
+    <div class="sfd-grid-3">
+      <div class="field">
+        <label for="sf-service">Service Type</label>
+        <select id="sf-service" class="field-input" [value]="serviceTypeId()" (change)="serviceTypeId.set($any($event.target).value)">
+          <option value="">Choose a service type</option>
+          @for (opt of serviceTypeOptions(); track opt.id) {
+            <option [value]="opt.id">{{ opt.label }}</option>
+          }
+        </select>
+      </div>
+      @if (isEdit()) {
+        <div class="field">
+          <label>Status <span class="muted">(cannot be changed here)</span></label>
+          <div class="field-static">{{ shipment?.status?.label }}</div>
+        </div>
+      } @else {
+        <div class="field">
+          <label for="sf-status">Initial Status</label>
+          <select id="sf-status" class="field-input" [value]="statusId()" (change)="statusId.set($any($event.target).value)">
+            <option value="">Choose a status</option>
+            @for (opt of shipmentStatusOptions(); track opt.id) {
+              <option [value]="opt.id">{{ opt.label }}</option>
+            }
+          </select>
+        </div>
+      }
+      <div class="field">
+        <label for="sf-dispatch">Dispatch Date</label>
+        <input id="sf-dispatch" type="date" class="field-input" [value]="dispatchDate()" (input)="dispatchDate.set($any($event.target).value)" />
+      </div>
+    </div>
+
+    <div class="sfd-grid-3">
+      <div class="field">
+        <label for="sf-mode">Mode / Port</label>
+        <input id="sf-mode" class="field-input" [value]="mode()" (input)="mode.set($any($event.target).value)" />
+      </div>
+      <div class="field">
+        <label for="sf-awb">AWB / BL</label>
+        <input id="sf-awb" class="field-input" [value]="awbOrBl()" (input)="awbOrBl.set($any($event.target).value)" />
+      </div>
+      <div class="field">
+        <label for="sf-eta">ETA</label>
+        <input id="sf-eta" type="date" class="field-input" [value]="eta()" (input)="eta.set($any($event.target).value)" />
+      </div>
+    </div>
+
+    <div class="sfd-grid-2">
+      <div class="field">
+        <label for="sf-freight">Freight &amp; Handling</label>
+        <input id="sf-freight" inputmode="decimal" class="field-input" [value]="freightCost()" (input)="freightCost.set($any($event.target).value)" />
+      </div>
+      <div class="field">
+        <label for="sf-total">Shipment Value <span class="muted">(only when there are no lines)</span></label>
+        <input
+          id="sf-total"
+          inputmode="decimal"
+          class="field-input"
+          [disabled]="!totalValueEditable()"
+          [value]="totalValue()"
+          (input)="totalValue.set($any($event.target).value)"
+        />
+      </div>
+    </div>
+
+    @if (showsLines()) {
+      <div class="field">
+        <label>Shipment Lines</label>
+        @for (row of lines(); track $index) {
+          <div class="sfd-line-row">
+            <select class="field-input" [value]="row.inventoryItemId" (change)="setLineItem($index, $any($event.target).value)">
+              <option value="">Choose an item</option>
+              @for (item of inventoryOptions(); track item.id) {
+                <option [value]="item.id">{{ item.name }}{{ item.sku ? ' · ' + item.sku : '' }}</option>
+              }
+            </select>
+            <input
+              class="field-input sfd-line-qty"
+              inputmode="decimal"
+              placeholder="Qty"
+              [value]="row.quantity"
+              (input)="setLineQuantity($index, $any($event.target).value)"
+            />
+            <button type="button" class="btn btn-secondary btn-sm" (click)="removeLine($index)">Remove</button>
+          </div>
+        }
+        <button type="button" class="btn btn-secondary btn-sm" (click)="addLine()">+ Add Line</button>
+      </div>
+    } @else {
+      <div class="sfd-freight-note muted">Freight-only shipments carry no inventory lines and decrement no stock.</div>
+    }
+
+    <div class="sfd-actions">
+      <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        {{ saving() ? 'Saving…' : 'Save Shipment' }}
+      </button>
+    </div>
+  </div>
+</div>

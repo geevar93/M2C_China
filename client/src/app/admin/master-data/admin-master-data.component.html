@@ -146,6 +146,27 @@
             <label for="md-label">Label</label>
             <input id="md-label" class="field-input" [value]="formLabel()" (input)="formLabel.set($any($event.target).value)" />
           </div>
+          @if (isDocumentTypeTab()) {
+            <div class="field">
+              <label for="md-scope">Scope</label>
+              <select
+                id="md-scope"
+                class="field-input"
+                [value]="formScope()"
+                [disabled]="formMode() === 'edit'"
+                (change)="setScope($any($event.target).value)"
+              >
+                @for (scope of documentTypeScopes; track scope) {
+                  <option [value]="scope">{{ scope }}</option>
+                }
+              </select>
+              @if (formMode() === 'edit') {
+                <div class="field-hint">Scope can't be changed after creation — the server ignores it on update. Retire this type and create a new one instead.</div>
+              } @else {
+                <div class="field-hint">Which upload dropdown this document type appears in. Choose carefully — a Vendor-scoped type can never back a shipment upload.</div>
+              }
+            </div>
+          }
         }
 
         <div class="md-modal-actions">

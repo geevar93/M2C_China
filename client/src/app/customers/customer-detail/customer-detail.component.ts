@@ -79,12 +79,16 @@ export class CustomerDetailComponent {
     }))
   );
 
-  readonly svcChip = computed(() => {
+  /** Raw API `code` (e.g. `FREIGHT_ONLY`), never the display label — branch
+   *  logic must compare against this, not `svcChip().label`, which is a
+   *  presentation string owned by `StatusStyleService` and not a stable key. */
+  private readonly serviceTypeCode = computed(() => {
     const c = this.customer();
     const md = this.masterData().data;
-    const row = md?.serviceTypes.find((r) => r.id === c?.serviceTypeId);
-    return this.styles.serviceType(row?.code);
+    return md?.serviceTypes.find((r) => r.id === c?.serviceTypeId)?.code ?? null;
   });
+
+  readonly svcChip = computed(() => this.styles.serviceType(this.serviceTypeCode()));
 
   readonly statusChip = computed(() => {
     const c = this.customer();
@@ -127,7 +131,7 @@ export class CustomerDetailComponent {
       { k: 'Notes', v: c.notes ?? '—' }
     ];
 
-    if (this.svcChip().label === 'FREIGHT-ONLY') {
+    if (this.serviceTypeCode() === 'FREIGHT_ONLY') {
       fields.push(
         { k: 'External Marketplace', v: c.externalMarketplace ?? '—' },
         { k: 'External Order Ref', v: c.externalOrderRef ?? '—' },

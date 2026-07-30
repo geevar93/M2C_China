@@ -1,21 +1,16 @@
 /**
- * Small formatting helpers owned by the invoices feature (E0-05, design-only
- * pass). Kept local to `invoices/` rather than added to `shared/utils` since
- * they exist only to render the mocked invoice screens — see
- * `../mock-invoices.ts` for why there is no live data to format here yet.
+ * Date formatting owned by the invoices feature (E0-05, design-only pass).
+ *
+ * `formatInr` used to live here too; the M5 screen pass moved it to
+ * `shared/utils/money.util.ts` once inventory and shipments each grew their
+ * own identical copy. It is re-exported below so the invoice screens' existing
+ * import sites keep working unchanged — this file stays their single
+ * formatting entry point.
  */
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+export { formatInr } from '../../shared/utils/money.util';
 
-/** `en-IN` currency formatting (₹, lakh/crore grouping) via the built-in `Intl` API — no new dependency. */
-export function formatInr(amount: number): string {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(amount);
-}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
 /** `yyyy-MM-dd` → `10 Jul 2026`, matching the style of `shared/utils/date-format.util.ts`'s `formatTimelineDate` (date-only, no time component). */
 export function formatInvoiceDate(isoDate: string | null | undefined): string {
