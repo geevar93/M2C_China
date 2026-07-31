@@ -125,7 +125,12 @@ export class CustomerDetailComponent {
       { k: 'Phone', v: c.phone },
       { k: 'Email', v: c.email ?? '—' },
       { k: 'City', v: c.city ?? '—' },
-      { k: 'Source Channel', v: c.sourceChannel },
+      // `sourceChannel` is a non-nullable string on the DTO, so it never hits the
+      // `?? '—'` the nullable fields use — but it can be EMPTY, and an empty string
+      // rendered a blank row where every neighbour shows an em-dash. Found in the
+      // N-22 browser pass; unreachable from the unit tests, whose fixtures all
+      // populate it.
+      { k: 'Source Channel', v: c.sourceChannel || '—' },
       { k: 'Categories', v: catNames.length ? catNames.join(', ') : '—' },
       { k: 'Owner', v: c.ownerName ?? 'Unassigned' },
       { k: 'Tags', v: c.tags.length ? c.tags.join(', ') : '—' },
