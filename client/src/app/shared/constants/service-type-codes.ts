@@ -14,6 +14,14 @@
  * whereas a Super Admin may relabel `Freight-only` to anything at any time.
  * Import from here rather than re-typing the literal, so a future code change
  * is one edit and a compile error everywhere else.
+ *
+ * **Do not import these into a test that is asserting what they equal** (ACTION_PLAN N-12).
+ * The rule across this codebase: a test may reference a constant to prove *behaviour*, but
+ * never to prove *identity* — an identity assertion terminates in a literal or it proves
+ * nothing. `status-style.service.spec.ts` deliberately spells `'FREIGHT_ONLY'` out for exactly
+ * this reason, and would have failed against the original bug; a version importing the
+ * constant would have passed. The server-side counterpart is
+ * `DbSeederTests.ExpectedPermissionCodes`.
  */
 export const SERVICE_TYPE_CIF = 'CIF';
 export const SERVICE_TYPE_FREIGHT_ONLY = 'FREIGHT_ONLY';

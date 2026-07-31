@@ -38,6 +38,39 @@ public class MasterDataEndpointTests : IClassFixture<AdminSeededFixture>
         body.VendorStatuses.Should().Contain(s => s.Code == "ON-HOLD");
     }
 
+    /// <summary>
+    /// ACTION_PLAN N-12 audit. The client's `DOCUMENT_SCOPE_VENDOR`/`DOCUMENT_SCOPE_SHIPMENT`
+    /// constants, the admin scope selector (N-20(b)) and both filtered upload dropdowns
+    /// (N-20(c)) all compare against these exact strings — but every test on that side is a
+    /// client test against mocked HTTP, so **nothing pinned what the API actually serialises**.
+    /// A casing or spelling drift here would silently empty a dropdown rather than fail loudly,
+    /// which is the failure mode N-20(c) exists to prevent.
+    ///
+    /// Literals on purpose: reading them back from <c>DocumentTypeScopes</c> would pass no
+    /// matter what that class says, which is the D-50 defect class exactly.
+    /// </summary>
+    [Fact]
+    public async Task GetAggregate_SerialisesDocumentTypeScopes_AsTheLiteralStringsTheClientMatchesOn()
+    {
+        var response = await _fixture.AssociateClient.GetAsync("/api/v1/master-data?includeRetired=false");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<MasterDataAggregateDto>();
+
+        body!.DocumentTypes.Should().NotBeEmpty();
+        body.DocumentTypes.Select(d => d.Scope).Distinct().Should().BeSubsetOf(new[] { "Vendor", "Shipment" });
+
+        // Both scopes must actually be present, or a "filtered to Shipment" dropdown could be
+        // empty for a reason no test would catch (D-34 seeds four shipment-scoped defaults).
+        body.DocumentTypes.Should().Contain(d => d.Scope == "Vendor");
+        body.DocumentTypes.Should().Contain(d => d.Scope == "Shipment");
+
+        // Trailing-nullable contract (D-45): every other LookupItemDto collection carries the
+        // field as null rather than omitting it, which is what keeps MasterDataService generic.
+        body.ServiceTypes.Should().OnlyContain(s => s.Scope == null);
+        body.ShipmentStatuses.Should().OnlyContain(s => s.Scope == null);
+    }
+
     [Fact]
     public async Task GetAggregate_WithoutAuthentication_Returns401()
     {

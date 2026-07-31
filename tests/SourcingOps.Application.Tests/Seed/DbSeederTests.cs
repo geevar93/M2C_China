@@ -7,9 +7,55 @@ using SourcingOps.Infrastructure.Persistence.Seed;
 
 namespace SourcingOps.Application.Tests.Seed;
 
-/// <summary>Covers ACTION_PLAN E1-03's explicit "re-running is idempotent" acceptance criterion.</summary>
+/// <summary>
+/// Covers ACTION_PLAN E1-03's explicit "re-running is idempotent" acceptance criterion.
+///
+/// <para>
+/// <b>THE RULE IN THIS FILE (ACTION_PLAN N-12):</b> a test may reference a constant to prove
+/// <i>behaviour</i>, but never to prove <i>identity</i>. An identity assertion terminates in a
+/// literal or it proves nothing.
+/// </para>
+/// <para>
+/// Every "the seeded set is X" assertion below therefore spells X out. Reading it back from
+/// <c>PermissionCodes</c>/<c>SeedDefaults</c> — which is what the seeder wrote in the first
+/// place — is a round trip that passes no matter what those constants say, including after a
+/// rename that breaks every <c>[Authorize]</c> policy and every client permission guard. That
+/// is not hypothetical: <b>D-50 was exactly this failure</b>, where the whole client suite
+/// stayed green through a live functional break because its fixtures encoded the same wrong
+/// value the production code used.
+/// </para>
+/// <para>
+/// The idempotency and preservation assertions are the opposite case and correctly reference
+/// the constants: there the constant is an <i>input</i> to the behaviour under test (seed
+/// twice, assert no duplication), not the answer being checked.
+/// </para>
+/// <para>
+/// Duplication here is the point. When one of these lists changes, a test must fail and a
+/// human must confirm the change was intended — for permission codes especially, since a
+/// silent divergence there is an authorisation hole, not a rendering bug.
+/// </para>
+/// </summary>
 public class DbSeederTests
 {
+    /// <summary>
+    /// The full permission catalogue, as literals. Deliberately NOT
+    /// <c>PermissionCodes.All</c> — see the rule in this class's summary. These strings cross
+    /// three boundaries (seeder → <c>[Authorize(Policy=…)]</c> → the client's
+    /// <c>permissionGuard</c> and nav visibility), and nothing else in the suite pins them.
+    /// </summary>
+    private static readonly string[] ExpectedPermissionCodes =
+    [
+        "Customers.View", "Customers.Edit",
+        "Vendors.View", "Vendors.Edit",
+        "Catalogs.View", "Catalogs.Edit",
+        "Inventory.View", "Inventory.Edit",
+        "Shipments.View", "Shipments.Edit",
+        "Invoicing.View", "Invoicing.Edit", "Invoicing.MarkPaid",
+        "Dispatch.Send",
+        "Analytics.View",
+        "Admin.ManageUsers", "Admin.ManageMasterData"
+    ];
+
     private static DbSeeder CreateSut(SourcingOps.Infrastructure.Persistence.AppDbContext db, BootstrapAdminOptions? options = null) =>
         new(db, AuthTestData.RealPasswordHasher, options ?? new BootstrapAdminOptions(), NullLogger<DbSeeder>.Instance);
 
@@ -21,7 +67,7 @@ public class DbSeederTests
 
         await sut.SeedAsync();
 
-        db.Permissions.Select(p => p.Code).Should().BeEquivalentTo(PermissionCodes.All);
+        db.Permissions.Select(p => p.Code).Should().BeEquivalentTo(ExpectedPermissionCodes);
     }
 
     [Fact]
@@ -40,9 +86,25 @@ public class DbSeederTests
         var associateCodes = db.RolePermissions.Where(rp => rp.RoleId == associate.Id)
             .Join(db.Permissions, rp => rp.PermissionId, p => p.Id, (rp, p) => p.Code).ToList();
 
-        superAdminCodes.Should().BeEquivalentTo(PermissionCodes.All);
-        associateCodes.Should().BeEquivalentTo(PermissionCodes.All.Except(PermissionCodes.AdminOnly));
-        associateCodes.Should().NotContain(PermissionCodes.AdminOnly);
+        superAdminCodes.Should().BeEquivalentTo(ExpectedPermissionCodes);
+
+        // Spelled out rather than `All.Except(AdminOnly)`: deriving the expectation from
+        // AdminOnly is exactly what would let AdminOnly silently shrink. If someone removes
+        // Admin.ManageUsers from that array, the derived version happily asserts that
+        // Associates SHOULD hold it — and passes.
+        associateCodes.Should().BeEquivalentTo(new[]
+        {
+            "Customers.View", "Customers.Edit",
+            "Vendors.View", "Vendors.Edit",
+            "Catalogs.View", "Catalogs.Edit",
+            "Inventory.View", "Inventory.Edit",
+            "Shipments.View", "Shipments.Edit",
+            "Invoicing.View", "Invoicing.Edit", "Invoicing.MarkPaid",
+            "Dispatch.Send",
+            "Analytics.View"
+        });
+        associateCodes.Should().NotContain("Admin.ManageUsers");
+        associateCodes.Should().NotContain("Admin.ManageMasterData");
     }
 
     /// <summary>
@@ -80,12 +142,23 @@ public class DbSeederTests
 
         await sut.SeedAsync();
 
-        db.Categories.Select(c => c.Name).Should().BeEquivalentTo(SeedDefaults.Categories.Select(c => c.Name));
-        db.ServiceTypes.Select(s => s.Code).Should().BeEquivalentTo([SeedDefaults.ServiceTypeCif, SeedDefaults.ServiceTypeFreightOnly]);
-        db.LeadStatuses.Select(s => s.Code).Should().BeEquivalentTo(SeedDefaults.LeadStatuses.Select(s => s.Code));
-        db.ShipmentStatuses.Select(s => s.Code).Should().BeEquivalentTo(SeedDefaults.ShipmentStatuses.Select(s => s.Code));
-        db.InvoiceStatuses.Select(s => s.Code).Should().BeEquivalentTo(SeedDefaults.InvoiceStatuses.Select(s => s.Code));
-        db.VendorStatuses.Select(s => s.Code).Should().BeEquivalentTo(SeedDefaults.VendorStatuses.Select(s => s.Code));
+        // All literals — see the class summary. Notably `FREIGHT_ONLY`: the previous version of
+        // this line read it back from SeedDefaults, so renaming the code would have kept it
+        // green while breaking D-36's freight-only branch server-side and the chip map, the
+        // intake form's FSD Q1 fields and the stock-impact column client-side.
+        db.Categories.Select(c => c.Name).Should()
+            .BeEquivalentTo("Jewellery", "Furniture", "Stationery", "Handbags", "Electronics", "Tools");
+        db.ServiceTypes.Select(s => s.Code).Should().BeEquivalentTo("CIF", "FREIGHT_ONLY");
+        db.LeadStatuses.Select(s => s.Code).Should()
+            .BeEquivalentTo("NEW", "QUALIFIED", "ACTIVE", "WON", "LOST", "DORMANT");
+        // "IN TRANSIT" carries a literal space, matching the prototype's ST map key verbatim.
+        // Asserting it here is the only place that spelling is pinned.
+        db.ShipmentStatuses.Select(s => s.Code).Should()
+            .BeEquivalentTo("PACKED", "DISPATCHED", "IN TRANSIT", "DELIVERED");
+        db.InvoiceStatuses.Select(s => s.Code).Should()
+            .BeEquivalentTo("DRAFT", "ISSUED", "PAID", "CANCELLED");
+        db.VendorStatuses.Select(s => s.Code).Should()
+            .BeEquivalentTo("ACTIVE", "ON-HOLD", "INACTIVE");
     }
 
     [Fact]
@@ -170,9 +243,13 @@ public class DbSeederTests
         var secondSut = CreateSut(db, new BootstrapAdminOptions { AdminEmail = "owner@example.com", AdminPassword = "Different-Pw2" });
         await secondSut.SeedAsync();
 
-        db.Permissions.Select(p => p.Code).Should().BeEquivalentTo(PermissionCodes.All); // no duplicates
+        // Literal counts, not `.Length` off the source array: the assertion here is "seeding
+        // twice did not duplicate", and a count derived from the seeder's own input cannot
+        // distinguish "17 rows, correct" from "17 rows, wrong set".
+        db.Permissions.Select(p => p.Code).Should().BeEquivalentTo(ExpectedPermissionCodes); // no duplicates
+        db.Permissions.Should().HaveCount(17);
         db.Roles.Select(r => r.Name).Should().BeEquivalentTo(RoleNames.All);
-        db.Categories.Count().Should().Be(SeedDefaults.Categories.Length);
+        db.Categories.Count().Should().Be(6);
         db.Users.Count(u => u.Email == "owner@example.com").Should().Be(1);
         db.Users.Single(u => u.Email == "owner@example.com").Id.Should().Be(firstRunAdminId);
         db.Users.Single(u => u.Email == "owner@example.com").PasswordHash.Should().Be(firstRunPasswordHash);
