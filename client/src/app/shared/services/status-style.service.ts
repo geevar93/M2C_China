@@ -27,8 +27,8 @@ export interface ServiceTypeColor extends StatusColor {
  * is unchanged, only the lookup key.
  */
 const SVC: Record<string, ServiceTypeColor> = {
-  CIF: { label: 'CIF', bg: '#e3f2fd', fg: '#1565c0' },
-  FREIGHT_ONLY: { label: 'FREIGHT-ONLY', bg: '#fff3e0', fg: '#f57f17' }
+  [SERVICE_TYPE_CIF]: { label: 'CIF', bg: '#e3f2fd', fg: '#1565c0' },
+  [SERVICE_TYPE_FREIGHT_ONLY]: { label: 'FREIGHT-ONLY', bg: '#fff3e0', fg: '#f57f17' }
 };
 
 /**

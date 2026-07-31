@@ -108,7 +108,11 @@ describe('InventoryComponent', () => {
     expect(c.itemCountLabel()).toBe('9');
     expect(c.belowReorderLabel()).toBe('3');
     expect(c.negativeStockLabel()).toBe('1');
-    expect(c.onHandValueLabel()).toContain('41,20,000');
+    // Abbreviated, not full precision (D-61): the approved screen's tile reads
+    // '₹41.2 L'. Asserted as the exact string rather than a substring — the whole
+    // point of the change is the *form* of the number, so a loose match would pass
+    // against the full-precision rendering this replaced.
+    expect(c.onHandValueLabel()).toBe('₹41.2 L');
   });
 
   it('shows the low-stock banner only when the summary has non-zero counts, stating the real counts', async () => {

@@ -132,7 +132,7 @@ export class CustomerDetailComponent {
       { k: 'Notes', v: c.notes ?? '—' }
     ];
 
-    if (this.serviceTypeCode() === 'FREIGHT_ONLY') {
+    if (this.serviceTypeCode() === SERVICE_TYPE_FREIGHT_ONLY) {
       fields.push(
         { k: 'External Marketplace', v: c.externalMarketplace ?? '—' },
         { k: 'External Order Ref', v: c.externalOrderRef ?? '—' },

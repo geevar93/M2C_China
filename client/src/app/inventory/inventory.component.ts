@@ -10,6 +10,7 @@ import { ItemFormDialogComponent } from './item-form-dialog/item-form-dialog.com
 import { InventoryService } from './services/inventory.service';
 import { InventoryItem, InventorySummary, RecordInboundResult, StockLevel } from './models/inventory.models';
 import { formatQty, formatStockValue } from './utils/format.util';
+import { formatInrCompact } from '../shared/utils/money.util';
 import { stockBarWidth, stockLevelColor, stockLevelTextColor } from './utils/stock-level.util';
 
 interface InventoryRow {
@@ -86,7 +87,10 @@ export class InventoryComponent {
     return parts.join(' · ') + '.';
   });
 
-  readonly onHandValueLabel = computed(() => formatStockValue(this.summary().onHandValue));
+  // Abbreviated (`₹41.2 L`), not full precision: the approved screen's tile reads
+  // that way and E7-11's criterion is a 1:1 port. The per-row Stock Value column
+  // below still uses `formatStockValue`, where exactness is what's wanted.
+  readonly onHandValueLabel = computed(() => formatInrCompact(this.summary().onHandValue));
   readonly itemCountLabel = computed(() => this.summary().itemCount.toLocaleString('en-IN'));
   readonly belowReorderLabel = computed(() => this.summary().lowStockCount.toLocaleString('en-IN'));
   readonly negativeStockLabel = computed(() => this.summary().negativeStockCount.toLocaleString('en-IN'));

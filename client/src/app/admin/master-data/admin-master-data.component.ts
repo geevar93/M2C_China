@@ -7,7 +7,6 @@ import {
   COLLECTION_LABELS,
   DOCUMENT_TYPE_SCOPES,
   CategoryRow,
-  DOCUMENT_TYPE_SCOPES,
   LookupRow,
   MasterDataAggregate,
   MasterDataCollectionKey,
@@ -77,11 +76,6 @@ export class AdminMasterDataComponent {
   readonly isCategoryTab = computed(() => isCategoryCollection(this.activeCollection()));
   /** Only `documentTypes` carries a `scope` — every other collection is confirmed `null` live. */
   readonly isDocumentTypeTab = computed(() => this.activeCollection() === 'documentTypes');
-  readonly documentTypeScopes = DOCUMENT_TYPE_SCOPES;
-
-  /** Only `documentTypes` carries a scope — every other tab hides the field entirely. */
-  readonly isDocumentTypeTab = computed(() => this.activeCollection() === 'documentTypes');
-
   readonly documentTypeScopes = DOCUMENT_TYPE_SCOPES;
 
   /** Rows of the active collection, filtered by "Show retired" and sorted by

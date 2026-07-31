@@ -182,7 +182,7 @@ export class CustomerIntakeComponent {
   }
 
   get showExtRef(): boolean {
-    return this.selectedServiceTypeRow()?.code === 'FREIGHT_ONLY';
+    return this.selectedServiceTypeRow()?.code === SERVICE_TYPE_FREIGHT_ONLY;
   }
 
   get formMeta(): string {
