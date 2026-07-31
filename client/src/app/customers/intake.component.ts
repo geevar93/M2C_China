@@ -7,6 +7,7 @@ import { AuthService } from '../core/services/auth.service';
 import { MasterDataService } from '../core/services/master-data.service';
 import { extractErrorMessage } from '../core/services/problem-details.util';
 import { StatusStyleService } from '../shared/services/status-style.service';
+import { SERVICE_TYPE_CIF, SERVICE_TYPE_FREIGHT_ONLY } from '../shared/constants/service-type-codes';
 import { CustomersService } from './services/customers.service';
 import { CreateCustomerRequest, DuplicateCustomerProblemDetails } from './models/customer.models';
 
@@ -21,12 +22,12 @@ interface ServiceTypeCardCopy {
  *  service type via DEFAULT_SERVICE_TYPE_COPY — the *set* of cards itself is
  *  driven by MasterDataService.serviceTypeOptions(), never hard-coded (DR-6). */
 const SERVICE_TYPE_COPY: Record<string, ServiceTypeCardCopy> = {
-  CIF: {
+  [SERVICE_TYPE_CIF]: {
     headline: 'Full-service',
     description:
       'We source from our vendor roster and deliver landed goods. Platform holds product, vendor, pricing, insurance and landed cost.'
   },
-  'Freight-only': {
+  [SERVICE_TYPE_FREIGHT_ONLY]: {
     headline: 'Transport only',
     description: 'Customer already bought the goods elsewhere. Platform holds shipment details, external purchase reference and freight fee.'
   }
@@ -181,7 +182,10 @@ export class CustomerIntakeComponent {
   }
 
   get showExtRef(): boolean {
-    return this.selectedServiceTypeRow()?.code === 'Freight-only';
+    // Was comparing against 'Freight-only' — the label, not the code — so against
+    // the real API this never became true and FSD Q1's external-purchase fields
+    // were unreachable on the intake form. See shared/constants/service-type-codes.ts.
+    return this.selectedServiceTypeRow()?.code === SERVICE_TYPE_FREIGHT_ONLY;
   }
 
   get formMeta(): string {

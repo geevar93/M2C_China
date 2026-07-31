@@ -17,7 +17,7 @@ const AGGREGATE = {
   categories: [],
   serviceTypes: [
     { id: 'svc-1', code: 'CIF', label: 'CIF', sortOrder: 1, isActive: true, isSystemDefault: true },
-    { id: 'svc-2', code: 'Freight-only', label: 'Freight Only', sortOrder: 2, isActive: true, isSystemDefault: true }
+    { id: 'svc-2', code: 'FREIGHT_ONLY', label: 'Freight Only', sortOrder: 2, isActive: true, isSystemDefault: true }
   ],
   leadStatuses: [],
   shipmentStatuses: [],
@@ -71,7 +71,7 @@ describe('InvoicesComponent (E0-05a design preview)', () => {
     // The label comes from the server row, not from the mock invoice data —
     // proving the screen would follow a renamed status without a redeploy.
     expect(component.invoiceStatusOptions().map((o) => o.label)).toContain('Issued');
-    expect(component.serviceTypeOptions().map((o) => o.code)).toEqual(['CIF', 'Freight-only']);
+    expect(component.serviceTypeOptions().map((o) => o.code)).toEqual(['CIF', 'FREIGHT_ONLY']);
   });
 
   it('renders the full sample set before any filter is applied', () => {
@@ -108,7 +108,7 @@ describe('InvoicesComponent (E0-05a design preview)', () => {
 
     component.setServiceType('svc-2'); // Freight-only: inv-0002, 0004, 0007, 0008
     expect(component.rows().length).toBe(4);
-    expect(component.filteredInvoices().every((i) => i.serviceTypeCode === 'Freight-only')).toBeTrue();
+    expect(component.filteredInvoices().every((i) => i.serviceTypeCode === 'FREIGHT_ONLY')).toBeTrue();
   });
 
   it('surfaces an explicit empty state rather than a blank table when filters match nothing', () => {

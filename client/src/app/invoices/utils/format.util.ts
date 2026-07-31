@@ -7,15 +7,14 @@
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
-/** `en-IN` currency formatting (₹, lakh/crore grouping) via the built-in `Intl` API — no new dependency. */
-export function formatInr(amount: number): string {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(amount);
-}
+/**
+ * `formatInr` now lives in `shared/utils/currency.util.ts` — re-exported here so
+ * existing imports keep working. It moved when M5's inventory/shipment screens
+ * became the first to format live money: the original "keep it local, it only
+ * formats mocks" reasoning stopped applying, and a second copy is how two screens
+ * end up disagreeing about what "₹" means.
+ */
+export { formatInr } from '../../shared/utils/currency.util';
 
 /** `yyyy-MM-dd` → `10 Jul 2026`, matching the style of `shared/utils/date-format.util.ts`'s `formatTimelineDate` (date-only, no time component). */
 export function formatInvoiceDate(isoDate: string | null | undefined): string {

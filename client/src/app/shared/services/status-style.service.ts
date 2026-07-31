@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { SERVICE_TYPE_CIF, SERVICE_TYPE_FREIGHT_ONLY } from '../constants/service-type-codes';
 
 /** A background/foreground colour pair for a chip/badge. */
 export interface StatusColor {
@@ -17,8 +18,15 @@ export interface ServiceTypeColor extends StatusColor {
  * of truth for service-type colours; no screen may redefine it locally.
  */
 const SVC: Record<string, ServiceTypeColor> = {
-  CIF: { label: 'CIF', bg: '#e3f2fd', fg: '#1565c0' },
-  'Freight-only': { label: 'FREIGHT-ONLY', bg: '#fff3e0', fg: '#f57f17' }
+  [SERVICE_TYPE_CIF]: { label: 'CIF', bg: '#e3f2fd', fg: '#1565c0' },
+  // KEYED BY CODE, NOT LABEL. The prototype's raw `svc` value was the string
+  // 'Freight-only', and this map was ported using it as the key — but the API
+  // serialises `code: 'FREIGHT_ONLY'` (SeedDefaults.ServiceTypeFreightOnly),
+  // with 'Freight-only' as the *label*. Every caller passes `.code`, so every
+  // freight-only chip fell through to the grey default with a raw
+  // 'FREIGHT_ONLY' label instead of the prototype's orange 'FREIGHT-ONLY'.
+  // Found during the M5 screen pass by diffing against a live response.
+  [SERVICE_TYPE_FREIGHT_ONLY]: { label: 'FREIGHT-ONLY', bg: '#fff3e0', fg: '#f57f17' }
 };
 
 /**
@@ -54,6 +62,17 @@ const ST: Record<string, StatusColor> = {
 };
 
 /**
+ * Inventory stock-level colours, ported verbatim from the approved prototype's
+ * `invRows()` (Source/Sourcing Ops Platform.dc.html, ~line 1412) — the same three
+ * pairs it computes inline for the level chip, the quantity text and the bar fill.
+ */
+const STOCK: Record<string, StatusColor> = {
+  HEALTHY: { bg: '#e8f5e9', fg: '#2e7d32' },
+  LOW: { bg: '#fff3e0', fg: '#f57f17' },
+  NEGATIVE: { bg: '#ffebee', fg: '#e53935' }
+};
+
+/**
  * Single source of truth for status → colour mapping across the whole app
  * (TECH_SPEC §5.1). Every list/detail screen must consume this service (or
  * the accompanying pipes) instead of hard-coding a colour map locally —
@@ -61,7 +80,7 @@ const ST: Record<string, StatusColor> = {
  */
 @Injectable({ providedIn: 'root' })
 export class StatusStyleService {
-  /** Colour + label for a service-type code (`CIF`, `Freight-only`). */
+  /** Colour + label for a service-type **code** (`CIF`, `FREIGHT_ONLY`) — never a label. */
   serviceType(code: string | null | undefined): ServiceTypeColor {
     return (code && SVC[code]) || { label: code ?? '—', bg: '#e5e7eb', fg: '#374151' };
   }
@@ -69,5 +88,18 @@ export class StatusStyleService {
   /** Colour for a generic status code, falling back to `ST.NEW` like the prototype does. */
   status(code: string | null | undefined): StatusColor {
     return (code && ST[code]) || ST['NEW'];
+  }
+
+  /**
+   * Colour for an inventory `stockLevel` (E7-11). Lives here rather than in the
+   * inventory component so DR-6's "one colour source" rule holds for it too —
+   * the shipment detail screen renders the same three levels against its lines.
+   *
+   * Deliberately a separate map from `ST`: stock level is a *computed* condition,
+   * not a configurable status row, and it must not become reachable through
+   * `status()` where a Super-Admin-created status code could collide with it.
+   */
+  stockLevel(level: string | null | undefined): StatusColor {
+    return (level && STOCK[level]) || STOCK['HEALTHY'];
   }
 }

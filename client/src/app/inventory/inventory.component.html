@@ -1,0 +1,140 @@
+<div>
+  <div class="page-header">
+    <h1 class="page-title">Inventory</h1>
+    @if (canEdit()) {
+      <div class="page-actions">
+        <!-- Both prototype buttons are inert there (static mock). "+ Record Inbound
+             Stock" needs the E7-02 dialog, which is not part of this story, so it is
+             left out rather than rendered dead — a button that does nothing when
+             clicked is worse than one that isn't there yet. -->
+        <button type="button" class="btn btn-secondary" disabled title="Recording inbound stock arrives with the inbound dialog.">
+          + Record Inbound Stock
+        </button>
+      </div>
+    }
+  </div>
+
+  @if (alert(); as alertText) {
+    <div class="inv-alert" role="status">
+      <strong>{{ alertText }}</strong>
+      <div class="inv-alert-spacer"></div>
+      @if (!lowStockFilterActive()) {
+        <button type="button" class="inv-alert-link" (click)="filterLowStock()">Show only low stock</button>
+      }
+    </div>
+  }
+
+  @if (tiles().length > 0) {
+    <div class="inv-stat-grid">
+      @for (t of tiles(); track t.label) {
+        <div class="stat-tile">
+          <div class="stat-tile__label">{{ t.label }}</div>
+          <div
+            class="stat-tile__value"
+            [class.inv-stat--warn]="t.emphasis === 'warn'"
+            [class.inv-stat--danger]="t.emphasis === 'danger'"
+          >
+            {{ t.value }}
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <div class="card filter-bar">
+    <div class="field filter-search">
+      <label for="inv-search">Search</label>
+      <input
+        id="inv-search"
+        class="field-input"
+        [value]="search()"
+        (input)="onSearchInput($any($event.target).value)"
+        placeholder="Item or SKU"
+      />
+    </div>
+    <div class="field">
+      <label for="inv-cat">Category</label>
+      <select id="inv-cat" class="field-input" [value]="categoryId()" (change)="setCategory($any($event.target).value)">
+        <option value="">All categories</option>
+        @for (opt of categoryOptions(); track opt.id) {
+          <option [value]="opt.id">{{ opt.name }}</option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="inv-level">Stock Level</label>
+      <!-- One "Low or negative" option, not two — E7-03, matching the prototype's
+           single dropdown entry and its `i.qty < i.reorder` predicate. -->
+      <select id="inv-level" class="field-input" [value]="stockLevel()" (change)="setStockLevel($any($event.target).value)">
+        <option value="">All stock levels</option>
+        <option value="low">Low or negative</option>
+        <option value="healthy">Healthy</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Category</th>
+          <th>Source Vendor</th>
+          <th class="align-right">On Hand</th>
+          <th class="align-right">Reorder At</th>
+          <th>Level</th>
+          <th class="align-right">Stock Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (i of rows(); track i.id) {
+          <tr [class.inv-row-negative]="i.negative">
+            <td>
+              <div class="inv-name">{{ i.name }}</div>
+              <div class="row-sub">{{ i.subLabel }}</div>
+            </td>
+            <td class="muted">{{ i.categoryName }}</td>
+            <td class="muted">{{ i.vendorName }}</td>
+            <td class="align-right"><strong [style.color]="i.qtyColor">{{ i.qtyLabel }}</strong></td>
+            <td class="align-right muted">{{ i.reorderLabel }}</td>
+            <td>
+              <div class="inv-level">
+                <div
+                  class="inv-bar"
+                  role="img"
+                  [attr.aria-label]="i.levelLabel + ' stock: ' + i.qtyLabel + ' on hand, reorder at ' + i.reorderLabel"
+                >
+                  <div class="inv-bar-fill" [style.width.%]="i.barWidth" [style.background]="i.barColor"></div>
+                </div>
+                <span class="chip" [style.background]="i.levelBg" [style.color]="i.levelFg">{{ i.levelLabel }}</span>
+              </div>
+            </td>
+            <td class="align-right"><strong>{{ i.valueLabel }}</strong></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (loading()) {
+      <div class="state-panel">
+        <div class="spinner"></div>
+        <span>Loading inventory…</span>
+      </div>
+    } @else if (error()) {
+      <div class="state-panel">
+        <span>{{ error() }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+      </div>
+    } @else if (noResults()) {
+      <div class="state-panel">No inventory items match these filters.</div>
+    }
+  </div>
+
+  @if (!loading() && !error() && totalCount() > 0) {
+    <div class="pager">
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() <= 1" (click)="prevPage()">← Prev</button>
+      <span class="muted">Page {{ page() }} of {{ totalPages() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() >= totalPages()" (click)="nextPage()">Next →</button>
+    </div>
+  }
+</div>

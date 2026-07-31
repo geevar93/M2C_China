@@ -33,6 +33,15 @@
   color: var(--color-text-muted);
 }
 
+/* Scope marker on the documentTypes tab (N-20b). Neutral rather than
+   semantic — a scope is a classification, not a good/bad state, so it must not
+   read like the Active/Inactive chips it sits beside. */
+.md-scope-chip {
+  background: var(--color-neutral-chip-bg);
+  color: var(--color-text-muted);
+  margin-left: var(--space-4);
+}
+
 .md-actions {
   display: flex;
   flex-wrap: wrap;

@@ -15,6 +15,9 @@ npm-debug.log*
 .env
 .env.*
 !.env.example
+# Local test logins (seeded owner/employee accounts) — never belongs in the repo,
+# and it sat untracked-but-uncommitted long enough to be committed by accident.
+credentials.txt
 
 # Docker / data volumes (named volumes, not repo paths — kept defensive only)
 **/pgdata/

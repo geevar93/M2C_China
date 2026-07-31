@@ -47,6 +47,11 @@
                 {{ categoryName(row) }}
               } @else {
                 <strong>{{ lookupCode(row) }}</strong>
+                @if (isDocumentTypeTab() && lookupScope(row)) {
+                  <!-- Rendered inline rather than as a fourth column: scope exists on
+                       one tab of seven, and a column would be empty on the other six. -->
+                  <span class="chip md-scope-chip">{{ lookupScope(row) }}</span>
+                }
                 <div class="row-sub">{{ lookupLabel(row) }}</div>
               }
             </td>
@@ -146,6 +151,32 @@
             <label for="md-label">Label</label>
             <input id="md-label" class="field-input" [value]="formLabel()" (input)="formLabel.set($any($event.target).value)" />
           </div>
+          @if (isDocumentTypeTab()) {
+            <div class="field">
+              <label for="md-scope">Used for</label>
+              <select
+                id="md-scope"
+                class="field-input"
+                [value]="formScope()"
+                [disabled]="formMode() === 'edit'"
+                (change)="formScope.set($any($event.target).value)"
+              >
+                <option value="">Choose…</option>
+                @for (s of documentTypeScopes; track s) {
+                  <option [value]="s">{{ s }} documents</option>
+                }
+              </select>
+              <div class="field-hint">
+                @if (formMode() === 'edit') {
+                  Scope can't be changed after creation — documents already filed under this type would move into the other module's
+                  list.
+                } @else {
+                  Decides which upload screen offers this type. A vendor type can never be picked for a shipment document, or the
+                  reverse.
+                }
+              </div>
+            </div>
+          }
         }
 
         <div class="md-modal-actions">

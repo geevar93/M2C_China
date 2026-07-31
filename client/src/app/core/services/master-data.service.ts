@@ -15,7 +15,14 @@ import {
 } from 'rxjs';
 import { ApiService } from './api.service';
 import { extractErrorMessage } from './problem-details.util';
-import { CategoryRow, LookupRow, MasterDataCollectionKey, MasterDataResponse } from '../models/master-data.models';
+import {
+  CategoryRow,
+  DOCUMENT_SCOPE_SHIPMENT,
+  DOCUMENT_SCOPE_VENDOR,
+  LookupRow,
+  MasterDataCollectionKey,
+  MasterDataResponse
+} from '../models/master-data.models';
 
 export type MasterDataLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -168,6 +175,32 @@ export class MasterDataService {
 
   vendorStatusById(id: string | null | undefined): Observable<LookupRow | undefined> {
     return this.byIdOf('vendorStatuses', id);
+  }
+
+  // ---- Document types ----------------------------------------------------
+
+  /**
+   * Document types are a **single table serving two upload paths**, discriminated
+   * by `scope` (D-34/D-44). Offering the unfiltered list would put "Packing List"
+   * in the vendor-compliance dropdown and "Business Licence" in the shipment one —
+   * a visible correctness bug in both directions, and one the server rejects
+   * anyway (`ShipmentDocumentService` 400s a mis-scoped type). Filtering here means
+   * the user never gets to pick something that cannot work.
+   *
+   * Scope-filtered accessors rather than one `documentTypeOptions()`, so a caller
+   * cannot forget to filter — the failure mode is silent at the dropdown and only
+   * shows up as a rejected upload.
+   */
+  shipmentDocumentTypeOptions(): Observable<LookupRow[]> {
+    return this.documentTypeOptionsForScope(DOCUMENT_SCOPE_SHIPMENT);
+  }
+
+  vendorDocumentTypeOptions(): Observable<LookupRow[]> {
+    return this.documentTypeOptionsForScope(DOCUMENT_SCOPE_VENDOR);
+  }
+
+  private documentTypeOptionsForScope(scope: string): Observable<LookupRow[]> {
+    return this.optionsOf('documentTypes').pipe(map((rows) => rows.filter((r) => r.scope === scope)));
   }
 
   // ---- Internals ----------------------------------------------------------

@@ -13,7 +13,7 @@ const MASTER_DATA: MasterDataResponse = {
   ],
   serviceTypes: [
     { id: 'svc-cif', code: 'CIF', label: 'CIF', sortOrder: 1, isActive: true },
-    { id: 'svc-freight', code: 'Freight-only', label: 'Freight-only', sortOrder: 2, isActive: true }
+    { id: 'svc-freight', code: 'FREIGHT_ONLY', label: 'Freight-only', sortOrder: 2, isActive: true }
   ],
   // A retired lead status — DoD requires a customer referencing it still renders its label.
   leadStatuses: [
@@ -22,7 +22,8 @@ const MASTER_DATA: MasterDataResponse = {
   ],
   shipmentStatuses: [],
   invoiceStatuses: [],
-  vendorStatuses: []
+  vendorStatuses: [],
+  documentTypes: []
 };
 
 function customer(overrides: Partial<CustomerListItem> = {}): CustomerListItem {

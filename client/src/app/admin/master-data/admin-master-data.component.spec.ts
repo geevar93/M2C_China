@@ -12,14 +12,15 @@ const AGGREGATE: MasterDataAggregate = {
   ],
   serviceTypes: [
     { id: 'svc-1', code: 'CIF', label: 'CIF', sortOrder: 1, isActive: true, isSystemDefault: true },
-    { id: 'svc-2', code: 'Freight-only', label: 'Freight-only', sortOrder: 2, isActive: true, isSystemDefault: true }
+    { id: 'svc-2', code: 'FREIGHT_ONLY', label: 'Freight-only', sortOrder: 2, isActive: true, isSystemDefault: true }
   ],
   leadStatuses: [],
   shipmentStatuses: [],
   invoiceStatuses: [],
   vendorStatuses: [],
   documentTypes: [
-    { id: 'doc-1', code: 'BUSINESS_LICENCE', label: 'Business Licence', sortOrder: 1, isActive: true, isSystemDefault: true }
+    { id: 'doc-1', code: 'BUSINESS_LICENCE', label: 'Business Licence', sortOrder: 1, isActive: true, isSystemDefault: true, scope: 'Vendor' },
+    { id: 'doc-2', code: 'PACKING_LIST', label: 'Packing List', sortOrder: 5, isActive: true, isSystemDefault: true, scope: 'Shipment' }
   ]
 };
 
@@ -124,6 +125,106 @@ describe('AdminMasterDataComponent', () => {
         { status: 201, statusText: 'Created' }
       );
       flushAggregate();
+    });
+  });
+
+  // N-20b / D-34. Before the selector existed, every type created here silently
+  // defaulted to Vendor scope and could therefore never back a shipment upload —
+  // the FSD §3.3 configurability violation DR-6 exists to catch.
+  describe('document-type scope selector', () => {
+    it('offers the scope field only on the documentTypes tab', () => {
+      fixture.detectChanges();
+      flushAggregate();
+      fixture.detectChanges();
+
+      const comp = fixture.componentInstance;
+      const el: HTMLElement = fixture.nativeElement;
+
+      comp.selectTab('serviceTypes');
+      comp.openCreateForm();
+      fixture.detectChanges();
+      expect(el.querySelector('#md-scope')).toBeFalsy();
+
+      comp.cancelForm();
+      comp.selectTab('documentTypes');
+      comp.openCreateForm();
+      fixture.detectChanges();
+      expect(el.querySelector('#md-scope')).toBeTruthy();
+    });
+
+    it('refuses to create without a scope, and issues no request', () => {
+      fixture.detectChanges();
+      flushAggregate();
+
+      const comp = fixture.componentInstance;
+      comp.selectTab('documentTypes');
+      comp.openCreateForm();
+      comp.formCode.set('TEST_REPORT');
+      comp.formLabel.set('Test Report');
+      comp.submitForm();
+
+      expect(comp.formError()).toContain('Scope is required');
+      // The point of the story: no silent Vendor-scoped row reaches the server.
+      httpMock.expectNone('/api/v1/master-data/document-types');
+    });
+
+    it('POSTs { code, label, scope } when a shipment-scoped type is created', () => {
+      fixture.detectChanges();
+      flushAggregate();
+
+      const comp = fixture.componentInstance;
+      comp.selectTab('documentTypes');
+      comp.openCreateForm();
+      comp.formCode.set('CERT_ORIGIN');
+      comp.formLabel.set('Certificate of Origin');
+      comp.formScope.set('Shipment');
+      comp.submitForm();
+
+      const req = httpMock.expectOne('/api/v1/master-data/document-types');
+      expect(req.request.body).toEqual({ code: 'CERT_ORIGIN', label: 'Certificate of Origin', scope: 'Shipment' });
+      req.flush(
+        { id: 'doc-new', code: 'CERT_ORIGIN', label: 'Certificate of Origin', sortOrder: 6, isActive: true, isSystemDefault: false, scope: 'Shipment' },
+        { status: 201, statusText: 'Created' }
+      );
+      flushAggregate();
+    });
+
+    it('renders scope read-only on edit and omits it from the PUT body (the server ignores it there)', () => {
+      fixture.detectChanges();
+      flushAggregate();
+      fixture.detectChanges();
+
+      const comp = fixture.componentInstance;
+      comp.selectTab('documentTypes');
+      fixture.detectChanges();
+      comp.openEditForm(comp.rows().find((r) => r.id === 'doc-2')!);
+      fixture.detectChanges();
+
+      const scopeEl = fixture.nativeElement.querySelector('#md-scope') as HTMLSelectElement;
+      expect(scopeEl.disabled).toBeTrue();
+      expect(comp.formScope()).toBe('Shipment');
+
+      comp.formLabel.set('Packing List (revised)');
+      comp.submitForm();
+
+      const req = httpMock.expectOne('/api/v1/master-data/document-types/doc-2');
+      expect(req.request.body).toEqual({ code: 'PACKING_LIST', label: 'Packing List (revised)' });
+      req.flush({ id: 'doc-2', code: 'PACKING_LIST', label: 'Packing List (revised)', sortOrder: 5, isActive: true, isSystemDefault: true, scope: 'Shipment' });
+      flushAggregate();
+    });
+
+    it('shows each type\'s scope in the list so the two sets are tellable apart', () => {
+      fixture.detectChanges();
+      flushAggregate();
+      fixture.detectChanges();
+
+      fixture.componentInstance.selectTab('documentTypes');
+      fixture.detectChanges();
+
+      const chips = Array.from(fixture.nativeElement.querySelectorAll('.md-scope-chip')).map((c) =>
+        (c as HTMLElement).textContent!.trim()
+      );
+      expect(chips).toEqual(['Vendor', 'Shipment']);
     });
   });
 

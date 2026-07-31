@@ -1,0 +1,122 @@
+/* Inventory list (E7-11). Layout only — every colour comes from a design token or
+   from StatusStyleService.stockLevel(), never a literal here (DR-6). */
+
+/* auto-fill/minmax rather than a fixed column count, so the four tiles reflow to
+   two-up and then one-up at phone width without a media query (E12-01). */
+.inv-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.inv-stat--warn {
+  color: var(--color-warning);
+}
+
+.inv-stat--danger {
+  color: var(--color-danger);
+}
+
+/* The prototype's amber pre-table banner. */
+.inv-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6) var(--space-8);
+  font-size: 13px;
+  color: var(--color-warning);
+  margin-bottom: var(--space-8);
+}
+
+.inv-alert-spacer {
+  flex: 1 1 auto;
+}
+
+/* A real <button>, not the prototype's clickable <span> — it performs an action,
+   so it must be keyboard-reachable and announce itself as a control. Styled to
+   read as the same inline link. */
+.inv-alert-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.filter-bar {
+  display: flex;
+  gap: var(--space-6);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-8);
+
+  .field {
+    margin-bottom: 0;
+  }
+}
+
+.filter-search {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.inv-name {
+  font-weight: 500;
+}
+
+.row-sub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+/* Oversold rows get a faint red wash so they stand out while scanning, matching
+   the prototype's `rowBg`. Kept very light — the level chip is the real signal. */
+.inv-row-negative {
+  background: #fff8f8;
+}
+
+.inv-level {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.inv-bar {
+  width: 40px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-border);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.inv-bar-fill {
+  height: 6px;
+  border-radius: 3px;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-top: var(--space-8);
+  font-size: 13px;
+}
+
+.page-actions {
+  display: flex;
+  gap: var(--space-4);
+}

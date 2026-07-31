@@ -157,6 +157,7 @@ Must land before any feature CRUD, because every feature screen resolves its dro
 | E5-07 | Vendor-level documents (licence, quality certs) | Non-catalog documents can be attached to a vendor and downloaded through the authenticated endpoint. **Requires a schema addition** — TECH_SPEC §6 has no vendor-documents table (see DR-4). | FR-VEN-07 [C]; TECH_SPEC §6 |
 | E5-08 | Port the Vendors list screen | The `vendors` screen matches the prototype 1:1 with category / region / status filters wired to E5-04. | TECH_SPEC §5.2 |
 | E5-09 | Port the Vendor detail screen | The `vendordetail` screen matches the prototype 1:1: profile, catalog sections, MOQ/lead time/rating, and edit. | TECH_SPEC §5.2 |
+| E5-10 | Vendor document upload UI | The vendor detail screen can attach and download a **non-catalog** compliance document (business licence, quality cert, test report), with a document-type dropdown **filtered to `Vendor` scope** — `MasterDataService.vendorDocumentTypeOptions()` already exists for it. Distinct from the catalog upload dialog, which files catalog PDFs into sections and has no type selector. **Backend is already built and tested** (`POST\|GET /vendors/{id}/documents`, `/vendor-documents/{id}/download\|DELETE`, E5-07/D-25); this is the frontend half, which was never written. Raised as **N-23** during the M5 screen pass, when N-20 (c) assumed two scope-filtered dropdowns and found one. Confirm against FSD Q5 before building: compliance documents are filed **for reference with no enforcement**, so this is an upload/list/download screen and explicitly **not** a blocking-rules feature. | FR-VEN-07 [C]; §16.4 N-23 |
 
 ### E6 — Catalog & Document Management (UC-04)
 
@@ -1057,3 +1058,72 @@ The API contract should be **diffed against a live response before the screens a
 **Then M6 — Invoicing (E8)**, which M5 was a prerequisite for: E8-01 references a shipment for the CIF case, and D-30's snapshotted line cost exists specifically so that invoice basis cannot drift. M6 remains **fully gated on FSD Q9c** and still needs **DR-3** (no PDF library chosen) settled *before* it starts, not during it.
 
 **Still needing the business owner:** FSD **Q9c** (gates M6 entirely), FSD **Q6 + Q8** (ask together — the legacy data *is* the initial volume), the **deployment track** (N-17 now adds a reason to settle it), **N-10**, **D-18**, and newly **N-19** (stock-take corrections).
+
+---
+
+## 16. M5 close-out — the screen pass (E7-11…E7-13)
+
+**Last updated:** 2026-07-31, end of the M5 **screen** pass. Same evidentiary standard as §9–§15: `Done` means an executed command backs it.
+
+**M5 is now 13 of 13 stories.** §15 was an explicit mid-milestone checkpoint at 10; this pass closes E7-11, E7-12 and E7-13 plus all three of N-20's frontend must-dos. §5's M5 exit criterion ("UC-06 and UC-07 are demonstrable") is met at the API level and now at the screen level in code and tests — **but not yet in a browser**, which is N-22 below and the one reason this close-out is written more cautiously than §14's.
+
+The pre-work §15.6 asked for was done first and in order: the §15.3 contract was **diffed against live responses before any screen was wired** (D-22), and TECH_SPEC §6 was brought back in step with the schema. Both turned up more than expected — see D-50 and D-58.
+
+### 16.1 Story status
+
+| ID | Status | Verification |
+| --- | --- | --- |
+| E7-11 | **Done** | Inventory list ported from `showInventory`. Search/category/stock-level filters, four stat tiles off `summary` (D-39), the low-stock bar, paging, loading/empty/error states. 15 specs, including one that feeds quantities a client-side classifier would call `HEALTHY` alongside an API `LOW` and asserts the API wins (E7-04). |
+| E7-12 | **Done** | Shipments list ported from `showShipments`. Status tabs built from `statusCounts` in `sortOrder`, with a spec proving every count stays stable after a tab is selected — the `totalCount`-vs-`statusCounts` trap E7-08 exists to avoid. 8 specs. |
+| E7-13 | **Done** | Shipment detail ported from `showShipDetail`, on the **new** `shipments/:id` route. Stepper, lines, totals, details panel, documents with download, and status advance through `PUT /{id}/status` (D-43). 13 specs. |
+| N-20 (a) | **Done** | `scope?: string \| null` on `LookupRow` in both the core and admin models. Verified against a live `/master-data` response: populated for `documentTypes`, `null` on the other five `LookupItemDto` collections, exactly as D-45 describes. |
+| N-20 (b) | **Done** | Scope selector on the admin create-document-type form — **required** on create, read-only on edit (the server ignores `scope` on PUT), with the scope shown per row in the list. A spec asserts no request is issued when scope is missing, which is the actual FSD §3.3 violation DR-6 exists to catch. |
+| N-20 (c) | **Done, but the story text was wrong** | Shipment upload dropdown is scope-filtered via `MasterDataService.shipmentDocumentTypeOptions()`. N-20 (c) said "**both** upload dropdowns"; there is no vendor document upload UI in the client at all — `POST /vendors/{id}/documents` exists server-side but E5-07's frontend half was never built. See N-23. |
+
+### 16.2 Verified on this machine, this pass
+
+| Check | Result |
+| --- | --- |
+| `ng build` | Clean. Initial total **1.52 MB** (dev configuration). |
+| `ng test` | **245 passing, 0 failed**, up from 198 at the start of this pass — +47 across the three screens, the scope selector and the `StatusStyleService` regression suite. |
+| Live contract diff (`GET /inventory`, `/shipments`, `/shipments/{id}`, `/master-data`) | **Run directly by the coordinator over real HTTP**, API from source against the live database. All three DTOs match §15.3 field-for-field, including `stockValue` computed, `stockLevel` classified server-side, `statusCounts` spanning all statuses, and `recordedByName` resolving off the earliest history row (D-47). §15.3 is now executed evidence, not a written record. |
+| Screens driven in a browser | **Not done — see N-22.** |
+
+### 16.3 Deviations and additions from this pass
+
+Continuing from D-49.
+
+| # | Deviation | Rationale |
+| --- | --- | --- |
+| D-50 | **`StatusStyleService`'s service-type map was keyed by the seeded *label*, not the code — fixed, and the codes extracted to `shared/constants/service-type-codes.ts`.** | A **live defect**, found by diffing against a real response rather than by any test. The API serialises `code: 'FREIGHT_ONLY'` (`SeedDefaults.ServiceTypeFreightOnly`) with `'Freight-only'` as the label; the map used the label as its key and every caller passes `.code`. Not cosmetic: `intake.component.ts` and `customer-detail.component.ts` both gated **FSD Q1's external-purchase fields** on the same wrong string, so those fields **never rendered against the real API** — Q1's whole answer was unreachable. `customer-detail` additionally branched on the chip *label*, which is Super-Admin-editable. Nothing caught it because **every spec fixture hard-coded the same wrong string it was meant to protect** — N-12's defect class, on a value reaching four screens. Callers now branch on the immutable code (D-12), fixtures corrected, and `status-style.service.spec.ts` added: the service had **no spec at all**, and its new assertions spell the code out as a literal rather than importing the constant they guard, so they would fail against the bug. |
+| D-51 | **`StatusStyleService.stockLevel()` added**, a separate map from `ST`. | E7-11 and E7-13 both render the three stock levels; a local copy in either would be the DR-6 violation the service exists to prevent. Deliberately not reachable through `status()`: stock level is a *computed condition*, not a configurable status row, and a Super-Admin-created status code must not be able to collide with it. |
+| D-52 | **`formatInr` promoted from `invoices/utils/` to `shared/utils/currency.util.ts`**, joined by `formatInrCompact` and `formatQty`. | Its "keep it local, it only formats mocked data" comment stopped being true the moment M5 put live money on screen. `formatInrCompact` renders the prototype's abbreviated tile figures (`₹41.2 L`) in lakh/crore units. The old path re-exports, so no import churn. |
+| D-53 | **`MasterDataResponse` (core) gains `documentTypes`.** | `MasterDataAggregateDto` has always served **seven** collections; this model declared six, so document types were invisible to every consumer outside the admin screen, which re-declares its own shapes. Not a new field — a blind spot that only surfaced when a read-only consumer finally needed it. |
+| D-54 | **Scope-filtered accessors (`shipmentDocumentTypeOptions()` / `vendorDocumentTypeOptions()`) rather than one `documentTypeOptions()`.** | So a caller cannot forget to filter. The failure mode of forgetting is silent at the dropdown and only appears as a rejected upload — exactly the shape of bug worth making unrepresentable. |
+| D-55 | **The shipment status tabs use their own pill classes, not the shared `.tabs`/`.tab` atoms.** | A **deviation from docs/SCREEN_DESIGNS.md's atom table**, which lists those atoms as serving "the shipments status tabs E7-12 will need". They do not: that atom is an underline tab strip designed for the net-new master-data screen, while the approved prototype renders these as bordered pills with a count. E7-12 is an explicit 1:1 port, so the prototype wins — and widening the shared atom to suit this screen would have silently restyled the admin selector. |
+| D-56 | **The detail stepper is driven by `shipmentStatuses` + `statusHistory`, not the prototype's hard-coded ladder and fixed date array.** | The prototype hard-codes `['PACKED','DISPATCHED','IN TRANSIT','DELIVERED']` and a four-element `stepWhen`. Both are mock artefacts: statuses are configurable master data a Super Admin may add to (FSD §3.3/DR-6), and D-33's history table exists precisely so the "when" is real. Each step reads the **first** history row reaching that status, so a shipment sent back a stage still shows when it originally got there. Stages not yet reached show "—" rather than the ETA — presenting an estimate where a record belongs is how a screen starts lying. |
+| D-57 | **"+ Record Inbound Stock" and "+ Record Outbound Shipment" render disabled, with a title explaining why.** | Both are inert in the prototype (a static mock). Their real flows — the inbound dialog and the line-picker with D-35's negative-stock override — are not in E7-11…E7-13's scope. Disabled-with-a-reason rather than wired-to-nothing: a button that silently does nothing when clicked is worse than one that says it isn't ready. See N-23. |
+| D-58 | **TECH_SPEC §6 gained `vendor_documents` and `document_types` rows, and five existing rows were corrected.** | §15.6's pre-work found more drift than N-20 recorded. Beyond the M5 rows (`inventory_items` missing `description`/`unit_cost`, `shipment_lines` missing `unit_cost`, `shipment_documents` still on `doc_type`, both new tables absent), **`vendor_documents` and `document_types` were missing from §6 entirely** — an **M4** gap, built in the pass that closed DR-4 but never written back. Same correction-in-place precedent as D-2, D-19 and commit `62d2588`. |
+
+### 16.4 Open items after the M5 screen pass
+
+| # | Item |
+| --- | --- |
+| **N-22** | **The three new screens have never been driven in a browser.** Build and 245 tests are green and the contract is diffed against live responses, but DR-5/E12-08 wants a per-screen visual diff signed off **at the time**, and this pass did not do one. This **extends N-16 rather than closing it** — M4's screens are still unverified visually too, and M5 has now added three more. The cheapest close is one pass with the API running: the data is already there (9 inventory items including one at −40, 5 shipments across 3 statuses). |
+| **N-23** | **E5-07's frontend half does not exist**, discovered while scoping N-20 (c). The vendor document upload endpoint (`POST /vendors/{id}/documents`, taking `docTypeId`) has been live since M4, but `vendor-detail` only wires the *catalog* upload dialog, which has no type selector. N-20 (c) assumed two dropdowns to filter and there is one. Not a regression — a story that was never written. **Now carried as a proper backlog story, `E5-10` in §4**, rather than fixed opportunistically during the M5 pass: the endpoint stays, the UI gets planned scope, and M5's close-out stays at 13/13. Confirm against FSD Q5 before building. |
+| **N-24** | **D-35's 409 `insufficientStock` response has no UI.** The contract is recorded (§15.3) and the backend is tested, but nothing in the client can trigger it, because the create/edit shipment flow that would decrement stock is not built (D-57). The retry-with-`allowNegativeStock` affordance lands with that flow, not before — recorded so the gap is a known consequence, not an oversight. |
+| **N-25** | **Running the API from source needs `Jwt__SigningKey` in the environment.** It is `""` in `appsettings.json` and supplied via env only under Docker, so `dotnet run` starts, connects and then **500s on login** with `IDX10703: key length is zero`. Cheap fixes are user-secrets or an `appsettings.Development.json`; worth doing before anyone else loses time to it. |
+| **N-17** | **Now diagnosed precisely, still open.** The port-5432 collision is a native `postgresql-x64-18` Windows service and Docker's proxy both bound to `0.0.0.0:5432`, with the native service winning host connections — which is why `dotnet run` failed `28P01` against credentials that were correct. The local connection string now targets `55432`, but **that published port is not reproducible from either compose file** and will vanish if the stack is recreated. Still to be settled before the deployment track, and E2-07's `dotnet ef database update` path is still unproven on this machine. |
+| **N-10** | **Moved, as predicted.** This pass was the first to touch Angular since it was raised. Initial total is now **1.52 MB** (dev build, not the production figure the 300 kB budget is written against) — the budget question needs re-measuring against a production build before it means anything. |
+| N-12 | **Now has a second confirmed instance.** D-50 is exactly this defect class — a fixture encoding the value it was meant to protect — and it survived four screens and a full milestone. The wider audit N-12 has asked for since §13.5 is now overdue, not merely worth doing. |
+| N-15 | **Unchanged and now reachable in principle.** E7-13 renders inventory-item names on the shipment detail screen, so a role holding `Shipments.View` without `Inventory.View` sees item names it has no permission to list. Still unreachable with the two seeded roles. |
+| N-18, N-19, N-21 | **Unchanged.** N-21's live re-verification was partly discharged — the contract diff was run directly this pass — but **not on a clean volume**, so §15.2's live row still carries its original caveat. |
+| N-1, N-3, N-5, N-9, N-11, N-13, N-14, N-16 | **Unchanged.** |
+
+### 16.5 Next
+
+**M6 — Invoicing (E8).** M5 is complete and was its prerequisite: E8-01 references a shipment for the CIF case, and D-30's snapshotted line cost exists specifically so an issued invoice's basis cannot drift. M6 remains **fully gated on FSD Q9c** and still needs **DR-3** (no PDF library chosen) settled **before** it starts, not during it — §15.6 was emphatic about this and nothing has changed.
+
+**Cheap and worth folding in first**, in this order: **N-22** (one browser pass over the three new screens, which also closes the older half of N-16), **N-25** (a one-line dev-config fix that is currently costing everyone a confusing 500), and the **N-12 audit**, which D-50 has now made the highest-value test debt in the plan.
+
+**Still needing the business owner:** FSD **Q9c** (gates M6 entirely), FSD **Q6 + Q8** (ask together), the **deployment track** (**N-17** now has a precise diagnosis to act on), **N-10** (re-measure against a production build first), **D-18**, **N-19** (stock-take corrections), and newly **N-23** (is a vendor document upload screen wanted, or is the endpoint dead weight?).

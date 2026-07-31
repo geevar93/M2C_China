@@ -1,0 +1,82 @@
+/* Shipments list (E7-12). Layout only — chip colours come from StatusStyleService. */
+
+/* DEVIATION from docs/SCREEN_DESIGNS.md's atom table, which lists the shared
+   `.tabs`/`.tab` atoms as serving "the shipments status tabs E7-12 will need".
+   They do not: that atom is an underline tab strip, designed for the net-new
+   master-data screen, whereas the approved prototype renders these as bordered
+   pills with a count (Source/Sourcing Ops Platform.dc.html ~line 757). E7-12 is an
+   explicit 1:1 port, so the prototype wins.
+
+   Kept as its own class rather than by widening `.tab`, because changing the shared
+   atom to suit this screen would silently restyle the admin master-data selector. */
+.shp-tabs {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-8);
+}
+
+.shp-tab {
+  appearance: none;
+  cursor: pointer;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-7);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--color-page-bg);
+  }
+}
+
+.shp-tab--active {
+  border-color: var(--color-accent);
+  background: #f5f8ff;
+  color: var(--color-accent);
+}
+
+.shp-tab-count {
+  color: var(--color-text-muted);
+  margin-left: var(--space-2);
+}
+
+.shp-tab--active .shp-tab-count {
+  color: var(--color-accent);
+}
+
+.filter-bar {
+  display: flex;
+  gap: var(--space-6);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-8);
+
+  .field {
+    margin-bottom: 0;
+  }
+}
+
+.filter-search {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.row-link {
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-top: var(--space-8);
+  font-size: 13px;
+}

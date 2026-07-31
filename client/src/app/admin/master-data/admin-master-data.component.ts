@@ -5,12 +5,15 @@ import { AdminMasterDataService } from '../services/admin-master-data.service';
 import {
   COLLECTION_KEYS,
   COLLECTION_LABELS,
+  DOCUMENT_TYPE_SCOPES,
   CategoryRow,
+  DocumentTypeScope,
   LookupRow,
   MasterDataAggregate,
   MasterDataCollectionKey,
   MasterDataRow,
   ReorderItem,
+  UpsertMasterDataRequest,
   isCategoryCollection
 } from '../models/admin-master-data.models';
 
@@ -24,6 +27,15 @@ import {
  *  - `code` is shown but disabled on edit (D-12: `StatusStyleService` keys
  *    colours by `code`, so a mutable code would silently break colours
  *    app-wide) — the field-hint explains that the label is what to rename.
+ *
+ * The `documentTypes` tab additionally carries `scope` (D-34/D-44, open item
+ * N-20b). It is required on create and read-only on edit, for the same reason
+ * `code` is: re-scoping a type that documents already reference would move
+ * those documents into the other module's dropdown. Without this selector the
+ * server's "Vendor" default applied silently and a Super Admin could not
+ * create a type that backs a shipment upload at all — the FSD §3.3
+ * configurability violation DR-6 exists to catch, and the second time this one
+ * screen has hit it (D-26 was the first).
  *
  * Reorder is Move-up/Move-down, not drag-and-drop (no new library — C1 /
  * TECH_SPEC §11 forbid one, and buttons are also what actually works at
@@ -52,6 +64,11 @@ export class AdminMasterDataComponent {
 
   readonly isCategoryTab = computed(() => isCategoryCollection(this.activeCollection()));
 
+  /** Only `documentTypes` carries a scope — every other tab hides the field entirely. */
+  readonly isDocumentTypeTab = computed(() => this.activeCollection() === 'documentTypes');
+
+  readonly documentTypeScopes = DOCUMENT_TYPE_SCOPES;
+
   /** Rows of the active collection, filtered by "Show retired" and sorted by
    * `sortOrder`. Retired rows are never silently hidden — dimmed via
    * `.row-inactive` with an "Inactive" chip when the toggle is on. */
@@ -76,6 +93,9 @@ export class AdminMasterDataComponent {
   readonly formName = signal('');
   readonly formCode = signal('');
   readonly formLabel = signal('');
+  /** `documentTypes` only. Starts empty so create forces a deliberate choice
+   * rather than inheriting the server's "Vendor" default silently (N-20b). */
+  readonly formScope = signal<DocumentTypeScope | ''>('');
   readonly formSaving = signal(false);
   readonly formError = signal<string | null>(null);
 
@@ -106,6 +126,11 @@ export class AdminMasterDataComponent {
 
   lookupLabel(row: MasterDataRow): string {
     return (row as LookupRow).label;
+  }
+
+  /** Empty for every collection but `documentTypes` — the list column renders nothing rather than a placeholder. */
+  lookupScope(row: MasterDataRow): string {
+    return (row as LookupRow).scope ?? '';
   }
 
   // ---- Reorder (Move up/down buttons — see class doc for why not drag-and-drop) ----
@@ -227,6 +252,7 @@ export class AdminMasterDataComponent {
     this.formName.set('');
     this.formCode.set('');
     this.formLabel.set('');
+    this.formScope.set('');
     this.formError.set(null);
     this.formOpen.set(true);
   }
@@ -239,10 +265,14 @@ export class AdminMasterDataComponent {
       this.formName.set(this.categoryName(row));
       this.formCode.set('');
       this.formLabel.set('');
+      this.formScope.set('');
     } else {
       this.formName.set('');
       this.formCode.set(this.lookupCode(row));
       this.formLabel.set(this.lookupLabel(row));
+      // Shown disabled on edit alongside `code` — the server ignores `scope` on
+      // PUT, so an editable field here would look like it worked and not.
+      this.formScope.set((this.lookupScope(row) as DocumentTypeScope) || '');
     }
     this.formOpen.set(true);
   }
@@ -272,10 +302,24 @@ export class AdminMasterDataComponent {
       this.formError.set('Code and label are required.');
       return;
     }
+
+    // Scope is create-only (the server ignores it on PUT, D-34), and required
+    // rather than defaulted: a type created as "Vendor" by accident can never
+    // back a shipment upload and cannot be re-scoped afterwards.
+    if (this.isDocumentTypeTab() && this.formMode() === 'create') {
+      const scope = this.formScope();
+      if (!scope) {
+        this.formError.set('Scope is required — choose whether this type is for vendor or shipment documents.');
+        return;
+      }
+      this.saveForm(key, { code, label, scope });
+      return;
+    }
+
     this.saveForm(key, { code, label });
   }
 
-  private saveForm(key: MasterDataCollectionKey, request: { name?: string; code?: string; label?: string }): void {
+  private saveForm(key: MasterDataCollectionKey, request: UpsertMasterDataRequest): void {
     this.formSaving.set(true);
     this.formError.set(null);
     const editing = this.formEditingRow();

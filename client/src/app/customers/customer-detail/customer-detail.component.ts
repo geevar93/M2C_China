@@ -8,6 +8,7 @@ import { extractErrorMessage } from '../../core/services/problem-details.util';
 import { StatusStyleService } from '../../shared/services/status-style.service';
 import { TimelineStyleService } from '../../shared/services/timeline-style.service';
 import { TimelineDatePipe } from '../../shared/pipes/timeline-date.pipe';
+import { SERVICE_TYPE_FREIGHT_ONLY } from '../../shared/constants/service-type-codes';
 import { DispatchCustomerLock, DispatchDialogComponent } from '../../dispatch/dispatch-dialog/dispatch-dialog.component';
 import { CustomersService } from '../services/customers.service';
 import { CustomerDetail, TimelineEvent } from '../models/customer.models';
@@ -79,12 +80,16 @@ export class CustomerDetailComponent {
     }))
   );
 
-  readonly svcChip = computed(() => {
+  private readonly svcRow = computed(() => {
     const c = this.customer();
     const md = this.masterData().data;
-    const row = md?.serviceTypes.find((r) => r.id === c?.serviceTypeId);
-    return this.styles.serviceType(row?.code);
+    return md?.serviceTypes.find((r) => r.id === c?.serviceTypeId);
   });
+
+  /** The immutable code (D-12) — what behaviour branches on. */
+  readonly svcCode = computed(() => this.svcRow()?.code);
+
+  readonly svcChip = computed(() => this.styles.serviceType(this.svcRow()?.code));
 
   readonly statusChip = computed(() => {
     const c = this.customer();
@@ -127,7 +132,12 @@ export class CustomerDetailComponent {
       { k: 'Notes', v: c.notes ?? '—' }
     ];
 
-    if (this.svcChip().label === 'FREIGHT-ONLY') {
+    // Branches on the service-type CODE, not the chip label. It previously read
+    // `svcChip().label === 'FREIGHT-ONLY'`, which is doubly fragile: the label is
+    // Super-Admin-editable master data, and it only ever held that value because
+    // StatusStyleService was mis-keyed (see shared/constants/service-type-codes.ts).
+    // Against the real API these FSD Q1 fields never rendered.
+    if (this.svcCode() === SERVICE_TYPE_FREIGHT_ONLY) {
       fields.push(
         { k: 'External Marketplace', v: c.externalMarketplace ?? '—' },
         { k: 'External Order Ref', v: c.externalOrderRef ?? '—' },

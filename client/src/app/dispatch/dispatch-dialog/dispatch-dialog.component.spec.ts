@@ -12,7 +12,8 @@ const MASTER_DATA: MasterDataResponse = {
   leadStatuses: [],
   shipmentStatuses: [],
   invoiceStatuses: [],
-  vendorStatuses: []
+  vendorStatuses: [],
+  documentTypes: []
 };
 
 function customer(overrides: Partial<CustomerListItem> = {}): CustomerListItem {

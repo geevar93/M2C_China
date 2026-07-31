@@ -26,7 +26,8 @@ describe('MasterDataService', () => {
     ],
     shipmentStatuses: [{ id: 'ship-transit', code: 'IN TRANSIT', label: 'In Transit', sortOrder: 3, isActive: true }],
     invoiceStatuses: [{ id: 'inv-draft', code: 'DRAFT', label: 'Draft', sortOrder: 1, isActive: true }],
-    vendorStatuses: [{ id: 'ven-active', code: 'ACTIVE', label: 'Active', sortOrder: 1, isActive: true }]
+    vendorStatuses: [{ id: 'ven-active', code: 'ACTIVE', label: 'Active', sortOrder: 1, isActive: true }],
+  documentTypes: []
   };
 
   beforeEach(() => {
