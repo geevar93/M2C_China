@@ -8,6 +8,25 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <!--
+      Required by the EF Core CLI on the STARTUP project, which is this one — ACTION_PLAN
+      N-17/E2-07. Infrastructure already references it, but with PrivateAssets="all", so it
+      deliberately does not flow here; without this line `dotnet ef database update` fails
+      with "Your startup project 'SourcingOps.Api' doesn't reference
+      Microsoft.EntityFrameworkCore.Design".
+
+      That is exactly the command E2-07's deploy job runs, and it has never worked. It went
+      unnoticed because every migration to date was applied either by the API's own
+      auto-migrate on startup (Development only) or by generated SQL run inside the
+      container — neither of which exercises the CLI path the deploy job depends on.
+
+      PrivateAssets="all" keeps it a build-time-only dependency: it is not published to the
+      runtime output, so the container image is unaffected.
+    -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <PackageReference Include="Microsoft.OpenApi" Version="2.11.0" />
   </ItemGroup>

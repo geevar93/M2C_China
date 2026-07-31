@@ -21,4 +21,13 @@ services:
 
   db:
     ports:
-      - "5432:5432" # local debug only — not exposed in prod (TECH_SPEC §8)
+      # HOST port 55432, not 5432 (ACTION_PLAN N-17). A native PostgreSQL service
+      # installed on the developer's machine also binds 0.0.0.0:5432, and on Windows
+      # it wins host connections — so `dotnet run` reached the WRONG server and failed
+      # `28P01 password authentication failed` against credentials that were correct.
+      # That reads as a secrets problem and is not one; it cost real time twice.
+      #
+      # Only the host side moves. The container still listens on 5432 internally, so
+      # `Host=db;Port=5432` in docker-compose.yml is unaffected — nothing inside the
+      # compose network changes. Local dev only; production does not use this file.
+      - "55432:5432" # local debug only — not exposed in prod (TECH_SPEC §8)
