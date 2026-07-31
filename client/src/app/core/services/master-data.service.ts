@@ -177,30 +177,32 @@ export class MasterDataService {
     return this.byIdOf('vendorStatuses', id);
   }
 
-  // ---- Document types ----------------------------------------------------
+  // ---- Document types (N-20(a)/(c); D-34/D-44/D-45) ----------------------
 
   /**
-   * Document types are a **single table serving two upload paths**, discriminated
-   * by `scope` (D-34/D-44). Offering the unfiltered list would put "Packing List"
-   * in the vendor-compliance dropdown and "Business Licence" in the shipment one —
-   * a visible correctness bug in both directions, and one the server rejects
-   * anyway (`ShipmentDocumentService` 400s a mis-scoped type). Filtering here means
-   * the user never gets to pick something that cannot work.
+   * Active document-type rows only, sorted by `sortOrder`, filtered to the
+   * given `scope` — the API serialises `documentTypes` rows for BOTH
+   * `Vendor` and `Shipment` scopes in one collection, so an unscoped caller
+   * would otherwise get a vendor document type back for a shipment upload
+   * dropdown (or vice versa) and offer a type that can never actually attach.
    *
-   * Scope-filtered accessors rather than one `documentTypeOptions()`, so a caller
-   * cannot forget to filter — the failure mode is silent at the dropdown and only
-   * shows up as a rejected upload.
+   * `scope` is deliberately a **required** parameter, not optional/defaulted,
+   * unlike every other `*Options()` accessor above. ACTION_PLAN N-20(b)
+   * exists precisely because a document type silently defaults to `Vendor`
+   * server-side when a caller omits scope on create — an unscoped accessor
+   * here would let the frontend repeat that same silent-default mistake one
+   * layer up, for a caller who simply forgot to ask. Making the parameter
+   * required and narrowly typed (`'Vendor' | 'Shipment'`) means a screen
+   * cannot compile a call that leaves it out; a caller is forced to state
+   * which module it is populating a dropdown for.
    */
-  shipmentDocumentTypeOptions(): Observable<LookupRow[]> {
-    return this.documentTypeOptionsForScope(DOCUMENT_SCOPE_SHIPMENT);
-  }
-
-  vendorDocumentTypeOptions(): Observable<LookupRow[]> {
-    return this.documentTypeOptionsForScope(DOCUMENT_SCOPE_VENDOR);
-  }
-
-  private documentTypeOptionsForScope(scope: string): Observable<LookupRow[]> {
+  documentTypeOptions(scope: 'Vendor' | 'Shipment'): Observable<LookupRow[]> {
     return this.optionsOf('documentTypes').pipe(map((rows) => rows.filter((r) => r.scope === scope)));
+  }
+
+  /** Resolves a document-type id to its row, retired included, scope included as-is on the row. */
+  documentTypeById(id: string | null | undefined): Observable<LookupRow | undefined> {
+    return this.byIdOf('documentTypes', id);
   }
 
   // ---- Internals ----------------------------------------------------------

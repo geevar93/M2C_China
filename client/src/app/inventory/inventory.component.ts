@@ -1,68 +1,59 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
 import { MasterDataService } from '../core/services/master-data.service';
 import { extractErrorMessage } from '../core/services/problem-details.util';
-import { StatusStyleService } from '../shared/services/status-style.service';
-import { formatInr, formatInrCompact, formatQty } from '../shared/utils/currency.util';
+import { InboundDialogComponent, InboundTargetItem } from './inbound-dialog/inbound-dialog.component';
+import { ItemFormDialogComponent } from './item-form-dialog/item-form-dialog.component';
 import { InventoryService } from './services/inventory.service';
-import { InventoryItem, InventoryListResponse, InventorySummary } from './models/inventory.models';
+import { InventoryItem, InventorySummary, RecordInboundResult, StockLevel } from './models/inventory.models';
+import { formatQty, formatStockValue } from './utils/format.util';
+import { stockBarWidth, stockLevelColor, stockLevelTextColor } from './utils/stock-level.util';
 
 interface InventoryRow {
   id: string;
   name: string;
-  subLabel: string;
+  skuUnitLabel: string;
   categoryName: string;
   vendorName: string;
   qtyLabel: string;
   qtyColor: string;
   reorderLabel: string;
-  levelLabel: string;
-  levelBg: string;
-  levelFg: string;
-  barWidth: number;
+  level: StockLevel;
+  chipBg: string;
+  chipFg: string;
   barColor: string;
+  barWidth: number;
   valueLabel: string;
-  negative: boolean;
-}
-
-interface StatTile {
-  label: string;
-  value: string;
-  emphasis: 'normal' | 'warn' | 'danger';
+  rowBg: string;
+  inboundTarget: InboundTargetItem;
 }
 
 const PAGE_SIZE = 25;
+const ALL = '';
+const EMPTY_SUMMARY: InventorySummary = { onHandValue: 0, itemCount: 0, lowStockCount: 0, negativeStockCount: 0 };
 
 /**
- * Inventory list (ACTION_PLAN E7-11) — ported from Source/Sourcing Ops
- * Platform.dc.html `showInventory` (~line 670) against the `/inventory`
- * contract, which was diffed against a live response before this was wired (D-22).
- *
- * Two things the API deliberately owns, so this component must not recompute them:
- *  - `stockLevel` is classified server-side (E7-04). The raw quantities come
- *    alongside it purely so the visual bar's ratio maths can stay here, which is
- *    presentation. Re-deriving the *level* would put a second classifier in the
- *    app, free to disagree with the one the filter uses.
- *  - `summary` is aggregated over the whole filtered set, not the page (D-39).
- *    The four stat tiles read it directly; counting `rows()` would silently show
- *    per-page numbers.
- *
- * `stockValue: null` means **not costed**, not zero — rendered as "—" so it can
- * never be misread as a real ₹0 valuation.
+ * Inventory list (ACTION_PLAN E7-11) — ported from the prototype's
+ * `showInventory` block (`Source/Sourcing Ops Platform.dc.html` ~line
+ * 670-748) and its `invRows()`/`invStats` logic (~line 1401 / ~1773).
+ * Search + category/stock-level filters call `GET /inventory` (§15.3);
+ * the four stat tiles and the low-stock banner read the response's
+ * `summary` block, which is computed over the whole filtered set (D-39),
+ * not just the current page.
  */
 @Component({
   selector: 'app-inventory',
   standalone: true,
-  imports: [],
+  imports: [RouterLink, ItemFormDialogComponent, InboundDialogComponent],
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.scss'
 })
 export class InventoryComponent {
   private readonly inventoryService = inject(InventoryService);
   private readonly masterDataService = inject(MasterDataService);
-  private readonly styles = inject(StatusStyleService);
   private readonly auth = inject(AuthService);
 
   readonly categoryOptions = toSignal(this.masterDataService.categoryOptions(), { initialValue: [] });
@@ -73,11 +64,12 @@ export class InventoryComponent {
   readonly error = signal<string | null>(null);
   private readonly items = signal<InventoryItem[]>([]);
   readonly totalCount = signal(0);
-  private readonly summary = signal<InventorySummary | null>(null);
+  readonly summary = signal<InventorySummary>(EMPTY_SUMMARY);
 
   readonly search = signal('');
-  readonly categoryId = signal('');
-  readonly stockLevel = signal<'' | 'low' | 'healthy'>('');
+  readonly categoryId = signal(ALL);
+  /** `''` | `'LOW'` | `'HEALTHY'` — the API's `stockLevel=LOW` already means "below reorder OR negative" (E7-03), so there is deliberately no separate NEGATIVE filter option; negative items surface via their row badge instead. */
+  readonly stockLevel = signal<'' | StockLevel>(ALL);
   readonly page = signal(1);
 
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.totalCount() / PAGE_SIZE)));
@@ -85,48 +77,28 @@ export class InventoryComponent {
   readonly rows = computed<InventoryRow[]>(() => this.items().map((item) => this.toRow(item)));
   readonly noResults = computed(() => !this.loading() && !this.error() && this.rows().length === 0);
 
-  /** The four tiles, in the approved screen's order and wording. */
-  readonly tiles = computed<StatTile[]>(() => {
+  readonly showLowStockBanner = computed(() => this.summary().lowStockCount > 0 || this.summary().negativeStockCount > 0);
+  readonly bannerText = computed(() => {
     const s = this.summary();
-    if (!s) return [];
-    return [
-      { label: 'On-Hand Value', value: formatInrCompact(s.onHandValue), emphasis: 'normal' },
-      { label: 'Distinct Items', value: String(s.itemCount), emphasis: 'normal' },
-      { label: 'Below Reorder', value: String(s.lowStockCount), emphasis: s.lowStockCount > 0 ? 'warn' : 'normal' },
-      {
-        label: 'Negative Stock',
-        value: String(s.negativeStockCount),
-        emphasis: s.negativeStockCount > 0 ? 'danger' : 'normal'
-      }
-    ];
-  });
-
-  /**
-   * The prototype's amber banner. Its copy is hard-coded there ("3 items below
-   * reorder threshold. Ballpoint Pen Bulk Pack is oversold by 40 units") because it
-   * is a static mock; here it is driven by the live summary and shown only when
-   * there is something to say. The oversold sentence needs a specific item name,
-   * which `summary` does not carry — so it degrades to a count rather than
-   * inventing one or firing a second request to find it.
-   */
-  readonly alert = computed(() => {
-    const s = this.summary();
-    if (!s || (s.lowStockCount === 0 && s.negativeStockCount === 0)) return null;
-
     const parts: string[] = [];
-    if (s.lowStockCount > 0) {
-      parts.push(`${s.lowStockCount} item${s.lowStockCount === 1 ? '' : 's'} below reorder threshold.`);
-    }
-    if (s.negativeStockCount > 0) {
-      parts.push(
-        `${s.negativeStockCount} item${s.negativeStockCount === 1 ? ' is' : 's are'} oversold — an outbound shipment took on-hand negative.`
-      );
-    }
-    return parts.join(' ');
+    if (s.lowStockCount > 0) parts.push(`${s.lowStockCount} item${s.lowStockCount === 1 ? '' : 's'} below reorder threshold`);
+    if (s.negativeStockCount > 0) parts.push(`${s.negativeStockCount} item${s.negativeStockCount === 1 ? '' : 's'} with negative stock`);
+    return parts.join(' · ') + '.';
   });
 
-  /** True once the "Show only low stock" shortcut is applied, so the banner stops offering it. */
-  readonly lowStockFilterActive = computed(() => this.stockLevel() === 'low');
+  readonly onHandValueLabel = computed(() => formatStockValue(this.summary().onHandValue));
+  readonly itemCountLabel = computed(() => this.summary().itemCount.toLocaleString('en-IN'));
+  readonly belowReorderLabel = computed(() => this.summary().lowStockCount.toLocaleString('en-IN'));
+  readonly negativeStockLabel = computed(() => this.summary().negativeStockCount.toLocaleString('en-IN'));
+
+  readonly createOpen = signal(false);
+  readonly editItem = signal<InventoryItem | null>(null);
+
+  readonly inboundOpen = signal(false);
+  readonly inboundPresetItem = signal<InboundTargetItem | null>(null);
+  readonly inboundCandidates = computed<InboundTargetItem[]>(() =>
+    this.items().map((i) => ({ id: i.id, name: i.name, sku: i.sku, unit: i.unit }))
+  );
 
   private readonly search$ = new Subject<string>();
 
@@ -153,14 +125,13 @@ export class InventoryComponent {
   }
 
   setStockLevel(value: string): void {
-    this.stockLevel.set(value === 'low' || value === 'healthy' ? value : '');
+    this.stockLevel.set(value as '' | StockLevel);
     this.page.set(1);
     this.fetch();
   }
 
-  /** The banner's "Show only low stock" shortcut — the prototype's `filterLowStock`. */
   filterLowStock(): void {
-    this.setStockLevel('low');
+    this.setStockLevel('LOW');
   }
 
   prevPage(): void {
@@ -179,19 +150,68 @@ export class InventoryComponent {
     this.fetch();
   }
 
+  openCreate(): void {
+    this.createOpen.set(true);
+  }
+
+  cancelCreate(): void {
+    this.createOpen.set(false);
+  }
+
+  onItemCreated(_item: InventoryItem): void {
+    this.createOpen.set(false);
+    this.fetch();
+  }
+
+  openEdit(row: InventoryRow): void {
+    const item = this.items().find((i) => i.id === row.id);
+    if (item) this.editItem.set(item);
+  }
+
+  cancelEdit(): void {
+    this.editItem.set(null);
+  }
+
+  onItemSaved(_item: InventoryItem): void {
+    this.editItem.set(null);
+    this.fetch();
+  }
+
+  openInboundForRow(row: InventoryRow): void {
+    this.inboundPresetItem.set(row.inboundTarget);
+    this.inboundOpen.set(true);
+  }
+
+  openInboundFromHeader(): void {
+    this.inboundPresetItem.set(null);
+    this.inboundOpen.set(true);
+  }
+
+  cancelInbound(): void {
+    this.inboundOpen.set(false);
+    this.inboundPresetItem.set(null);
+  }
+
+  /** The response carries both the new entry and the re-computed item (§15.3) — patch the one row from it rather than refetching the whole list. */
+  onInboundRecorded(result: RecordInboundResult): void {
+    this.inboundOpen.set(false);
+    this.inboundPresetItem.set(null);
+    this.items.update((items) => items.map((i) => (i.id === result.item.id ? result.item : i)));
+  }
+
   private fetch(): void {
     this.loading.set(true);
     this.error.set(null);
     this.inventoryService
       .list({
         search: this.search() || undefined,
-        categoryId: this.categoryId() || undefined,
-        stockLevel: this.stockLevel() || undefined,
         page: this.page(),
-        pageSize: PAGE_SIZE
+        pageSize: PAGE_SIZE,
+        categoryId: this.categoryId() || undefined,
+        stockLevel: (this.stockLevel() || undefined) as StockLevel | undefined
       })
       .subscribe({
-        next: (res: InventoryListResponse) => {
+        next: (res) => {
           this.items.set(res.items);
           this.totalCount.set(res.totalCount);
           this.summary.set(res.summary);
@@ -205,42 +225,28 @@ export class InventoryComponent {
   }
 
   private toRow(item: InventoryItem): InventoryRow {
-    const level = this.styles.stockLevel(item.stockLevel);
-
+    const color = stockLevelColor(item.stockLevel);
     return {
       id: item.id,
       name: item.name,
-      subLabel: [item.sku, `per ${item.unit}`].filter(Boolean).join(' · '),
+      skuUnitLabel: `${item.sku ?? '—'} · per ${item.unit}`,
       categoryName: item.category.name,
       vendorName: item.vendor?.name ?? '—',
       qtyLabel: formatQty(item.onHandQty),
-      // HEALTHY quantities keep the default ink — only LOW/NEGATIVE are tinted,
-      // matching the prototype's `qtyColor` (which uses the plain body colour).
-      qtyColor: item.stockLevel === 'HEALTHY' ? '' : level.fg,
+      qtyColor: stockLevelTextColor(item.stockLevel),
       reorderLabel: formatQty(item.reorderThreshold),
-      levelLabel: item.stockLevel,
-      levelBg: level.bg,
-      levelFg: level.fg,
-      barWidth: this.barWidth(item),
-      barColor: level.fg,
-      valueLabel: item.stockValue === null ? '—' : formatInr(item.stockValue),
-      negative: item.stockLevel === 'NEGATIVE'
+      level: item.stockLevel,
+      chipBg: color.bg,
+      chipFg: color.fg,
+      barColor: color.fg,
+      barWidth: stockBarWidth(item.onHandQty, item.reorderThreshold),
+      valueLabel: formatStockValue(item.stockValue),
+      // Negative rows get the prototype's tinted row background; no dedicated
+      // token exists for its literal `#fff8f8` shade, so this reuses the
+      // closest existing semantic token (`--color-danger-bg`) rather than
+      // hand-inventing a new hex (flagged to the coordinator).
+      rowBg: item.stockLevel === 'NEGATIVE' ? 'var(--color-danger-bg-subtle)' : 'var(--color-surface)',
+      inboundTarget: { id: item.id, name: item.name, sku: item.sku, unit: item.unit }
     };
-  }
-
-  /**
-   * The prototype's bar ratio: `qty / (reorder * 2.5)` as a percentage, clamped to
-   * 0–100, with negative stock pinned full-width in red so an oversold row reads as
-   * a hard problem rather than an empty bar.
-   *
-   * A zero threshold would divide by zero. The prototype never hits that because its
-   * seed data has none, but real master data can — treated as "no threshold to
-   * measure against", so any non-negative quantity shows a full bar.
-   */
-  private barWidth(item: InventoryItem): number {
-    if (item.stockLevel === 'NEGATIVE') return 100;
-    if (item.reorderThreshold <= 0) return 100;
-    const ratio = Math.round((item.onHandQty / (item.reorderThreshold * 2.5)) * 100);
-    return Math.max(0, Math.min(100, ratio));
   }
 }

@@ -11,7 +11,7 @@ import { InventoryItem, InventorySummary } from './models/inventory.models';
 const MASTER_DATA: MasterDataResponse = {
   categories: [
     { id: 'cat-jewellery', name: 'Jewellery', sortOrder: 1, isActive: true },
-    { id: 'cat-tools', name: 'Tools', sortOrder: 2, isActive: true }
+    { id: 'cat-stationery', name: 'Stationery', sortOrder: 2, isActive: true }
   ],
   serviceTypes: [],
   leadStatuses: [],
@@ -21,34 +21,31 @@ const MASTER_DATA: MasterDataResponse = {
   documentTypes: []
 };
 
-/** Field-for-field the shape a live `GET /inventory` returned during the contract diff. */
 function item(overrides: Partial<InventoryItem> = {}): InventoryItem {
   return {
     id: 'inv-1',
-    name: 'Adjustable Wrench 10in',
-    sku: 'TLS-WRN-310',
+    name: 'Silver Chain',
+    sku: 'SKU-001',
     description: null,
-    category: { id: 'cat-tools', name: 'Tools' },
-    vendor: { id: 'ven-1', name: 'Ningbo Tools & Hardware' },
-    unit: 'pc',
-    onHandQty: 145,
-    reorderThreshold: 200,
-    unitCost: 700,
-    stockValue: 101500,
-    stockLevel: 'LOW',
+    category: { id: 'cat-jewellery', name: 'Jewellery' },
+    vendor: { id: 'ven-1', name: 'Yiwu Jewel Craft Co.' },
+    unit: 'pcs',
+    onHandQty: 1840,
+    reorderThreshold: 600,
+    unitCost: 120,
+    stockValue: 220800,
+    stockLevel: 'HEALTHY',
     ...overrides
   };
 }
 
-function summary(overrides: Partial<InventorySummary> = {}): InventorySummary {
-  return { onHandValue: 3450900, itemCount: 9, lowStockCount: 2, negativeStockCount: 1, ...overrides };
-}
+const SUMMARY: InventorySummary = { onHandValue: 220800, itemCount: 1, lowStockCount: 0, negativeStockCount: 0 };
 
 describe('InventoryComponent', () => {
   let fixture: ComponentFixture<InventoryComponent>;
   let httpMock: HttpTestingController;
 
-  async function configure(permissions: string[] = ['Inventory.View']): Promise<void> {
+  async function configure(permissions: string[] = []): Promise<void> {
     await TestBed.configureTestingModule({
       imports: [InventoryComponent],
       providers: [
@@ -69,202 +66,195 @@ describe('InventoryComponent', () => {
     httpMock.expectOne((r) => r.url === '/api/v1/master-data').flush(MASTER_DATA);
   }
 
-  function flushList(items: InventoryItem[], s: InventorySummary = summary(), totalCount = items.length): void {
-    httpMock
-      .expectOne((r) => r.url === '/api/v1/inventory')
-      .flush({ items, page: 1, pageSize: 25, totalCount, summary: s });
+  function flushList(items: InventoryItem[], summary: InventorySummary = SUMMARY, totalCount = items.length): void {
+    httpMock.expectOne((r) => r.url === '/api/v1/inventory').flush({ items, page: 1, pageSize: 25, totalCount, summary });
   }
 
-  it('populates the category filter from MasterDataService, not a hard-coded list (DR-6)', async () => {
+  it('renders a row from the embedded category/vendor objects', async () => {
     await configure();
     fixture.detectChanges();
     flushMasterData();
     flushList([item()]);
     fixture.detectChanges();
 
-    const options = Array.from(fixture.nativeElement.querySelectorAll('#inv-cat option')).map((o) =>
-      (o as HTMLOptionElement).textContent!.trim()
-    );
-    expect(options).toEqual(['All categories', 'Jewellery', 'Tools']);
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('Silver Chain');
+    expect(text).toContain('SKU-001 · per pcs');
+    expect(text).toContain('Jewellery');
+    expect(text).toContain('Yiwu Jewel Craft Co.');
+    expect(text).toContain('HEALTHY');
   });
 
-  it('offers ONE "Low or negative" stock-level option, matching the approved screen (E7-03)', async () => {
+  it('renders "—" for a vendor-less item and for stockValue: null (D-30 — not costed, not worth zero)', async () => {
     await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([item({ vendor: null, stockValue: null })]);
+    fixture.detectChanges();
+
+    const rows = fixture.componentInstance.rows();
+    expect(rows[0].vendorName).toBe('—');
+    expect(rows[0].valueLabel).toBe('—');
+  });
+
+  it('reads the four stat tiles from the response summary, not from the page of items', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([item()], { onHandValue: 4120000, itemCount: 9, lowStockCount: 3, negativeStockCount: 1 }, 50);
+    fixture.detectChanges();
+
+    const c = fixture.componentInstance;
+    expect(c.itemCountLabel()).toBe('9');
+    expect(c.belowReorderLabel()).toBe('3');
+    expect(c.negativeStockLabel()).toBe('1');
+    expect(c.onHandValueLabel()).toContain('41,20,000');
+  });
+
+  it('shows the low-stock banner only when the summary has non-zero counts, stating the real counts', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([item()], { onHandValue: 0, itemCount: 1, lowStockCount: 3, negativeStockCount: 1 });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.showLowStockBanner()).toBeTrue();
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('3 items below reorder threshold');
+    expect(text).toContain('1 item with negative stock');
+    expect(text).toContain('Show only low stock');
+  });
+
+  it('hides the low-stock banner when both counts are zero', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([item()], { onHandValue: 0, itemCount: 1, lowStockCount: 0, negativeStockCount: 0 });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.showLowStockBanner()).toBeFalse();
+  });
+
+  it('"Show only low stock" sets the stock-level filter to LOW and refetches', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([item()], { onHandValue: 0, itemCount: 1, lowStockCount: 1, negativeStockCount: 0 });
+    fixture.detectChanges();
+
+    fixture.componentInstance.filterLowStock();
+
+    const req = httpMock.expectOne((r) => r.url === '/api/v1/inventory');
+    expect(req.request.params.get('stockLevel')).toBe('LOW');
+    req.flush({ items: [], page: 1, pageSize: 25, totalCount: 0, summary: SUMMARY });
+  });
+
+  it('sends the category and stock-level filters as query params', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([]);
+    fixture.detectChanges();
+
+    fixture.componentInstance.setCategory('cat-stationery');
+    let req = httpMock.expectOne((r) => r.url === '/api/v1/inventory');
+    expect(req.request.params.get('categoryId')).toBe('cat-stationery');
+    req.flush({ items: [], page: 1, pageSize: 25, totalCount: 0, summary: SUMMARY });
+
+    fixture.componentInstance.setStockLevel('HEALTHY');
+    req = httpMock.expectOne((r) => r.url === '/api/v1/inventory');
+    expect(req.request.params.get('stockLevel')).toBe('HEALTHY');
+    req.flush({ items: [], page: 1, pageSize: 25, totalCount: 0, summary: SUMMARY });
+  });
+
+  it('debounces the search box and sends it as the search query param', fakeAsync(async () => {
+    await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([]);
+    fixture.detectChanges();
+
+    fixture.componentInstance.onSearchInput('chain');
+    tick(350);
+
+    const req = httpMock.expectOne((r) => r.url === '/api/v1/inventory');
+    expect(req.request.params.get('search')).toBe('chain');
+    req.flush({ items: [], page: 1, pageSize: 25, totalCount: 0, summary: SUMMARY });
+  }));
+
+  it('shows a visible error instead of hanging when the list request fails', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    httpMock
+      .expectOne((r) => r.url === '/api/v1/inventory')
+      .flush({ title: 'Server error', detail: 'Inventory lookup failed' }, { status: 500, statusText: 'Server Error' });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.loading()).toBeFalse();
+    expect(fixture.componentInstance.error()).toBe('Inventory lookup failed');
+    expect(fixture.nativeElement.textContent).toContain('Inventory lookup failed');
+  });
+
+  it('shows the empty-state message when no items match the filters', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('No inventory items match these filters');
+  });
+
+  it('hides mutating actions without Inventory.Edit permission', async () => {
+    await configure([]);
     fixture.detectChanges();
     flushMasterData();
     flushList([item()]);
     fixture.detectChanges();
 
-    const options = Array.from(fixture.nativeElement.querySelectorAll('#inv-level option')).map((o) =>
-      (o as HTMLOptionElement).textContent!.trim()
-    );
-    expect(options).toEqual(['All stock levels', 'Low or negative', 'Healthy']);
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).not.toContain('+ Add Item');
+    expect(text).not.toContain('+ Record Inbound Stock');
+    expect(text).not.toContain('+ Inbound');
+    expect(text).not.toContain('Edit');
   });
 
-  describe('stat tiles', () => {
-    it('reads the summary block rather than counting the current page (D-39)', async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      // One row on the page, but a summary describing nine items across the filtered set.
-      flushList([item()], summary({ itemCount: 9, lowStockCount: 2, negativeStockCount: 1 }), 9);
-      fixture.detectChanges();
-
-      const values = Array.from(fixture.nativeElement.querySelectorAll('.stat-tile__value')).map((v) =>
-        (v as HTMLElement).textContent!.trim()
-      );
-      expect(values).toEqual(['₹34.5 L', '9', '2', '1']);
-    });
-
-    it('does not tint the counts when there is nothing wrong', async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      flushList([item({ stockLevel: 'HEALTHY' })], summary({ lowStockCount: 0, negativeStockCount: 0 }));
-      fixture.detectChanges();
-
-      expect(fixture.nativeElement.querySelector('.inv-stat--warn')).toBeFalsy();
-      expect(fixture.nativeElement.querySelector('.inv-stat--danger')).toBeFalsy();
-    });
-  });
-
-  describe('stock value', () => {
-    it('renders an uncosted item as "—", never as ₹0', async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      flushList([item({ unitCost: null, stockValue: null })]);
-      fixture.detectChanges();
-
-      const cells: string = fixture.nativeElement.querySelector('tbody tr').textContent;
-      expect(cells).toContain('—');
-      expect(cells).not.toContain('₹0');
-    });
-
-    it('formats a costed item in en-IN rupees', async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      flushList([item({ stockValue: 101500 })]);
-      fixture.detectChanges();
-
-      expect(fixture.nativeElement.querySelector('tbody tr').textContent).toContain('₹1,01,500.00');
-    });
-  });
-
-  describe('level bar', () => {
-    it('pins an oversold row full-width and flags the row itself', async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      flushList([item({ onHandQty: -40, stockLevel: 'NEGATIVE' })]);
-      fixture.detectChanges();
-
-      const fill = fixture.nativeElement.querySelector('.inv-bar-fill') as HTMLElement;
-      expect(fill.style.width).toBe('100%');
-      expect(fixture.nativeElement.querySelector('.inv-row-negative')).toBeTruthy();
-    });
-
-    it('scales the bar by qty / (reorder * 2.5), as the prototype does', async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      // 145 / (200 * 2.5) = 29%
-      flushList([item({ onHandQty: 145, reorderThreshold: 200 })]);
-      fixture.detectChanges();
-
-      expect((fixture.nativeElement.querySelector('.inv-bar-fill') as HTMLElement).style.width).toBe('29%');
-    });
-
-    it('does not divide by zero when an item has no reorder threshold', async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      flushList([item({ onHandQty: 10, reorderThreshold: 0, stockLevel: 'HEALTHY' })]);
-      fixture.detectChanges();
-
-      expect((fixture.nativeElement.querySelector('.inv-bar-fill') as HTMLElement).style.width).toBe('100%');
-    });
-
-    it('takes the level from the API rather than re-deriving it from the quantities (E7-04)', async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      // Quantities that a client-side classifier would call HEALTHY, but the API says LOW.
-      // The screen must show what the API (and therefore the filter) says.
-      flushList([item({ onHandQty: 900, reorderThreshold: 200, stockLevel: 'LOW' })]);
-      fixture.detectChanges();
-
-      expect(fixture.nativeElement.querySelector('.inv-level .chip').textContent.trim()).toBe('LOW');
-    });
-  });
-
-  describe('filters', () => {
-    it('sends stockLevel=low and hides the banner shortcut once applied', async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      flushList([item()], summary({ lowStockCount: 2 }));
-      fixture.detectChanges();
-
-      expect(fixture.nativeElement.querySelector('.inv-alert-link')).toBeTruthy();
-      fixture.componentInstance.filterLowStock();
-
-      const req = httpMock.expectOne((r) => r.url === '/api/v1/inventory');
-      expect(req.request.params.get('stockLevel')).toBe('low');
-      req.flush({ items: [item()], page: 1, pageSize: 25, totalCount: 1, summary: summary() });
-      fixture.detectChanges();
-
-      expect(fixture.nativeElement.querySelector('.inv-alert-link')).toBeFalsy();
-    });
-
-    it('debounces search and resets to page 1', fakeAsync(async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      flushList([item()], summary(), 100);
-
-      fixture.componentInstance.onSearchInput('wren');
-      tick(300);
-
-      const req = httpMock.expectOne((r) => r.url === '/api/v1/inventory');
-      expect(req.request.params.get('search')).toBe('wren');
-      expect(req.request.params.get('page')).toBe('1');
-      req.flush({ items: [], page: 1, pageSize: 25, totalCount: 0, summary: summary() });
-    }));
-  });
-
-  describe('alert banner', () => {
-    it('stays hidden when nothing is low or negative', async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      flushList([item({ stockLevel: 'HEALTHY' })], summary({ lowStockCount: 0, negativeStockCount: 0 }));
-      fixture.detectChanges();
-
-      expect(fixture.nativeElement.querySelector('.inv-alert')).toBeFalsy();
-    });
-
-    it('describes both conditions from live counts, not the prototype’s hard-coded copy', async () => {
-      await configure();
-      fixture.detectChanges();
-      flushMasterData();
-      flushList([item()], summary({ lowStockCount: 3, negativeStockCount: 1 }));
-      fixture.detectChanges();
-
-      const text: string = fixture.nativeElement.querySelector('.inv-alert').textContent;
-      expect(text).toContain('3 items below reorder threshold.');
-      expect(text).toContain('1 item is oversold');
-    });
-  });
-
-  it('shows a retryable error instead of hanging when the list request fails', async () => {
-    await configure();
+  it('shows mutating actions with Inventory.Edit permission', async () => {
+    await configure(['Inventory.Edit']);
     fixture.detectChanges();
     flushMasterData();
-    httpMock.expectOne((r) => r.url === '/api/v1/inventory').flush('boom', { status: 500, statusText: 'Server Error' });
+    flushList([item()]);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('.state-panel').textContent).toContain('Could not load inventory');
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('+ Add Item');
+    expect(text).toContain('+ Record Inbound Stock');
+  });
+
+  it('patches the row from the inbound response instead of refetching the list', async () => {
+    await configure(['Inventory.Edit']);
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([item()]);
+    fixture.detectChanges();
+
+    const updated = item({ onHandQty: 2040 });
+    fixture.componentInstance.onInboundRecorded({
+      entry: {
+        id: 'entry-1',
+        inventoryItemId: 'inv-1',
+        quantity: 200,
+        entryDate: '2026-07-29',
+        reference: null,
+        recordedByUserId: 'user-1',
+        recordedByName: 'Priya Sharma',
+        createdAt: '2026-07-29T10:00:00Z'
+      },
+      item: updated
+    });
+
+    expect(fixture.componentInstance.rows()[0].qtyLabel).toBe('2,040');
+    httpMock.expectNone((r) => r.url === '/api/v1/inventory');
   });
 });

@@ -1,0 +1,55 @@
+<div class="dialog-backdrop">
+  <div class="dialog-panel dialog-panel--narrow">
+    <div class="ibd-header">
+      <div>
+        <div class="section-title">Record Inbound Stock</div>
+        <div class="muted">Written as a durable, queryable inbound entry — not just an audit-log row.</div>
+      </div>
+      <div class="dialog-close" (click)="cancel()">✕</div>
+    </div>
+
+    @if (error()) {
+      <div class="field-error ibd-banner" role="alert">{{ error() }}</div>
+    }
+
+    @if (presetItem) {
+      <div class="field">
+        <label>Item</label>
+        <div class="field-static">{{ selectedItemLabel() }}</div>
+      </div>
+    } @else {
+      <div class="field">
+        <label for="ibd-item">Item</label>
+        <select id="ibd-item" class="field-input" [value]="selectedItemId()" (change)="setItem($any($event.target).value)">
+          <option value="">Choose an item</option>
+          @for (opt of candidateItems; track opt.id) {
+            <option [value]="opt.id">{{ opt.name }}{{ opt.sku ? ' · ' + opt.sku : '' }}</option>
+          }
+        </select>
+      </div>
+    }
+
+    <div class="ibd-grid-2">
+      <div class="field">
+        <label for="ibd-qty">Quantity <span class="muted">{{ selectedItem()?.unit ? '(' + selectedItem()!.unit + ')' : '' }}</span></label>
+        <input id="ibd-qty" class="field-input" inputmode="decimal" [value]="quantity()" (input)="quantity.set($any($event.target).value)" />
+      </div>
+      <div class="field">
+        <label for="ibd-date">Entry Date</label>
+        <input id="ibd-date" type="date" class="field-input" [value]="entryDate()" (change)="entryDate.set($any($event.target).value)" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="ibd-ref">Reference <span class="muted">(optional — e.g. PO number)</span></label>
+      <input id="ibd-ref" class="field-input" [value]="reference()" (input)="reference.set($any($event.target).value)" />
+    </div>
+
+    <div class="ibd-actions">
+      <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        {{ saving() ? 'Recording…' : 'Record Inbound' }}
+      </button>
+    </div>
+  </div>
+</div>

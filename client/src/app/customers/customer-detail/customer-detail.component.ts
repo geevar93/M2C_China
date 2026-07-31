@@ -80,16 +80,16 @@ export class CustomerDetailComponent {
     }))
   );
 
-  private readonly svcRow = computed(() => {
+  /** Raw API `code` (e.g. `FREIGHT_ONLY`), never the display label — branch
+   *  logic must compare against this, not `svcChip().label`, which is a
+   *  presentation string owned by `StatusStyleService` and not a stable key. */
+  private readonly serviceTypeCode = computed(() => {
     const c = this.customer();
     const md = this.masterData().data;
-    return md?.serviceTypes.find((r) => r.id === c?.serviceTypeId);
+    return md?.serviceTypes.find((r) => r.id === c?.serviceTypeId)?.code ?? null;
   });
 
-  /** The immutable code (D-12) — what behaviour branches on. */
-  readonly svcCode = computed(() => this.svcRow()?.code);
-
-  readonly svcChip = computed(() => this.styles.serviceType(this.svcRow()?.code));
+  readonly svcChip = computed(() => this.styles.serviceType(this.serviceTypeCode()));
 
   readonly statusChip = computed(() => {
     const c = this.customer();
@@ -132,12 +132,7 @@ export class CustomerDetailComponent {
       { k: 'Notes', v: c.notes ?? '—' }
     ];
 
-    // Branches on the service-type CODE, not the chip label. It previously read
-    // `svcChip().label === 'FREIGHT-ONLY'`, which is doubly fragile: the label is
-    // Super-Admin-editable master data, and it only ever held that value because
-    // StatusStyleService was mis-keyed (see shared/constants/service-type-codes.ts).
-    // Against the real API these FSD Q1 fields never rendered.
-    if (this.svcCode() === SERVICE_TYPE_FREIGHT_ONLY) {
+    if (this.serviceTypeCode() === 'FREIGHT_ONLY') {
       fields.push(
         { k: 'External Marketplace', v: c.externalMarketplace ?? '—' },
         { k: 'External Order Ref', v: c.externalOrderRef ?? '—' },

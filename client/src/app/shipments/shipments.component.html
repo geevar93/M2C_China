@@ -2,44 +2,30 @@
   <div class="page-header">
     <h1 class="page-title">Shipments</h1>
     @if (canEdit()) {
-      <!-- Inert in the prototype (static mock). Recording an outbound shipment needs
-           the line-picker + negative-stock override flow (E7-06/D-35), which is not
-           this story — disabled rather than rendered dead. -->
-      <button type="button" class="btn btn-primary" disabled title="Recording a shipment arrives with the outbound flow.">
-        + Record Outbound Shipment
-      </button>
+      <button type="button" class="btn btn-primary" (click)="openCreate()">+ Record Outbound Shipment</button>
     }
   </div>
 
   <div class="card filter-bar">
     <div class="field filter-search">
-      <label for="shp-search">Search</label>
+      <label for="ship-search">Search</label>
       <input
-        id="shp-search"
+        id="ship-search"
         class="field-input"
         [value]="search()"
         (input)="onSearchInput($any($event.target).value)"
-        placeholder="Shipment reference"
+        placeholder="Reference or customer"
       />
     </div>
   </div>
 
-  @if (tabs().length > 0) {
-    <div class="shp-tabs" role="tablist" aria-label="Filter shipments by status">
-      @for (t of tabs(); track t.statusId) {
-        <button
-          type="button"
-          class="shp-tab"
-          role="tab"
-          [class.shp-tab--active]="t.active"
-          [attr.aria-selected]="t.active"
-          (click)="selectTab(t.statusId)"
-        >
-          {{ t.label }} <span class="shp-tab-count">{{ t.count }}</span>
-        </button>
-      }
-    </div>
-  }
+  <div class="pill-tabs">
+    @for (t of tabs(); track t.key) {
+      <div class="pill-tab" [class.pill-tab--active]="t.active" (click)="selectTab(t.key)">
+        {{ t.label }} <span class="pill-tab__count">{{ t.count }}</span>
+      </div>
+    }
+  </div>
 
   <div class="table-wrap">
     <table>
@@ -59,7 +45,7 @@
         @for (s of rows(); track s.id) {
           <tr>
             <td><a [routerLink]="['/shipments', s.id]" class="row-link">{{ s.reference }}</a></td>
-            <td>{{ s.customerName }}</td>
+            <td>{{ s.customer }}</td>
             <td><span class="chip" [style.background]="s.svcBg" [style.color]="s.svcFg">{{ s.svcLabel }}</span></td>
             <td class="muted">{{ s.stockImpact }}</td>
             <td class="muted">{{ s.destination }}</td>
@@ -92,5 +78,9 @@
       <span class="muted">Page {{ page() }} of {{ totalPages() }}</span>
       <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() >= totalPages()" (click)="nextPage()">Next →</button>
     </div>
+  }
+
+  @if (createOpen()) {
+    <app-shipment-form-dialog (closed)="cancelCreate()" (saved)="onShipmentCreated()"></app-shipment-form-dialog>
   }
 </div>

@@ -27,7 +27,10 @@ describe('MasterDataService', () => {
     shipmentStatuses: [{ id: 'ship-transit', code: 'IN TRANSIT', label: 'In Transit', sortOrder: 3, isActive: true }],
     invoiceStatuses: [{ id: 'inv-draft', code: 'DRAFT', label: 'Draft', sortOrder: 1, isActive: true }],
     vendorStatuses: [{ id: 'ven-active', code: 'ACTIVE', label: 'Active', sortOrder: 1, isActive: true }],
-  documentTypes: []
+    documentTypes: [
+      { id: 'doc-licence', code: 'BUSINESS_LICENCE', label: 'Business Licence', sortOrder: 1, isActive: true, scope: 'Vendor' },
+      { id: 'doc-packing-list', code: 'PACKING_LIST', label: 'Packing List', sortOrder: 1, isActive: true, scope: 'Shipment' }
+    ]
   };
 
   beforeEach(() => {
@@ -102,6 +105,20 @@ describe('MasterDataService', () => {
 
     expect(result.length).toBe(1);
     expect(result.every((r) => r.isActive)).toBeTrue();
+  });
+
+  describe('documentTypeOptions (N-20(a)/(c))', () => {
+    it('filters to the given scope, excluding rows for the other scope', () => {
+      let vendorResult: Array<{ code: string }> = [];
+      let shipmentResult: Array<{ code: string }> = [];
+      service.documentTypeOptions('Vendor').subscribe((r) => (vendorResult = r));
+      service.documentTypeOptions('Shipment').subscribe((r) => (shipmentResult = r));
+
+      flushOnce();
+
+      expect(vendorResult.map((r) => r.code)).toEqual(['BUSINESS_LICENCE']);
+      expect(shipmentResult.map((r) => r.code)).toEqual(['PACKING_LIST']);
+    });
   });
 
   it('orders dropdown options by sortOrder, retired rows excluded', () => {

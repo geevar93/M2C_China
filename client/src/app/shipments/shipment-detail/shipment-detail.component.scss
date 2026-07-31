@@ -1,103 +1,60 @@
-/* Shipment detail (E7-13). Layout only — chip colours come from StatusStyleService. */
-
-.sd-back {
-  display: inline-block;
+.back-link {
   font-size: 13px;
   color: var(--color-text-muted);
-  margin-bottom: var(--space-6);
 }
 
-.sd-header {
+.sd-head {
+  display: flex;
   align-items: flex-start;
+  justify-content: space-between;
+  margin: 6px 0 var(--space-9);
+  gap: var(--space-8);
 }
 
 .sd-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-6);
   flex-wrap: wrap;
 }
 
-.sd-subtitle {
+.sd-sub {
   font-size: 13px;
   color: var(--color-text-muted);
-  margin-top: var(--space-3);
+  margin-top: var(--space-2);
 }
 
 .sd-actions {
   display: flex;
   gap: var(--space-4);
+  flex: 0 0 auto;
   flex-wrap: wrap;
 }
 
-/* The 4-step progress stepper. Steps flex evenly and wrap at phone width rather
-   than scrolling sideways — a status ladder is readable stacked, and a horizontal
-   scroll would hide the later stages entirely (E12-01). */
-.sd-stepper {
-  display: flex;
-  gap: var(--space-6);
-  flex-wrap: wrap;
+.sd-banner {
   margin-bottom: var(--space-8);
 }
 
-.sd-step {
-  flex: 1 1 140px;
-  text-align: center;
-  color: var(--color-text-muted);
+.sd-stepper-card {
+  margin-bottom: var(--space-8);
 }
 
-.sd-step-dot {
-  width: 28px;
-  height: 28px;
-  margin: 0 auto var(--space-4);
-  border-radius: 50%;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
+.section-title {
+  font-size: 14px;
   font-weight: 600;
+  margin-bottom: var(--space-8);
 }
 
-/* Reached stages take the accent; upcoming ones stay muted. The distinction is
-   carried by the mark (✓ / ● / number) as well as colour, so it survives a
-   greyscale print and does not rely on hue alone. */
-.sd-step--done,
-.sd-step--current {
-  color: var(--color-text);
-
-  .sd-step-dot {
-    background: var(--color-accent);
-    border-color: var(--color-accent);
-    color: #fff;
-  }
-}
-
-.sd-step-label {
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.sd-step-when {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  margin-top: var(--space-2);
-}
-
-/* Lines take the width; details/documents ride alongside and drop under at
-   tablet width. */
 .sd-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  grid-template-columns: 1.4fr 1fr;
   gap: var(--space-8);
-  align-items: start;
-}
 
-@media (max-width: 900px) {
-  .sd-grid {
-    grid-template-columns: minmax(0, 1fr);
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -107,8 +64,75 @@
   gap: var(--space-8);
 }
 
-.sd-line-name {
+.sd-totals {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-9);
+  padding-top: var(--space-8);
+  font-size: 14px;
+}
+
+.sd-totals-value {
+  color: var(--color-text);
+
+  &--lg {
+    font-size: 16px;
+  }
+}
+
+.sd-field-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-track);
+  font-size: 13px;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.sd-field-value {
   font-weight: 500;
+  text-align: right;
+}
+
+.sd-doc-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--color-track);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.sd-doc-icon {
+  font-size: 16px;
+}
+
+.sd-doc-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sd-doc-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.sd-doc-open {
+  font-size: 13px;
+  color: var(--color-accent);
+  cursor: pointer;
+
+  &--busy {
+    cursor: default;
+    opacity: 0.6;
+  }
 }
 
 .row-sub {
@@ -119,75 +143,4 @@
 
 .muted {
   color: var(--color-text-muted);
-}
-
-.sd-totals {
-  display: flex;
-  gap: var(--space-9);
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  margin-top: var(--space-8);
-  padding-top: var(--space-6);
-  border-top: 1px solid var(--color-border);
-  font-size: 13px;
-  color: var(--color-text-muted);
-
-  strong {
-    color: var(--color-text);
-    margin-left: var(--space-3);
-  }
-}
-
-.sd-field {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-6);
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--color-border);
-  font-size: 13px;
-
-  &:last-child {
-    border-bottom: none;
-  }
-}
-
-.sd-field-key {
-  color: var(--color-text-muted);
-}
-
-.sd-field-value {
-  text-align: right;
-}
-
-.sd-doc {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-6) 0;
-  border-bottom: 1px solid var(--color-border);
-
-  &:last-child {
-    border-bottom: none;
-  }
-}
-
-.sd-doc-icon {
-  font-size: 18px;
-}
-
-.sd-doc-body {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.sd-doc-name {
-  font-size: 14px;
-  font-weight: 500;
-  word-break: break-word;
-}
-
-.sd-dialog-actions {
-  display: flex;
-  gap: var(--space-6);
-  margin-top: var(--space-8);
 }

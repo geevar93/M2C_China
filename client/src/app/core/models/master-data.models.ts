@@ -27,11 +27,12 @@ export interface CategoryRow {
  * A `code`/`label` lookup row — the shape shared by `serviceTypes` and every
  * `*Statuses` collection (TECH_SPEC §6).
  *
- * `scope` mirrors `LookupItemDto.Scope` (D-45): a trailing nullable carried by
- * all six `LookupItemDto` collections, but only ever populated for
- * `documentTypes` (D-34/D-44 — `Vendor` or `Shipment`). One shape for every
- * collection is what keeps `MasterDataService`'s generic per-collection
- * helpers generic; optional and trailing, so no existing consumer breaks.
+ * `scope` (D-34/D-44/D-45) is a trailing nullable field the API serialises
+ * on every collection: `null` for everything except `documentTypes`, where
+ * it is `"Vendor"` or `"Shipment"` — the discriminator that keeps a vendor
+ * upload dropdown from offering a shipment-only document type and vice
+ * versa. Trailing and nullable so this one shape still fits every
+ * collection without forking `MasterDataService`'s generic machinery.
  */
 export interface LookupRow {
   id: string;
@@ -50,15 +51,6 @@ export interface MasterDataResponse {
   shipmentStatuses: LookupRow[];
   invoiceStatuses: LookupRow[];
   vendorStatuses: LookupRow[];
-  /**
-   * Added in the M5 screen pass. `MasterDataAggregateDto` has always served seven
-   * collections — this model declared six, so document types were simply invisible
-   * to every consumer outside the admin screen (which re-declares its own shapes).
-   * The shipment upload dropdown is the first read-only consumer to need them.
-   *
-   * Rows carry `scope` (`Vendor` | `Shipment`); consumers must filter by it rather
-   * than offering the whole list — see `shipmentDocumentTypeOptions()`.
-   */
   documentTypes: LookupRow[];
 }
 

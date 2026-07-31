@@ -19,8 +19,7 @@ const AGGREGATE: MasterDataAggregate = {
   invoiceStatuses: [],
   vendorStatuses: [],
   documentTypes: [
-    { id: 'doc-1', code: 'BUSINESS_LICENCE', label: 'Business Licence', sortOrder: 1, isActive: true, isSystemDefault: true, scope: 'Vendor' },
-    { id: 'doc-2', code: 'PACKING_LIST', label: 'Packing List', sortOrder: 5, isActive: true, isSystemDefault: true, scope: 'Shipment' }
+    { id: 'doc-1', code: 'BUSINESS_LICENCE', label: 'Business Licence', sortOrder: 1, isActive: true, isSystemDefault: true, scope: 'Vendor' }
   ]
 };
 
@@ -276,6 +275,80 @@ describe('AdminMasterDataComponent', () => {
       expect(req.request.method).toBe('PUT');
       expect(req.request.body).toEqual({ code: 'CIF', label: 'CIF renamed' });
       req.flush({ ...row, label: 'CIF renamed' });
+      flushAggregate();
+    });
+  });
+
+  describe('document-type scope selector (N-20(b))', () => {
+    it('shows a Scope selector for the documentTypes tab', () => {
+      fixture.detectChanges();
+      flushAggregate();
+
+      const comp = fixture.componentInstance;
+      comp.selectTab('documentTypes');
+      comp.openCreateForm();
+      fixture.detectChanges();
+
+      const el: HTMLElement = fixture.nativeElement;
+      expect(el.querySelector('#md-scope')).toBeTruthy();
+    });
+
+    it('does not show a Scope selector for another lookup tab', () => {
+      fixture.detectChanges();
+      flushAggregate();
+
+      const comp = fixture.componentInstance;
+      comp.selectTab('serviceTypes');
+      comp.openCreateForm();
+      fixture.detectChanges();
+
+      const el: HTMLElement = fixture.nativeElement;
+      expect(el.querySelector('#md-scope')).toBeFalsy();
+    });
+
+    it('sends the chosen scope on create', () => {
+      fixture.detectChanges();
+      flushAggregate();
+
+      const comp = fixture.componentInstance;
+      comp.selectTab('documentTypes');
+      comp.openCreateForm();
+      comp.formCode.set('INVOICE');
+      comp.formLabel.set('Invoice');
+      comp.setScope('Shipment');
+      comp.submitForm();
+
+      const req = httpMock.expectOne('/api/v1/master-data/document-types');
+      expect(req.request.body).toEqual({ code: 'INVOICE', label: 'Invoice', scope: 'Shipment' });
+      req.flush(
+        { id: 'doc-new', code: 'INVOICE', label: 'Invoice', sortOrder: 2, isActive: true, isSystemDefault: false, scope: 'Shipment' },
+        { status: 201, statusText: 'Created' }
+      );
+      flushAggregate();
+    });
+
+    it('renders the Scope selector disabled on edit, prefilled from the row, and does not send scope on update', () => {
+      fixture.detectChanges();
+      flushAggregate();
+      fixture.detectChanges();
+
+      const comp = fixture.componentInstance;
+      comp.selectTab('documentTypes');
+      fixture.detectChanges();
+      const row = AGGREGATE.documentTypes[0];
+      comp.openEditForm(row);
+      fixture.detectChanges();
+
+      const scopeSelect: HTMLSelectElement = fixture.nativeElement.querySelector('#md-scope');
+      expect(scopeSelect.disabled).toBeTrue();
+      expect(scopeSelect.value).toBe('Vendor');
+
+      comp.formLabel.set('Business Licence (renamed)');
+      comp.submitForm();
+
+      const req = httpMock.expectOne(`/api/v1/master-data/document-types/${row.id}`);
+      expect(req.request.body).toEqual({ code: row.code, label: 'Business Licence (renamed)' });
+      req.flush({ ...row, label: 'Business Licence (renamed)' });
       flushAggregate();
     });
   });

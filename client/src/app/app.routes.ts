@@ -95,10 +95,6 @@ export const routes: Routes = [
         loadComponent: () => import('./shipments/shipments.component').then((m) => m.ShipmentsComponent)
       },
       {
-        // E7-13. No literal sibling under 'shipments/' exists today, so this needs
-        // no ordering guard of the kind 'customers/follow-ups' (E4-08) and
-        // 'invoices/new' both required — but any future literal segment must be
-        // declared ABOVE this one, or ':id' will match it first.
         path: 'shipments/:id',
         canActivate: [permissionGuard],
         data: { title: 'Shipment', permission: 'Shipments.View' },

@@ -153,28 +153,23 @@
           </div>
           @if (isDocumentTypeTab()) {
             <div class="field">
-              <label for="md-scope">Used for</label>
+              <label for="md-scope">Scope</label>
               <select
                 id="md-scope"
                 class="field-input"
                 [value]="formScope()"
                 [disabled]="formMode() === 'edit'"
-                (change)="formScope.set($any($event.target).value)"
+                (change)="setScope($any($event.target).value)"
               >
-                <option value="">Choose…</option>
-                @for (s of documentTypeScopes; track s) {
-                  <option [value]="s">{{ s }} documents</option>
+                @for (scope of documentTypeScopes; track scope) {
+                  <option [value]="scope">{{ scope }}</option>
                 }
               </select>
-              <div class="field-hint">
-                @if (formMode() === 'edit') {
-                  Scope can't be changed after creation — documents already filed under this type would move into the other module's
-                  list.
-                } @else {
-                  Decides which upload screen offers this type. A vendor type can never be picked for a shipment document, or the
-                  reverse.
-                }
-              </div>
+              @if (formMode() === 'edit') {
+                <div class="field-hint">Scope can't be changed after creation — the server ignores it on update. Retire this type and create a new one instead.</div>
+              } @else {
+                <div class="field-hint">Which upload dropdown this document type appears in. Choose carefully — a Vendor-scoped type can never back a shipment upload.</div>
+              }
             </div>
           }
         }

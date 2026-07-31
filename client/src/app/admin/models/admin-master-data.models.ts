@@ -21,7 +21,15 @@ export interface CategoryRow {
   isSystemDefault: boolean;
 }
 
-/** The `code`/`label` shape shared by `serviceTypes` and every `*Statuses` collection. */
+/**
+ * The `code`/`label` shape shared by `serviceTypes` and every `*Statuses` collection.
+ *
+ * `scope` (D-34/D-44/D-45) is a trailing nullable field the API serialises on
+ * every collection: `null` for everything except `documentTypes`, where it is
+ * `"Vendor"` or `"Shipment"`. See the matching note on
+ * `core/models/master-data.models.ts`'s `LookupRow` — same field, re-declared
+ * here per this file's header comment.
+ */
 export interface LookupRow {
   id: string;
   code: string;
@@ -29,7 +37,6 @@ export interface LookupRow {
   sortOrder: number;
   isActive: boolean;
   isSystemDefault: boolean;
-  /** Only ever populated for `documentTypes` — `Vendor` or `Shipment` (D-34/D-44/D-45). */
   scope?: string | null;
 }
 
@@ -85,14 +92,18 @@ export const COLLECTION_KEYS: MasterDataCollectionKey[] = [
   'documentTypes'
 ];
 
-/** Single request shape for create/update. Categories only ever send `name`;
+/**
+ * Single request shape for create/update. Categories only ever send `name`;
  * every other collection sends `code` (create only — PUT never changes it,
  * D-12) and `label`.
  *
- * `scope` is sent only by the `documentTypes` tab and, like `code`, only on
- * create — the server honours it on POST and ignores it on PUT (D-34), because
- * re-scoping a type that documents already reference would silently move those
- * documents into the other module's dropdown. */
+ * `scope` applies only to `documentTypes` (D-34/D-44). Confirmed against the
+ * backend's `UpsertMasterDataRequest`/`MasterDataService.UpdateLookupAsync`
+ * (SourcingOps.Application/MasterData): scope is honoured on **create only**
+ * and silently ignored on update — same treatment as `code` under D-12, so
+ * the create form sends it and the edit form must render it read-only
+ * rather than offer a control that looks live but does nothing server-side.
+ */
 export interface UpsertMasterDataRequest {
   name?: string;
   code?: string;
@@ -100,18 +111,8 @@ export interface UpsertMasterDataRequest {
   scope?: string;
 }
 
-/**
- * The two values `documentTypes.scope` may hold, mirroring
- * `DocumentTypeScopes` server-side. A closed set on purpose: `scope` is a
- * code-path discriminator the application switches on, not business data a
- * Super Admin can add rows to (D-44), so it is a fixed selector rather than a
- * lookup-backed dropdown — this is the one place DR-6's "no hard-coded lookup
- * lists" rule does not apply, and the reason is that a third scope invented at
- * runtime would have no code path to serve it.
- */
+/** The only two valid `documentTypes.scope` values (D-44: a plain-text discriminator, not an FK lookup). */
 export const DOCUMENT_TYPE_SCOPES = ['Vendor', 'Shipment'] as const;
-
-export type DocumentTypeScope = (typeof DOCUMENT_TYPE_SCOPES)[number];
 
 /** One row of the bulk reorder request body: `[{ id, sortOrder }, ...]`. */
 export interface ReorderItem {

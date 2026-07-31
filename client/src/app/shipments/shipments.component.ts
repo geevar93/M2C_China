@@ -5,16 +5,16 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
 import { extractErrorMessage } from '../core/services/problem-details.util';
 import { StatusStyleService } from '../shared/services/status-style.service';
-import { SERVICE_TYPE_CIF } from '../shared/constants/service-type-codes';
 import { formatDateOnly } from '../shared/utils/date-format.util';
-import { formatInr } from '../shared/utils/currency.util';
+import { formatMoneyOrDash as formatMoney } from '../shared/utils/money.util';
 import { ShipmentsService } from './services/shipments.service';
-import { ShipmentListItem, ShipmentListResponse, ShipmentStatusCount } from './models/shipment.models';
+import { ShipmentListItem, ShipmentStatusCount } from './models/shipment.models';
+import { ShipmentFormDialogComponent } from './shipment-form-dialog/shipment-form-dialog.component';
 
 interface ShipmentRow {
   id: string;
   reference: string;
-  customerName: string;
+  customer: string;
   svcLabel: string;
   svcBg: string;
   svcFg: string;
@@ -27,32 +27,28 @@ interface ShipmentRow {
   valueLabel: string;
 }
 
-interface StatusTab {
-  /** Empty string is the "All shipments" tab — it clears the filter rather than setting one. */
-  statusId: string;
+interface ShipTab {
+  key: string;
   label: string;
   count: number;
   active: boolean;
 }
 
 const PAGE_SIZE = 25;
+const ALL = '';
 
 /**
  * Shipments list (ACTION_PLAN E7-12) — ported from Source/Sourcing Ops
- * Platform.dc.html `showShipments` (~line 750) against the `/shipments` contract,
- * diffed against a live response first (D-22).
- *
- * The status tabs are built from the response's `statusCounts`, never from a
- * hard-coded status list (DR-6) and never recounted from `items`. Two reasons:
- * the seeded statuses are configurable master data a Super Admin may add to, and
- * the server computes those counts across the whole filtered set **excluding the
- * status filter itself** (E7-08) — recount them from the current page and every
- * tab reads either its own total or zero the moment one is selected.
+ * Platform.dc.html `showShipments` (~line 751). Status tabs are driven by the
+ * live `GET /shipments` response's `statusCounts` (§15.3), never a
+ * hard-coded status list (DR-6) — that array is live-confirmed to include
+ * zero-count statuses and to be computed EXCLUDING the active status filter,
+ * so every tab always shows its true total, not a filtered/zero one.
  */
 @Component({
   selector: 'app-shipments',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, ShipmentFormDialogComponent],
   templateUrl: './shipments.component.html',
   styleUrl: './shipments.component.scss'
 })
@@ -70,36 +66,25 @@ export class ShipmentsComponent {
   readonly totalCount = signal(0);
 
   readonly search = signal('');
-  readonly statusId = signal('');
+  readonly statusId = signal(ALL);
   readonly page = signal(1);
 
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.totalCount() / PAGE_SIZE)));
 
+  readonly tabs = computed<ShipTab[]>(() => {
+    const counts = [...this.statusCounts()].sort((a, b) => a.sortOrder - b.sortOrder);
+    const allCount = counts.reduce((sum, c) => sum + c.count, 0);
+    const active = this.statusId();
+    return [
+      { key: ALL, label: 'All shipments', count: allCount, active: active === ALL },
+      ...counts.map((c) => ({ key: c.statusId, label: c.label, count: c.count, active: active === c.statusId }))
+    ];
+  });
+
   readonly rows = computed<ShipmentRow[]>(() => this.items().map((item) => this.toRow(item)));
   readonly noResults = computed(() => !this.loading() && !this.error() && this.rows().length === 0);
 
-  /**
-   * "All shipments" plus one tab per status, in the lookup's own `sortOrder`.
-   *
-   * The All count sums `statusCounts` rather than reading `totalCount`: because the
-   * counts exclude the status filter, that sum is the true all-statuses total and
-   * stays stable as tabs are clicked, whereas `totalCount` is the *filtered* count
-   * and would collapse to the selected tab's number.
-   */
-  readonly tabs = computed<StatusTab[]>(() => {
-    const counts = this.statusCounts();
-    if (counts.length === 0) return [];
-
-    const selected = this.statusId();
-    const all = counts.reduce((sum, c) => sum + c.count, 0);
-
-    return [
-      { statusId: '', label: 'All shipments', count: all, active: selected === '' },
-      ...[...counts]
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((c) => ({ statusId: c.statusId, label: c.label, count: c.count, active: selected === c.statusId }))
-    ];
-  });
+  readonly createOpen = signal(false);
 
   private readonly search$ = new Subject<string>();
 
@@ -117,9 +102,8 @@ export class ShipmentsComponent {
     this.search$.next(value);
   }
 
-  selectTab(statusId: string): void {
-    if (this.statusId() === statusId) return;
-    this.statusId.set(statusId);
+  selectTab(key: string): void {
+    this.statusId.set(key);
     this.page.set(1);
     this.fetch();
   }
@@ -140,6 +124,19 @@ export class ShipmentsComponent {
     this.fetch();
   }
 
+  openCreate(): void {
+    this.createOpen.set(true);
+  }
+
+  cancelCreate(): void {
+    this.createOpen.set(false);
+  }
+
+  onShipmentCreated(): void {
+    this.createOpen.set(false);
+    this.fetch();
+  }
+
   private fetch(): void {
     this.loading.set(true);
     this.error.set(null);
@@ -151,7 +148,7 @@ export class ShipmentsComponent {
         pageSize: PAGE_SIZE
       })
       .subscribe({
-        next: (res: ShipmentListResponse) => {
+        next: (res) => {
           this.items.set(res.items);
           this.statusCounts.set(res.statusCounts);
           this.totalCount.set(res.totalCount);
@@ -167,25 +164,22 @@ export class ShipmentsComponent {
   private toRow(item: ShipmentListItem): ShipmentRow {
     const svc = this.styles.serviceType(item.serviceType.code);
     const st = this.styles.status(item.status.code);
-
     return {
       id: item.id,
-      // `reference` is nullable on the wire (the column predates E7-05 populating
-      // it), so a row with none still has to render something clickable.
-      reference: item.reference ?? '(no reference)',
-      customerName: item.customer.name,
+      reference: item.reference ?? '—',
+      customer: item.customer.name,
       svcLabel: svc.label,
       svcBg: svc.bg,
       svcFg: svc.fg,
-      // Switches on the immutable code (D-12/D-36), not the label. Freight-only
-      // shipments hold no stock at all (FSD A8) — they cannot even carry lines.
-      stockImpact: item.serviceType.code === SERVICE_TYPE_CIF ? 'Decrements inventory' : 'No stock held',
+      // Switches on the immutable service-type CODE, never the label (D-36) —
+      // labels are configurable master data and could be renamed.
+      stockImpact: item.serviceType.code === 'CIF' ? 'Decrements inventory' : 'No stock held',
       destination: item.destination ?? '—',
       dispatchedLabel: formatDateOnly(item.dispatchDate),
       statusLabel: item.status.label,
       stBg: st.bg,
       stFg: st.fg,
-      valueLabel: item.totalValue === null ? '—' : formatInr(item.totalValue)
+      valueLabel: formatMoney(item.totalValue)
     };
   }
 }

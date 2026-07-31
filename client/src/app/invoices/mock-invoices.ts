@@ -16,7 +16,8 @@
  * aggregate (`invoiceStatuses` / `serviceTypes`) and MUST be resolved through
  * `MasterDataService` by the components that consume this file — never
  * hard-coded. This file only supplies the code values (`DRAFT`/`ISSUED`/
- * `PAID`/`CANCELLED`, `CIF`/`FREIGHT_ONLY`) that get matched against the real
+ * `PAID`/`CANCELLED`, `CIF`/`FREIGHT_ONLY` — the real API `code`, not the
+ * `Freight-only` display label) that get matched against the real
  * master-data rows; it does not define labels or colours for them.
  *
  * The freight-only value was `'Freight-only'` until the M5 screen pass — that is

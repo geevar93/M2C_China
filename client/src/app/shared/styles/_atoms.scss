@@ -337,3 +337,118 @@ textarea.field-input {
 .row-inactive td {
   opacity: .6;
 }
+
+// ---- Pill tab (M5, E7-12) ---------------------------------------------------
+// The prototype uses TWO distinct tab treatments and they are not
+// interchangeable: `.tab` above is the underline tab (admin master data), while
+// the shipments status tabs are bordered pills carrying a count. Added as a
+// second atom rather than by overloading `.tab` with a modifier — they share no
+// declarations beyond the font size, so a variant would have overridden almost
+// every property. Ported from the prototype's `shipTabs` markup (~line 755).
+.pill-tabs {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-8);
+}
+
+.pill-tab {
+  appearance: none;
+  font-family: inherit;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-7);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s;
+
+  &:hover:not(:disabled) {
+    background: var(--color-page-bg);
+  }
+
+  &--active {
+    border-color: var(--color-accent);
+    background: var(--color-accent-soft-bg);
+    color: var(--color-accent);
+  }
+
+  // The per-tab count stays muted even when the tab is active, exactly as the
+  // prototype renders it (`<span style="color:#6b7280">`).
+  &__count {
+    color: var(--color-text-muted);
+  }
+}
+
+// ---- Stock level bar (M5, E7-11) -------------------------------------------
+// The inventory screen's low-stock visual indicator: a fixed 40x6 track with a
+// fill whose width and colour are bound per row. Both are inline `[style]`
+// bindings on the fill, because they are data-driven per item (the ratio maths
+// lives in the component, where presentation logic belongs — see §15.3 on why
+// the API returns raw `onHandQty`/`reorderThreshold` alongside `stockLevel`).
+.stock-bar {
+  width: 40px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-border);
+  overflow: hidden;
+  flex: 0 0 40px;
+}
+
+.stock-bar__fill {
+  height: 6px;
+  border-radius: 3px;
+}
+
+// ---- Status stepper (M5, E7-13) --------------------------------------------
+// The shipment detail 4-step progress stepper. Each step is an equal-width
+// column whose connector line is drawn by the step itself, so the markup stays
+// a flat `*ngFor` with no separate separator elements. Dot/line/label colours
+// are bound per step from the component, driven by the shipment's real
+// `statusHistory` (D-33) rather than invented timestamps.
+.stepper {
+  display: flex;
+  align-items: flex-start;
+}
+
+.stepper__step {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.stepper__row {
+  display: flex;
+  align-items: center;
+}
+
+.stepper__dot {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 11px;
+  border: 1px solid var(--color-border);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stepper__line {
+  flex: 1 1 auto;
+  height: 2px;
+}
+
+.stepper__label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: var(--space-4);
+}
+
+.stepper__when {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}

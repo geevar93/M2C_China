@@ -22,3 +22,18 @@ export interface StatusRef {
   code: string;
   label: string;
 }
+
+/**
+ * `{ id, name }` reference embedded in inventory/shipment responses (M5,
+ * ACTION_PLAN §15.3) — a shipment's `customer` and an inventory item's
+ * `vendor` are both this shape, same convention as `CategoryRef` above.
+ */
+export interface VendorRef {
+  id: string;
+  name: string;
+}
+
+export interface CustomerRef {
+  id: string;
+  name: string;
+}

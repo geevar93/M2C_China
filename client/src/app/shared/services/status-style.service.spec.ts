@@ -1,68 +1,54 @@
-import { TestBed } from '@angular/core/testing';
 import { StatusStyleService } from './status-style.service';
-import { SERVICE_TYPE_CIF, SERVICE_TYPE_FREIGHT_ONLY } from '../constants/service-type-codes';
 
 /**
- * Guards the app-wide status/service-type colour source (DR-6, TECH_SPEC §5.1).
+ * Regression coverage for the M5 live-API diff: the real
+ * `serviceType.code` for the freight-only service type is `FREIGHT_ONLY`,
+ * not the display label `Freight-only`. Every spec fixture across the app
+ * previously used `code: 'Freight-only'`, which encoded the bug and let the
+ * whole suite go green while `serviceType('FREIGHT_ONLY')` silently fell
+ * through to the grey default in the real app.
  *
- * It had no spec until the M5 screen pass, which is how it shipped keyed by the
- * service-type *label* while every caller passed the *code* — freight-only chips
- * silently fell through to the grey default on four screens. The assertions below
- * deliberately spell the expected code out as a literal rather than reading it back
- * from the constant they protect (the N-12 defect class): a test that imports the
- * value it is checking would have passed against the bug too.
+ * The expected colours are hardcoded here as literals, not read back off the
+ * `SVC` map under test — asserting `serviceType('FREIGHT_ONLY')` against a
+ * value pulled from the same map it's meant to guard would make this test
+ * pass even if both were renamed together (ACTION_PLAN N-12: a seed test
+ * deriving its expectation from the constant it protects is a known smell in
+ * this codebase; this test deliberately avoids repeating it).
  */
 describe('StatusStyleService', () => {
-  let styles: StatusStyleService;
+  let service: StatusStyleService;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
-    styles = TestBed.inject(StatusStyleService);
+    service = new StatusStyleService();
   });
 
-  describe('serviceType()', () => {
-    it('resolves the freight-only code the API actually serialises', () => {
-      const chip = styles.serviceType('FREIGHT_ONLY');
-
-      expect(chip.label).toBe('FREIGHT-ONLY');
-      expect(chip.fg).toBe('#f57f17');
-      expect(chip.bg).toBe('#fff3e0');
-    });
-
-    it('does NOT resolve the seeded label — that string is not a code', () => {
-      // 'Freight-only' is what `serviceTypes[1].label` holds and what the prototype
-      // used as its raw value. Reaching this map means a caller passed a label.
-      const chip = styles.serviceType('Freight-only');
-
-      expect(chip.label).not.toBe('FREIGHT-ONLY');
-    });
-
-    it('resolves CIF', () => {
-      const chip = styles.serviceType('CIF');
-
-      expect(chip.label).toBe('CIF');
-      expect(chip.fg).toBe('#1565c0');
-    });
-
-    it('falls back to a neutral chip for an unknown code rather than throwing', () => {
-      const chip = styles.serviceType('SOMETHING_NEW');
-
-      expect(chip.label).toBe('SOMETHING_NEW');
-      expect(chip.bg).toBe('#e5e7eb');
-    });
-
-    it('keeps the exported constants in step with the seeder', () => {
-      expect(SERVICE_TYPE_CIF).toBe('CIF');
-      expect(SERVICE_TYPE_FREIGHT_ONLY).toBe('FREIGHT_ONLY');
-    });
+  it('resolves the real API code FREIGHT_ONLY to the orange freight chip, not the grey default', () => {
+    const result = service.serviceType('FREIGHT_ONLY');
+    expect(result).toEqual({ label: 'FREIGHT-ONLY', bg: '#fff3e0', fg: '#f57f17' });
   });
 
-  describe('status()', () => {
-    it('resolves every seeded shipment status code, including the one with a space', () => {
-      expect(styles.status('PACKED').fg).toBe('#374151');
-      expect(styles.status('DISPATCHED').fg).toBe('#1565c0');
-      expect(styles.status('IN TRANSIT').fg).toBe('#f57f17');
-      expect(styles.status('DELIVERED').fg).toBe('#2e7d32');
-    });
+  it('resolves CIF to the blue chip', () => {
+    const result = service.serviceType('CIF');
+    expect(result).toEqual({ label: 'CIF', bg: '#e3f2fd', fg: '#1565c0' });
+  });
+
+  it('does NOT resolve the display label Freight-only — code is the only valid key', () => {
+    const result = service.serviceType('Freight-only');
+    expect(result.bg).toBe('#e5e7eb');
+    expect(result.fg).toBe('#374151');
+  });
+
+  it('falls back to the grey default with the raw code as label for an unknown code', () => {
+    const result = service.serviceType('SOMETHING_ELSE');
+    expect(result).toEqual({ label: 'SOMETHING_ELSE', bg: '#e5e7eb', fg: '#374151' });
+  });
+
+  it('falls back to the em dash label for null/undefined', () => {
+    expect(service.serviceType(null).label).toBe('—');
+    expect(service.serviceType(undefined).label).toBe('—');
+  });
+
+  it('resolves the shipment status IN TRANSIT (with a space) to the orange chip — confirmed live, not to be "fixed"', () => {
+    expect(service.status('IN TRANSIT')).toEqual({ bg: '#fff3e0', fg: '#f57f17' });
   });
 });

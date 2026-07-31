@@ -27,7 +27,7 @@ const SERVICE_TYPE_COPY: Record<string, ServiceTypeCardCopy> = {
     description:
       'We source from our vendor roster and deliver landed goods. Platform holds product, vendor, pricing, insurance and landed cost.'
   },
-  [SERVICE_TYPE_FREIGHT_ONLY]: {
+  FREIGHT_ONLY: {
     headline: 'Transport only',
     description: 'Customer already bought the goods elsewhere. Platform holds shipment details, external purchase reference and freight fee.'
   }
@@ -182,10 +182,7 @@ export class CustomerIntakeComponent {
   }
 
   get showExtRef(): boolean {
-    // Was comparing against 'Freight-only' — the label, not the code — so against
-    // the real API this never became true and FSD Q1's external-purchase fields
-    // were unreachable on the intake form. See shared/constants/service-type-codes.ts.
-    return this.selectedServiceTypeRow()?.code === SERVICE_TYPE_FREIGHT_ONLY;
+    return this.selectedServiceTypeRow()?.code === 'FREIGHT_ONLY';
   }
 
   get formMeta(): string {

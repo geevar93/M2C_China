@@ -24,11 +24,22 @@
   --color-warning-border: #ffcc80;
   --color-danger: #e53935;
   --color-danger-bg: #ffebee;
+  // A far subtler danger wash than --color-danger-bg, for tinting a whole table
+  // ROW rather than a chip. The prototype uses both and they are not
+  // interchangeable: #ffebee behind a full-width row reads as an error state,
+  // where the approved inventory screen only whispers that stock went negative.
+  --color-danger-bg-subtle: #fff8f8;
   --color-success: #2e7d32;
   --color-success-bg: #e8f5e9;
   --color-info: #1565c0;
   --color-info-bg: #e3f2fd;
   --color-neutral-chip-bg: #e5e7eb;
+  // The prototype's literal "selected/active" tint, used behind an active pill
+  // tab and any selected card. Promoted to a token by the M5 screen pass, which
+  // added a fourth consumer; three pre-existing raw `#f5f8ff` usages (intake,
+  // dispatch dialog) still spell it literally and should converge here when
+  // those files are next touched.
+  --color-accent-soft-bg: #f5f8ff;
 
   // WhatsApp preview bubble
   --color-wa-bubble: #dbeafe;

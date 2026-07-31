@@ -1,244 +1,236 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { MasterDataService } from '../../core/services/master-data.service';
 import { extractErrorMessage } from '../../core/services/problem-details.util';
 import { StatusStyleService } from '../../shared/services/status-style.service';
-import { SERVICE_TYPE_CIF } from '../../shared/constants/service-type-codes';
-import { formatDateOnly, formatTimelineDate } from '../../shared/utils/date-format.util';
-import { formatInr, formatQty } from '../../shared/utils/currency.util';
+import { formatDateOnly } from '../../shared/utils/date-format.util';
 import { formatFileSize } from '../../shared/utils/file-size.util';
-import { previewBlob } from '../../shared/utils/file-download.util';
-import { ShipmentDocumentsService } from '../services/shipment-documents.service';
+import { saveBlobAs } from '../../shared/utils/file-download.util';
+import { formatMoneyOrDash as formatMoney } from '../../shared/utils/money.util';
 import { ShipmentsService } from '../services/shipments.service';
-import { ShipmentDetail } from '../models/shipment.models';
+import { ShipmentDetail, ShipmentDocument } from '../models/shipment.models';
+import { ShipmentFormDialogComponent } from '../shipment-form-dialog/shipment-form-dialog.component';
+import { ShipmentDocumentUploadDialogComponent } from '../document-upload-dialog/document-upload-dialog.component';
 
-interface Step {
+interface StepView {
+  id: string;
   label: string;
   mark: string;
   when: string;
-  state: 'done' | 'current' | 'todo';
+  dotBg: string;
+  dotFg: string;
+  dotBorder: string;
+  lineColor: string;
+  labelColor: string;
 }
 
 interface LineRow {
   id: string;
   name: string;
   meta: string;
-  qtyLabel: string;
-  unitCostLabel: string;
-  lineTotalLabel: string;
+  qty: string;
+  unitCost: string;
+  lineTotal: string;
+}
+
+interface DetailField {
+  k: string;
+  v: string;
 }
 
 interface DocRow {
   id: string;
-  filename: string;
+  fileName: string;
   meta: string;
 }
 
+const REACHED_COLOR = { dotBg: '#2d5be3', dotFg: '#fff', dotBorder: '#2d5be3', lineColor: '#2d5be3', labelColor: '#1a2332' };
+const FUTURE_COLOR = { dotBg: '#fff', dotFg: '#6b7280', dotBorder: '#e5e7eb', lineColor: '#e5e7eb', labelColor: '#6b7280' };
+
 /**
  * Shipment detail (ACTION_PLAN E7-13) — ported from Source/Sourcing Ops
- * Platform.dc.html `showShipDetail` (~line 794) against the `/shipments/{id}`
- * contract, diffed against a live response first (D-22).
+ * Platform.dc.html `showShipDetail` (~line 795). Single `GET /shipments/{id}`
+ * load (§15.3's `ShipmentDetail` shape embeds lines/statusHistory/documents),
+ * no forkJoin.
  *
- * Three places this deliberately departs from the prototype's mock, all because
- * the mock had no backend to be honest against:
- *  - The **stepper's statuses come from master data**, not the prototype's
- *    hard-coded `['PACKED','DISPATCHED','IN TRANSIT','DELIVERED']`. They are
- *    configurable rows a Super Admin may add to (FSD §3.3 / DR-6); a hard-coded
- *    ladder would silently drop any stage the business adds.
- *  - Each step's **"when" comes from `statusHistory`** (D-33), which exists
- *    precisely so this is renderable. The prototype used a fixed date array.
- *  - **"Recorded by" reads `recordedByName`** (D-47, derived from the earliest
- *    history row) rather than the mock's hard-coded person.
+ * **D-43, the whole point of this screen's action-button split:** status only
+ * ever advances through `ShipmentsService.changeStatus()` → `PUT
+ * /shipments/{id}/status`, the one path that also writes a
+ * `shipment_status_history` row. The "Edit" dialog (`ShipmentFormDialogComponent`)
+ * never renders a status control — see that component's class doc.
  *
- * Status changes go only through `PUT /shipments/{id}/status` — the single path
- * that writes history (D-43), so the stepper can never develop gaps.
+ * The stepper's step list AND the advance-button's "next status" are both
+ * derived from the live `shipmentStatuses` lookup's `sortOrder`
+ * (`MasterDataService`), never a hard-coded `['PACKED','DISPATCHED',...]`
+ * array — a hard-coded list would break the day the business adds a stage,
+ * which is exactly why E7-07 refuses to enforce a transition graph
+ * server-side. Each step's "when" comes from the real `statusHistory` (D-33):
+ * an em-dash for a status not yet reached, never an invented timestamp (the
+ * prototype's own mock `stepWhen` array is exactly what NOT to port here).
  */
 @Component({
   selector: 'app-shipment-detail',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, ShipmentFormDialogComponent, ShipmentDocumentUploadDialogComponent],
   templateUrl: './shipment-detail.component.html',
   styleUrl: './shipment-detail.component.scss'
 })
 export class ShipmentDetailComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly shipmentsService = inject(ShipmentsService);
-  private readonly documentsService = inject(ShipmentDocumentsService);
   private readonly masterDataService = inject(MasterDataService);
   private readonly styles = inject(StatusStyleService);
   private readonly auth = inject(AuthService);
 
-  private readonly shipmentId = this.route.snapshot.paramMap.get('id') ?? '';
-
-  readonly statusOptions = toSignal(this.masterDataService.shipmentStatusOptions(), { initialValue: [] });
-  /** Scope-filtered (N-20c) — the vendor-scoped types must never appear here. */
-  readonly documentTypeOptions = toSignal(this.masterDataService.shipmentDocumentTypeOptions(), { initialValue: [] });
-
   readonly canEdit = computed(() => this.auth.hasPermission('Shipments.Edit'));
 
-  readonly loading = signal(false);
+  readonly shipmentStatusOptions = toSignal(this.masterDataService.shipmentStatusOptions(), { initialValue: [] });
+
+  readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly shipment = signal<ShipmentDetail | null>(null);
 
-  readonly actionError = signal<string | null>(null);
-  readonly advancing = signal(false);
-
+  readonly editOpen = signal(false);
   readonly uploadOpen = signal(false);
-  readonly uploadTypeId = signal('');
-  readonly uploadFile = signal<File | null>(null);
-  readonly uploading = signal(false);
-  readonly uploadError = signal<string | null>(null);
 
-  readonly downloadingDocId = signal<string | null>(null);
+  readonly advancing = signal(false);
+  readonly advanceError = signal<string | null>(null);
 
-  readonly headline = computed(() => {
+  readonly openingDocId = signal<string | null>(null);
+  readonly openError = signal<string | null>(null);
+
+  readonly svcChip = computed(() => {
     const s = this.shipment();
-    if (!s) return null;
-    const svc = this.styles.serviceType(s.serviceType.code);
-    const st = this.styles.status(s.status.code);
-    return {
-      reference: s.reference ?? '(no reference)',
-      svcLabel: svc.label,
-      svcBg: svc.bg,
-      svcFg: svc.fg,
-      statusLabel: s.status.label,
-      stBg: st.bg,
-      stFg: st.fg,
-      subtitle: [s.customer.name, s.destination, s.dispatchDate ? `dispatched ${formatDateOnly(s.dispatchDate)}` : null]
-        .filter(Boolean)
-        .join(' · ')
-    };
+    return s ? this.styles.serviceType(s.serviceType.code) : { label: '—', bg: '#e5e7eb', fg: '#374151' };
   });
 
-  /**
-   * The 4-step progress stepper. Ordered by the lookup's own `sortOrder`, with each
-   * step's timestamp taken from the **first** history row that reached that status —
-   * first, not last, because a shipment sent back a stage and forwarded again should
-   * show when it originally got there, and because that is what the prototype's
-   * left-to-right reading implies.
-   *
-   * Steps after the current one show "—": a future transition has no time yet, and
-   * showing the ETA there (as the mock did) would present an estimate as a record.
-   */
-  readonly steps = computed<Step[]>(() => {
+  readonly statusChip = computed(() => {
     const s = this.shipment();
-    const options = this.statusOptions();
-    if (!s || options.length === 0) return [];
+    return s ? this.styles.status(s.status.code) : { bg: '#e5e7eb', fg: '#374151' };
+  });
 
-    const currentIdx = options.findIndex((o) => o.id === s.status.id);
-    const firstReached = new Map<string, string>();
-    for (const h of [...s.statusHistory].sort((a, b) => a.changedAt.localeCompare(b.changedAt))) {
-      if (!firstReached.has(h.status.id)) firstReached.set(h.status.id, h.changedAt);
-    }
+  readonly subline = computed(() => {
+    const s = this.shipment();
+    if (!s) return '';
+    return `${s.customer.name} · ${s.destination ?? '—'} · dispatched ${formatDateOnly(s.dispatchDate)}`;
+  });
 
-    return options.map((o, i) => {
-      const reachedAt = firstReached.get(o.id);
-      const state: Step['state'] = i < currentIdx ? 'done' : i === currentIdx ? 'current' : 'todo';
+  /** Position of the shipment's current status within the live, sortOrder-sorted lookup — NOT a hard-coded index (see class doc). -1 if the status is retired/not found. */
+  private readonly currentStatusIndex = computed(() => {
+    const s = this.shipment();
+    const options = this.shipmentStatusOptions();
+    if (!s) return -1;
+    return options.findIndex((o) => o.id === s.status.id);
+  });
+
+  readonly steps = computed<StepView[]>(() => {
+    const s = this.shipment();
+    const options = this.shipmentStatusOptions();
+    if (!s) return [];
+    const currentIdx = this.currentStatusIndex();
+    return options.map((opt, i) => {
+      const reached = currentIdx >= 0 && i <= currentIdx;
+      const isCurrent = currentIdx >= 0 && i === currentIdx;
+      const historyRow = s.statusHistory.find((h) => h.status.id === opt.id);
+      const colors = reached ? REACHED_COLOR : FUTURE_COLOR;
       return {
-        label: o.label,
-        mark: state === 'done' ? '✓' : state === 'current' ? '●' : String(i + 1),
-        when: reachedAt ? formatDateOnly(reachedAt) : '—',
-        state
+        id: opt.id,
+        label: opt.label,
+        mark: currentIdx >= 0 && i < currentIdx ? '✓' : isCurrent ? '●' : String(i + 1),
+        when: historyRow ? formatDateOnly(historyRow.changedAt) : '—',
+        dotBg: colors.dotBg,
+        dotFg: colors.dotFg,
+        dotBorder: colors.dotBorder,
+        // The connector line after the LAST reached step should also read as
+        // "done" (matching the prototype's `i < idx` line rule) — future
+        // steps' trailing line stays neutral.
+        lineColor: currentIdx >= 0 && i < currentIdx ? REACHED_COLOR.lineColor : FUTURE_COLOR.lineColor,
+        labelColor: colors.labelColor
       };
     });
   });
 
-  /** `Mark Dispatched` etc. Null at the last status — there is nowhere to advance to. */
-  readonly nextStatus = computed(() => {
-    const s = this.shipment();
-    const options = this.statusOptions();
-    if (!s || options.length === 0) return null;
-    const idx = options.findIndex((o) => o.id === s.status.id);
+  /** Next status to advance to, by lookup position — never a hard-coded transition array. Null once already at the last status. */
+  private readonly nextStatus = computed(() => {
+    const options = this.shipmentStatusOptions();
+    const idx = this.currentStatusIndex();
     if (idx < 0 || idx >= options.length - 1) return null;
     return options[idx + 1];
   });
 
-  readonly lines = computed<LineRow[]>(() =>
-    (this.shipment()?.lines ?? []).map((l) => ({
-      id: l.id,
-      name: l.inventoryItemName,
-      meta: [l.inventoryItemSku, `per ${l.unit}`].filter(Boolean).join(' · '),
-      qtyLabel: formatQty(l.quantity),
-      unitCostLabel: l.unitCost === null ? '—' : formatInr(l.unitCost),
-      lineTotalLabel: l.lineTotal === null ? '—' : formatInr(l.lineTotal)
-    }))
-  );
-
-  readonly totals = computed(() => {
-    const s = this.shipment();
-    if (!s) return null;
-    return {
-      freight: s.freightCost === null ? '—' : formatInr(s.freightCost),
-      value: s.totalValue === null ? '—' : formatInr(s.totalValue)
-    };
+  readonly canAdvance = computed(() => !!this.nextStatus());
+  readonly advanceLabel = computed(() => {
+    const next = this.nextStatus();
+    return next ? `Mark ${next.label}` : 'Delivered';
   });
 
-  /** The right-hand "Details" panel, in the approved screen's field order. */
-  readonly fields = computed(() => {
+  readonly lines = computed<LineRow[]>(() => {
+    const s = this.shipment();
+    if (!s) return [];
+    return s.lines.map((l) => ({
+      id: l.id,
+      name: l.inventoryItemName,
+      meta: `${l.inventoryItemSku ?? '—'} · ${l.unit}`,
+      qty: String(l.quantity),
+      unitCost: formatMoney(l.unitCost),
+      lineTotal: formatMoney(l.lineTotal)
+    }));
+  });
+
+  readonly noLines = computed(() => this.lines().length === 0);
+
+  readonly freightLabel = computed(() => formatMoney(this.shipment()?.freightCost ?? null));
+  readonly valueLabel = computed(() => formatMoney(this.shipment()?.totalValue ?? null));
+
+  readonly fields = computed<DetailField[]>(() => {
     const s = this.shipment();
     if (!s) return [];
     return [
       { k: 'Customer', v: s.customer.name },
       { k: 'Service type', v: s.serviceType.label },
-      {
-        k: 'Stock impact',
-        // Freight-only shipments hold no stock and cannot carry lines at all (FSD A8 / D-36).
-        v: s.serviceType.code === SERVICE_TYPE_CIF ? 'Inventory decremented' : 'No firm-held stock'
-      },
+      { k: 'Stock impact', v: s.serviceType.code === 'CIF' ? 'Inventory decremented' : 'No firm-held stock' },
       { k: 'Mode / port', v: s.mode ?? '—' },
       { k: 'AWB / BL', v: s.awbOrBl ?? '—' },
       { k: 'ETA', v: formatDateOnly(s.eta) },
-      { k: 'Recorded by', v: s.recordedByName ?? '—' },
-      { k: 'Created', v: formatTimelineDate(s.createdAt) }
+      { k: 'Recorded by', v: s.recordedByName ?? '—' }
     ];
   });
 
-  readonly documents = computed<DocRow[]>(() =>
-    (this.shipment()?.documents ?? []).map((d) => ({
-      id: d.id,
-      filename: d.originalFilename,
-      // "184 KB · 21 Jul 2026", plus the type and uploader the mock had no way to show.
-      meta: `${d.documentType.label} · ${formatFileSize(d.sizeBytes)} · ${formatDateOnly(d.uploadedAt)} · ${d.uploadedByName}`
-    }))
-  );
-
-  readonly canUpload = computed(() => this.canEdit() && this.documentTypeOptions().length > 0);
+  readonly docs = computed<DocRow[]>(() => {
+    const s = this.shipment();
+    if (!s) return [];
+    return s.documents.map((d) => this.toDocRow(d));
+  });
 
   constructor() {
     this.masterDataService.ensureLoaded().subscribe({ error: () => {} });
-    this.fetch();
-  }
-
-  retry(): void {
-    this.fetch();
-  }
-
-  /** Advances one step via the only endpoint that writes status — and therefore history (D-43). */
-  advanceStatus(): void {
-    const s = this.shipment();
-    const next = this.nextStatus();
-    if (!s || !next || this.advancing()) return;
-
-    this.advancing.set(true);
-    this.actionError.set(null);
-    this.shipmentsService.changeStatus(s.id, { statusId: next.id }).subscribe({
-      next: (updated) => {
-        this.advancing.set(false);
-        this.shipment.set(updated);
-      },
-      error: (err: unknown) => {
-        this.advancing.set(false);
-        this.actionError.set(extractErrorMessage(err, 'Could not update the shipment status. Please try again.'));
-      }
+    this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+      const id = params.get('id');
+      if (id) this.load(id);
     });
   }
 
+  retry(): void {
+    const id = this.route.snapshot.paramMap.get('id');
+    if (id) this.load(id);
+  }
+
+  openEdit(): void {
+    this.editOpen.set(true);
+  }
+
+  cancelEdit(): void {
+    this.editOpen.set(false);
+  }
+
+  onShipmentSaved(shipment: ShipmentDetail): void {
+    this.editOpen.set(false);
+    this.shipment.set(shipment);
+  }
+
   openUpload(): void {
-    this.uploadTypeId.set('');
-    this.uploadFile.set(null);
-    this.uploadError.set(null);
     this.uploadOpen.set(true);
   }
 
@@ -246,65 +238,52 @@ export class ShipmentDetailComponent {
     this.uploadOpen.set(false);
   }
 
-  onFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    this.uploadFile.set(input.files?.[0] ?? null);
+  onDocumentUploaded(_doc: ShipmentDocument): void {
+    this.uploadOpen.set(false);
+    const id = this.shipment()?.id;
+    if (id) this.load(id);
   }
 
-  submitUpload(): void {
+  advanceStatus(): void {
     const s = this.shipment();
-    const file = this.uploadFile();
-    const typeId = this.uploadTypeId();
-    if (!s || this.uploading()) return;
-
-    if (!file) {
-      this.uploadError.set('Choose a file to upload.');
-      return;
-    }
-    if (!typeId) {
-      this.uploadError.set('Choose a document type.');
-      return;
-    }
-
-    this.uploading.set(true);
-    this.uploadError.set(null);
-    this.documentsService.upload(s.id, file, typeId).subscribe({
-      next: () => {
-        this.uploading.set(false);
-        this.uploadOpen.set(false);
-        // Re-reads the shipment rather than pushing the new row in locally: the
-        // response is a document, and the detail screen renders more than documents.
-        this.fetch();
+    const next = this.nextStatus();
+    if (!s || !next || this.advancing()) return;
+    this.advancing.set(true);
+    this.advanceError.set(null);
+    this.shipmentsService.changeStatus(s.id, { statusId: next.id }).subscribe({
+      next: (updated) => {
+        this.advancing.set(false);
+        this.shipment.set(updated);
       },
       error: (err: unknown) => {
-        this.uploading.set(false);
-        this.uploadError.set(extractErrorMessage(err, 'Could not upload this document. Please try again.'));
+        this.advancing.set(false);
+        this.advanceError.set(extractErrorMessage(err, 'Could not update this shipment\'s status. Please try again.'));
       }
     });
   }
 
-  openDocument(docId: string): void {
-    if (this.downloadingDocId()) return;
-    this.downloadingDocId.set(docId);
-    this.actionError.set(null);
-    this.documentsService.download(docId).subscribe({
+  openDocument(doc: DocRow): void {
+    if (this.openingDocId()) return;
+    this.openingDocId.set(doc.id);
+    this.openError.set(null);
+    this.shipmentsService.downloadDocument(doc.id).subscribe({
       next: (blob) => {
-        this.downloadingDocId.set(null);
-        previewBlob(blob);
+        this.openingDocId.set(null);
+        saveBlobAs(blob, doc.fileName);
       },
       error: (err: unknown) => {
-        this.downloadingDocId.set(null);
-        this.actionError.set(extractErrorMessage(err, 'Could not open this document. Please try again.'));
+        this.openingDocId.set(null);
+        this.openError.set(extractErrorMessage(err, 'Could not open this document. Please try again.'));
       }
     });
   }
 
-  private fetch(): void {
+  private load(id: string): void {
     this.loading.set(true);
     this.error.set(null);
-    this.shipmentsService.getById(this.shipmentId).subscribe({
-      next: (s) => {
-        this.shipment.set(s);
+    this.shipmentsService.getById(id).subscribe({
+      next: (shipment) => {
+        this.shipment.set(shipment);
         this.loading.set(false);
       },
       error: (err: unknown) => {
@@ -312,5 +291,13 @@ export class ShipmentDetailComponent {
         this.error.set(extractErrorMessage(err, 'Could not load this shipment. Please try again.'));
       }
     });
+  }
+
+  private toDocRow(d: ShipmentDocument): DocRow {
+    return {
+      id: d.id,
+      fileName: d.originalFilename,
+      meta: `${formatFileSize(d.sizeBytes)} · ${formatDateOnly(d.uploadedAt)}`
+    };
   }
 }
