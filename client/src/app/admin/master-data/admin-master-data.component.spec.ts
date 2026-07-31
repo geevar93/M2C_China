@@ -228,6 +228,43 @@ describe('AdminMasterDataComponent', () => {
       flushAggregate();
     });
 
+    // N-24. The form previously preselected the first scope, which reproduced at the
+    // UI layer the same silent "Vendor" default that made N-20(b) necessary at the
+    // server layer. A mis-scoped type can never back a shipment upload and cannot be
+    // re-scoped afterwards (D-34), so the choice has to be deliberate.
+    it('starts with no scope selected and offers an empty first option on create', () => {
+      fixture.detectChanges();
+      flushAggregate();
+      fixture.detectChanges();
+
+      const comp = fixture.componentInstance;
+      comp.selectTab('documentTypes');
+      comp.openCreateForm();
+      fixture.detectChanges();
+
+      expect(comp.formScope()).toBe('');
+      const options = Array.from(fixture.nativeElement.querySelectorAll('#md-scope option')).map((o) =>
+        (o as HTMLOptionElement).value
+      );
+      expect(options[0]).toBe('');
+    });
+
+    it('refuses to create a document type with no scope, and issues no request', () => {
+      fixture.detectChanges();
+      flushAggregate();
+
+      const comp = fixture.componentInstance;
+      comp.selectTab('documentTypes');
+      comp.openCreateForm();
+      comp.formCode.set('CERT_ORIGIN');
+      comp.formLabel.set('Certificate of Origin');
+      comp.submitForm();
+
+      expect(comp.formError()).toContain('Scope is required');
+      // The whole point: no silently Vendor-scoped row reaches the server.
+      httpMock.expectNone('/api/v1/master-data/document-types');
+    });
+
     it('renders the Scope selector disabled on edit, prefilled from the row, and does not send scope on update', () => {
       fixture.detectChanges();
       flushAggregate();

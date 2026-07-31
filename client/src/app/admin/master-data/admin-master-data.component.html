@@ -161,6 +161,13 @@
                 [disabled]="formMode() === 'edit'"
                 (change)="setScope($any($event.target).value)"
               >
+                @if (formMode() === 'create') {
+                  <!-- Empty first option, deliberately (N-24). Preselecting "Vendor" would
+                       re-create at the UI layer exactly the silent default that made N-20(b)
+                       necessary at the server layer — and a type created as Vendor by
+                       accident can never back a shipment upload and cannot be re-scoped. -->
+                  <option value="">Choose…</option>
+                }
                 @for (scope of documentTypeScopes; track scope) {
                   <option [value]="scope">{{ scope }}</option>
                 }

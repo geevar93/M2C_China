@@ -263,7 +263,9 @@ export class AdminMasterDataComponent {
     this.formName.set('');
     this.formCode.set('');
     this.formLabel.set('');
-    this.formScope.set(DOCUMENT_TYPE_SCOPES[0]);
+    // Empty, not DOCUMENT_TYPE_SCOPES[0] — creating a document type must be a
+    // deliberate choice of scope (N-24). See the template's "Choose…" option.
+    this.formScope.set('');
     this.formError.set(null);
     this.formOpen.set(true);
   }
@@ -314,6 +316,13 @@ export class AdminMasterDataComponent {
     // scope is create-only (D-12-style: the backend ignores it on update) —
     // only ever sent when creating a documentTypes row, per the class doc.
     const scope = this.isDocumentTypeTab() && this.formMode() === 'create' ? this.formScope() : undefined;
+    if (this.isDocumentTypeTab() && this.formMode() === 'create' && !scope) {
+      // Refuse rather than fall back to a default: the server's own fallback is
+      // "Vendor", so letting this through is precisely the silent mis-scoping
+      // N-20(b) exists to prevent, and it is not correctable afterwards (D-34).
+      this.formError.set('Scope is required — choose whether this type is for vendor or shipment documents.');
+      return;
+    }
     this.saveForm(key, { code, label, ...(scope ? { scope } : {}) });
   }
 
