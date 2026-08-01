@@ -7,7 +7,7 @@ import { StatusStyleService } from '../../shared/services/status-style.service';
 import { TimelineDatePipe } from '../../shared/pipes/timeline-date.pipe';
 import { formatDateOnly } from '../../shared/utils/date-format.util';
 import { formatFileSize } from '../../shared/utils/file-size.util';
-import { previewBlob } from '../../shared/utils/file-download.util';
+import { previewBlob, saveBlobAs } from '../../shared/utils/file-download.util';
 import { CatalogsService } from '../../catalogs/services/catalogs.service';
 import { CatalogUploadDialogComponent } from '../../catalogs/upload-dialog/upload-dialog.component';
 import { CatalogSection } from '../../catalogs/models/catalog.models';
@@ -15,8 +15,9 @@ import { DispatchDialogComponent, DispatchDocumentLock } from '../../dispatch/di
 import { DispatchService } from '../../dispatch/services/dispatch.service';
 import { DispatchHistoryEntryDto } from '../../dispatch/models/dispatch.models';
 import { VendorsService } from '../services/vendors.service';
-import { VendorDetail } from '../models/vendor.models';
+import { VendorDetail, VendorDocument } from '../models/vendor.models';
 import { VendorFormDialogComponent } from '../vendor-form-dialog/vendor-form-dialog.component';
+import { VendorDocumentUploadDialogComponent } from '../document-upload-dialog/document-upload-dialog.component';
 
 interface StatTile {
   label: string;
@@ -42,6 +43,12 @@ interface SectionRow {
   docs: DocRow[];
 }
 
+interface ComplianceDocRow {
+  id: string;
+  fileName: string;
+  meta: string;
+}
+
 /**
  * Vendor detail (ACTION_PLAN E5-09) — ported from Source/Sourcing Ops
  * Platform.dc.html `showVendorDetail` (~line 546). `GET /vendors/{id}`
@@ -55,11 +62,26 @@ interface SectionRow {
  * inline history panel from `GET /catalog-documents/{id}/dispatches` —
  * gated on `Catalogs.View` (already required to see this screen at all),
  * not `Dispatch.Send`, per that endpoint's own doc comment.
+ *
+ * **Compliance Documents (ACTION_PLAN E5-10)**: unlike `catalogSections`,
+ * `GET /vendors/{id}` does NOT embed these — `VendorDocumentDto` is a
+ * separate resource, live-confirmed against `VendorDocumentDtos.cs`, so this
+ * screen fires a second `GET /vendors/{id}/documents` alongside the vendor
+ * load. Filed for reference only (FSD Q5) — no expiry/compliance-state UI,
+ * just attach / list / download through the authenticated
+ * `/vendor-documents/{id}/download` endpoint, same as a catalog document.
  */
 @Component({
   selector: 'app-vendor-detail',
   standalone: true,
-  imports: [RouterLink, VendorFormDialogComponent, CatalogUploadDialogComponent, DispatchDialogComponent, TimelineDatePipe],
+  imports: [
+    RouterLink,
+    VendorFormDialogComponent,
+    CatalogUploadDialogComponent,
+    DispatchDialogComponent,
+    VendorDocumentUploadDialogComponent,
+    TimelineDatePipe
+  ],
   templateUrl: './vendor-detail.component.html',
   styleUrl: './vendor-detail.component.scss'
 })
@@ -93,6 +115,13 @@ export class VendorDetailComponent {
   readonly historyError = signal<string | null>(null);
   readonly historyEntries = signal<DispatchHistoryEntryDto[]>([]);
 
+  readonly documentsLoading = signal(false);
+  readonly documentsError = signal<string | null>(null);
+  readonly documents = signal<VendorDocument[]>([]);
+  readonly documentUploadOpen = signal(false);
+  readonly openingDocumentId = signal<string | null>(null);
+  readonly openDocumentError = signal<string | null>(null);
+
   readonly statusChip = computed(() => {
     const v = this.vendor();
     return v ? this.styles.status(v.status.code) : { bg: '#e5e7eb', fg: '#374151' };
@@ -121,6 +150,8 @@ export class VendorDetailComponent {
     if (!v) return [];
     return v.catalogSections.map((s) => this.toSectionRow(s));
   });
+
+  readonly complianceDocs = computed<ComplianceDocRow[]>(() => this.documents().map((d) => this.toComplianceDocRow(d)));
 
   constructor() {
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((params) => {
@@ -227,6 +258,41 @@ export class VendorDetailComponent {
     });
   }
 
+  openDocumentUpload(): void {
+    this.documentUploadOpen.set(true);
+  }
+
+  cancelDocumentUpload(): void {
+    this.documentUploadOpen.set(false);
+  }
+
+  onDocumentUploaded(_doc: VendorDocument): void {
+    this.documentUploadOpen.set(false);
+    const id = this.vendor()?.id;
+    if (id) this.loadDocuments(id);
+  }
+
+  openComplianceDocument(doc: ComplianceDocRow): void {
+    if (this.openingDocumentId()) return;
+    this.openingDocumentId.set(doc.id);
+    this.openDocumentError.set(null);
+    this.vendorsService.downloadDocument(doc.id).subscribe({
+      next: (blob) => {
+        this.openingDocumentId.set(null);
+        saveBlobAs(blob, doc.fileName);
+      },
+      error: (err: unknown) => {
+        this.openingDocumentId.set(null);
+        this.openDocumentError.set(extractErrorMessage(err, 'Could not open this document. Please try again.'));
+      }
+    });
+  }
+
+  retryDocuments(): void {
+    const id = this.vendor()?.id;
+    if (id) this.loadDocuments(id);
+  }
+
   private load(id: string): void {
     this.loading.set(true);
     this.error.set(null);
@@ -240,6 +306,30 @@ export class VendorDetailComponent {
         this.error.set(extractErrorMessage(err, 'Could not load this vendor. Please try again.'));
       }
     });
+    this.loadDocuments(id);
+  }
+
+  private loadDocuments(id: string): void {
+    this.documentsLoading.set(true);
+    this.documentsError.set(null);
+    this.vendorsService.listDocuments(id).subscribe({
+      next: (docs) => {
+        this.documentsLoading.set(false);
+        this.documents.set(docs);
+      },
+      error: (err: unknown) => {
+        this.documentsLoading.set(false);
+        this.documentsError.set(extractErrorMessage(err, 'Could not load compliance documents. Please try again.'));
+      }
+    });
+  }
+
+  private toComplianceDocRow(d: VendorDocument): ComplianceDocRow {
+    return {
+      id: d.id,
+      fileName: d.originalFilename,
+      meta: `${d.docType.label} · ${formatFileSize(d.sizeBytes)} · ${formatDateOnly(d.uploadedAt)}`
+    };
   }
 
   private toSectionRow(section: CatalogSection): SectionRow {

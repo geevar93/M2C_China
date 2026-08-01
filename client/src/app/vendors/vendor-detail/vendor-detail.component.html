@@ -26,6 +26,7 @@
             <button type="button" class="btn btn-primary" (click)="openUpload()">+ Upload Catalog PDF</button>
           }
           @if (canEditVendor()) {
+            <button type="button" class="btn btn-secondary" (click)="openDocumentUpload()">+ Attach Document</button>
             <button type="button" class="btn btn-secondary" (click)="openEdit()">Edit Vendor</button>
           }
         </div>
@@ -145,6 +146,41 @@
         }
       </div>
 
+      <div class="vd-section-heading">Compliance Documents</div>
+      <div class="card vd-compliance-card">
+        @if (openDocumentError()) {
+          <div class="field-error vd-banner" role="alert">{{ openDocumentError() }}</div>
+        }
+        @if (documentsLoading()) {
+          <div class="state-panel">Loading compliance documents…</div>
+        } @else if (documentsError()) {
+          <div class="field-error" role="alert">
+            {{ documentsError() }}
+            <button type="button" class="btn btn-secondary btn-sm" (click)="retryDocuments()">Retry</button>
+          </div>
+        } @else {
+          @for (d of complianceDocs(); track d.id) {
+            <div class="vd-doc-row">
+              <span class="vd-doc-icon">📄</span>
+              <div class="vd-doc-info">
+                <div class="vd-doc-name">{{ d.fileName }}</div>
+                <div class="muted">{{ d.meta }}</div>
+              </div>
+              <span
+                class="vd-doc-open"
+                [class.vd-doc-open--busy]="openingDocumentId() === d.id"
+                (click)="openComplianceDocument(d)"
+              >
+                {{ openingDocumentId() === d.id ? 'Opening…' : 'Download' }}
+              </span>
+            </div>
+          }
+          @if (complianceDocs().length === 0) {
+            <div class="state-panel">No compliance documents attached yet.</div>
+          }
+        }
+      </div>
+
       @if (editOpen()) {
         <app-vendor-form-dialog [vendor]="v" (closed)="cancelEdit()" (saved)="onVendorSaved($event)"></app-vendor-form-dialog>
       }
@@ -159,6 +195,14 @@
 
       @if (dispatchOpen() && dispatchDocumentLock(); as lock) {
         <app-dispatch-dialog [documentLock]="lock" (closed)="cancelDispatch()" (logged)="onDispatchLogged()"></app-dispatch-dialog>
+      }
+
+      @if (documentUploadOpen()) {
+        <app-vendor-document-upload-dialog
+          [vendorId]="v.id"
+          (closed)="cancelDocumentUpload()"
+          (saved)="onDocumentUploaded($event)"
+        ></app-vendor-document-upload-dialog>
       }
     }
   }

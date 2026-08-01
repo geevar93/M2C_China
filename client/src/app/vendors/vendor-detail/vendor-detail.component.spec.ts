@@ -5,7 +5,7 @@ import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/route
 import { of } from 'rxjs';
 import { VendorDetailComponent } from './vendor-detail.component';
 import { AuthService } from '../../core/services/auth.service';
-import { VendorDetail } from '../models/vendor.models';
+import { VendorDetail, VendorDocument } from '../models/vendor.models';
 
 const detail: VendorDetail = {
   id: 'ven-1',
@@ -92,10 +92,16 @@ describe('VendorDetailComponent', () => {
     httpMock.expectOne((r) => r.url === '/api/v1/vendors/ven-1').flush(payload);
   }
 
+  /** The vendor-documents list is a separate `GET /vendors/{id}/documents` call — VendorDocumentDto is NOT embedded in VendorDetail, unlike catalogSections (E5-10). */
+  function flushDocuments(docs: VendorDocument[] = []): void {
+    httpMock.expectOne((r) => r.url === '/api/v1/vendors/ven-1/documents').flush(docs);
+  }
+
   it('renders the profile subline, stat tiles and status chip colour from a single GET /vendors/{id} (E5-05, no second call)', async () => {
     await configure();
     fixture.detectChanges();
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     const text: string = fixture.nativeElement.textContent;
@@ -110,6 +116,7 @@ describe('VendorDetailComponent', () => {
     await configure();
     fixture.detectChanges();
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     const text: string = fixture.nativeElement.textContent;
@@ -126,6 +133,7 @@ describe('VendorDetailComponent', () => {
     httpMock
       .expectOne((r) => r.url === '/api/v1/vendors/ven-1')
       .flush({ title: 'Not Found', detail: 'Vendor not found' }, { status: 404, statusText: 'Not Found' });
+    flushDocuments();
     fixture.detectChanges();
 
     expect(fixture.componentInstance.loading()).toBeFalse();
@@ -137,6 +145,7 @@ describe('VendorDetailComponent', () => {
     await configure('ven-1', []);
     fixture.detectChanges();
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     const text: string = fixture.nativeElement.textContent;
@@ -148,6 +157,7 @@ describe('VendorDetailComponent', () => {
     await configure('ven-1', ['Vendors.Edit', 'Catalogs.Edit']);
     fixture.detectChanges();
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     const btn: HTMLButtonElement = fixture.nativeElement.querySelector('[aria-label="Send via WhatsApp"]');
@@ -158,6 +168,7 @@ describe('VendorDetailComponent', () => {
     await configure('ven-1', ['Vendors.Edit', 'Catalogs.Edit', 'Dispatch.Send']);
     fixture.detectChanges();
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     const btns: HTMLButtonElement[] = fixture.nativeElement.querySelectorAll('[aria-label="Send via WhatsApp"]');
@@ -193,6 +204,7 @@ describe('VendorDetailComponent', () => {
     await configure();
     fixture.detectChanges();
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     fixture.componentInstance.toggleHistory('doc-1');
@@ -212,6 +224,7 @@ describe('VendorDetailComponent', () => {
     await configure();
     fixture.detectChanges();
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     fixture.componentInstance.toggleHistory('doc-1');
@@ -225,6 +238,7 @@ describe('VendorDetailComponent', () => {
     await configure();
     fixture.detectChanges();
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     fixture.componentInstance.toggleHistory('doc-1');
@@ -246,6 +260,7 @@ describe('VendorDetailComponent', () => {
     await configure();
     fixture.detectChanges();
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     const openSpy = spyOn(window, 'open').and.stub();
@@ -264,6 +279,7 @@ describe('VendorDetailComponent', () => {
     await configure();
     fixture.detectChanges();
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     fixture.componentInstance.openUpload();
@@ -288,6 +304,7 @@ describe('VendorDetailComponent', () => {
 
     fixture.componentInstance.onUploadSaved(detail.catalogSections[0]);
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     expect(fixture.componentInstance.uploadOpen()).toBeFalse();
@@ -297,6 +314,7 @@ describe('VendorDetailComponent', () => {
     await configure();
     fixture.detectChanges();
     flushVendor();
+    flushDocuments();
     fixture.detectChanges();
 
     fixture.componentInstance.openEdit();
@@ -321,5 +339,124 @@ describe('VendorDetailComponent', () => {
 
     expect(fixture.componentInstance.editOpen()).toBeFalse();
     expect(fixture.nativeElement.textContent).toContain('350 sets');
+  });
+
+  // ---- E5-10: Compliance Documents ---------------------------------------
+
+  const complianceDoc: VendorDocument = {
+    id: 'vdoc-1',
+    vendorId: 'ven-1',
+    originalFilename: 'business-licence.pdf',
+    sizeBytes: 204800,
+    docType: { id: 'dt-1', code: 'BUSINESS_LICENCE', label: 'Business Licence' },
+    uploadedByUserId: 'user-1',
+    uploadedByName: 'Priya Sharma',
+    uploadedAt: '2026-07-20T00:00:00Z'
+  };
+
+  it('lists compliance documents from the separate GET /vendors/{id}/documents call', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushVendor();
+    flushDocuments([complianceDoc]);
+    fixture.detectChanges();
+
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('Compliance Documents');
+    expect(text).toContain('business-licence.pdf');
+    expect(text).toContain('Business Licence');
+    expect(text).toContain('200.0 KB');
+  });
+
+  it('shows an empty state instead of hanging when a vendor has no compliance documents', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushVendor();
+    flushDocuments([]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('No compliance documents attached yet.');
+  });
+
+  it('shows a visible error with retry instead of hanging when the compliance-documents fetch fails', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushVendor();
+    httpMock
+      .expectOne((r) => r.url === '/api/v1/vendors/ven-1/documents')
+      .flush({ title: 'Server error', detail: 'Could not load documents' }, { status: 500, statusText: 'Server Error' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Could not load documents');
+
+    fixture.componentInstance.retryDocuments();
+    flushDocuments([complianceDoc]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('business-licence.pdf');
+  });
+
+  it('hides "+ Attach Document" without Vendors.Edit', async () => {
+    await configure('ven-1', ['Catalogs.Edit']);
+    fixture.detectChanges();
+    flushVendor();
+    flushDocuments();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('+ Attach Document');
+  });
+
+  it('opens the vendor-locked attach-document dialog and reloads the document list after a successful upload', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushVendor();
+    flushDocuments();
+    fixture.detectChanges();
+
+    fixture.componentInstance.openDocumentUpload();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.documentUploadOpen()).toBeTrue();
+
+    // The dialog's own child-load — shares the app-wide MasterDataService
+    // cache. Unlike the other child dialogs in this spec, this one calls
+    // `documentTypeOptions('Vendor')`, so the flushed payload must include
+    // `documentTypes` (N-20(a)) or `MasterDataService`'s `activeSorted` throws.
+    httpMock.expectOne((r) => r.url === '/api/v1/master-data').flush({
+      categories: [],
+      serviceTypes: [],
+      leadStatuses: [],
+      shipmentStatuses: [],
+      invoiceStatuses: [],
+      vendorStatuses: [],
+      documentTypes: [{ id: 'dt-1', code: 'BUSINESS_LICENCE', label: 'Business Licence', sortOrder: 1, isActive: true, isSystemDefault: false, scope: 'Vendor' }]
+    });
+    fixture.detectChanges();
+
+    fixture.componentInstance.onDocumentUploaded(complianceDoc);
+    flushDocuments([complianceDoc]);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.documentUploadOpen()).toBeFalse();
+    expect(fixture.nativeElement.textContent).toContain('business-licence.pdf');
+  });
+
+  it('downloads a compliance document through the authenticated /vendor-documents/{id}/download endpoint, never a static href', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushVendor();
+    flushDocuments([complianceDoc]);
+    fixture.detectChanges();
+
+    spyOn(URL, 'createObjectURL').and.returnValue('blob:mock-url');
+    spyOn(URL, 'revokeObjectURL');
+    const clickSpy = spyOn(HTMLAnchorElement.prototype, 'click');
+
+    fixture.componentInstance.openComplianceDocument({ id: 'vdoc-1', fileName: 'business-licence.pdf', meta: '' });
+
+    const req = httpMock.expectOne((r) => r.url === '/api/v1/vendor-documents/vdoc-1/download');
+    expect(req.request.responseType).toBe('blob');
+    req.flush(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+
+    expect(clickSpy).toHaveBeenCalled();
   });
 });

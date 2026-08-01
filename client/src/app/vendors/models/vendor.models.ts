@@ -41,6 +41,28 @@ export interface VendorDetail extends VendorListItem {
   catalogSections: CatalogSection[];
 }
 
+/**
+ * `GET /vendors/{id}/documents` row (ACTION_PLAN E5-07/E5-10, FSD Q5). NOT
+ * embedded in `VendorDetail` — a separate list call, unlike `catalogSections`
+ * (verified against `VendorDocumentDto` in
+ * `SourcingOps.Application.Vendors.VendorDocumentDtos`). The lookup field is
+ * `docType`, NOT `documentType` — the backend record names it `DocType`,
+ * deliberately different from `ShipmentDocumentDto.DocumentType`, so this is
+ * not a copy-paste of `ShipmentDocument`. No `versionLabel`/`isLatest`: FSD Q5
+ * scopes these as "filed for reference only", without `CatalogDocument`'s
+ * version history.
+ */
+export interface VendorDocument {
+  id: string;
+  vendorId: string;
+  originalFilename: string;
+  sizeBytes: number;
+  docType: StatusRef;
+  uploadedByUserId: string;
+  uploadedByName: string;
+  uploadedAt: string;
+}
+
 export interface VendorsListResponse {
   items: VendorListItem[];
   page: number;

@@ -154,6 +154,51 @@
   font-weight: 500;
 }
 
+// Compliance Documents card (ACTION_PLAN E5-10) — mirrors ShipmentDetail's
+// `.sd-doc-*` reference-documents row treatment exactly (same tokens, same
+// declarations), since it is the same "flat, un-versioned document row" shape.
+.vd-compliance-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.vd-doc-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--color-track);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.vd-doc-icon {
+  font-size: 16px;
+}
+
+.vd-doc-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vd-doc-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.vd-doc-open {
+  font-size: 13px;
+  color: var(--color-accent);
+  cursor: pointer;
+
+  &--busy {
+    cursor: default;
+    opacity: 0.6;
+  }
+}
+
 @media (max-width: 640px) {
   .vd-head {
     flex-direction: column;
