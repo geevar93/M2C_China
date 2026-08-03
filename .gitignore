@@ -33,3 +33,12 @@ Thumbs.db
 .vs/
 .vscode/
 *.swp
+
+# Human task register (guardrail G2) - updated every round, so it would otherwise
+# churn git status continuously. Committed once at 4620947 as a snapshot.
+# NOTE: the file is currently still TRACKED, so this entry is inert - .gitignore
+# only affects untracked files. Making this effective needs
+#   git rm --cached docs/HUMAN_TASKS.md
+# which un-commits it from the tree while leaving it on disk. Deliberately NOT
+# done yet - awaiting an explicit call, see ACTION_PLAN section 18.
+docs/HUMAN_TASKS.md
