@@ -159,7 +159,7 @@ public class DispatchServiceTests
         using var db = TestDbContextFactory.Create();
         var f = SeedData(db);
         var sut = CreateSut(db, out var audit, out _);
-        var request = new CreateDispatchLogRequest(f.Customer.Id, f.Document.Id, "Hi Kundan Traders, here is our catalog.");
+        var request = new CreateDispatchLogRequest(f.Customer.Id, f.Document.Id, null, "Hi Kundan Traders, here is our catalog.");
 
         var result = await sut.CreateAsync(request, Actor);
 
@@ -185,7 +185,7 @@ public class DispatchServiceTests
         using var db = TestDbContextFactory.Create();
         var f = SeedData(db);
         var sut = CreateSut(db, out _, out _);
-        var request = new CreateDispatchLogRequest(f.Customer.Id, f.Document.Id, "   ");
+        var request = new CreateDispatchLogRequest(f.Customer.Id, f.Document.Id, null, "   ");
 
         var act = async () => await sut.CreateAsync(request, Actor);
 
@@ -198,7 +198,7 @@ public class DispatchServiceTests
         using var db = TestDbContextFactory.Create();
         var f = SeedData(db);
         var sut = CreateSut(db, out _, out _);
-        var request = new CreateDispatchLogRequest(Guid.NewGuid(), f.Document.Id, "Hi there");
+        var request = new CreateDispatchLogRequest(Guid.NewGuid(), f.Document.Id, null, "Hi there");
 
         var act = async () => await sut.CreateAsync(request, Actor);
 
@@ -211,11 +211,89 @@ public class DispatchServiceTests
         using var db = TestDbContextFactory.Create();
         var f = SeedData(db);
         var sut = CreateSut(db, out _, out _);
-        var request = new CreateDispatchLogRequest(f.Customer.Id, Guid.NewGuid(), "Hi there");
+        var request = new CreateDispatchLogRequest(f.Customer.Id, Guid.NewGuid(), null, "Hi there");
 
         var act = async () => await sut.CreateAsync(request, Actor);
 
         await act.Should().ThrowAsync<AppValidationException>();
+    }
+
+    // ---- M6/E8-06: invoice dispatch --------------------------------------------------------
+
+    private static Invoice SeedInvoice(AppDbContext db, Customer customer)
+    {
+        var draft = new InvoiceStatus { Id = Guid.NewGuid(), Code = "DRAFT", Label = "Draft", IsActive = true, SortOrder = 1 };
+        db.InvoiceStatuses.Add(draft);
+        var invoice = new Invoice
+        {
+            Id = Guid.NewGuid(), CustomerId = customer.Id, InvoiceNumber = "INV-2608-001",
+            InvoiceDate = DateTime.UtcNow, Amount = 1000m, TaxAmount = 180m, Currency = "INR",
+            StatusId = draft.Id, CreatedByUserId = Actor, CreatedAt = DateTime.UtcNow
+        };
+        db.Invoices.Add(invoice);
+        db.SaveChanges();
+        return invoice;
+    }
+
+    [Fact]
+    public async Task CreateAsync_InvoiceTarget_RecordsDispatch_AgainstTheInvoice()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var invoice = SeedInvoice(db, f.Customer);
+        var sut = CreateSut(db, out _, out _);
+        var request = new CreateDispatchLogRequest(f.Customer.Id, null, invoice.Id, "Sharing your invoice.");
+
+        var result = await sut.CreateAsync(request, Actor);
+
+        result.CatalogDocumentId.Should().BeNull();
+        result.CatalogName.Should().BeNull();
+        result.InvoiceId.Should().Be(invoice.Id);
+        result.InvoiceNumber.Should().Be("INV-2608-001");
+
+        var stored = await db.Dispatches.SingleAsync();
+        stored.CatalogDocumentId.Should().BeNull();
+        stored.InvoiceId.Should().Be(invoice.Id);
+    }
+
+    [Fact]
+    public async Task CreateAsync_NeitherCatalogNorInvoiceSupplied_ThrowsValidationException()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var sut = CreateSut(db, out _, out _);
+        var request = new CreateDispatchLogRequest(f.Customer.Id, null, null, "Hi there");
+
+        var act = async () => await sut.CreateAsync(request, Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("catalogDocumentId");
+    }
+
+    [Fact]
+    public async Task CreateAsync_BothCatalogAndInvoiceSupplied_ThrowsValidationException()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var invoice = SeedInvoice(db, f.Customer);
+        var sut = CreateSut(db, out _, out _);
+        var request = new CreateDispatchLogRequest(f.Customer.Id, f.Document.Id, invoice.Id, "Hi there");
+
+        var act = async () => await sut.CreateAsync(request, Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("catalogDocumentId");
+    }
+
+    [Fact]
+    public async Task CreateAsync_UnknownInvoiceId_ThrowsValidationException()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var sut = CreateSut(db, out _, out _);
+        var request = new CreateDispatchLogRequest(f.Customer.Id, null, Guid.NewGuid(), "Hi there");
+
+        var act = async () => await sut.CreateAsync(request, Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("invoiceId");
     }
 
     // ---- Sent-to history (E9-07) ---------------------------------------------------------
@@ -250,9 +328,9 @@ public class DispatchServiceTests
         using var db = TestDbContextFactory.Create();
         var f = SeedData(db);
         var sut = CreateSut(db, out _, out _);
-        var first = await sut.CreateAsync(new CreateDispatchLogRequest(f.Customer.Id, f.Document.Id, "First send"), Actor);
+        var first = await sut.CreateAsync(new CreateDispatchLogRequest(f.Customer.Id, f.Document.Id, null, "First send"), Actor);
         await Task.Delay(10); // ensure a distinct, later SentAt for the ordering assertion
-        var second = await sut.CreateAsync(new CreateDispatchLogRequest(f.Customer.Id, f.Document.Id, "Second send"), Actor);
+        var second = await sut.CreateAsync(new CreateDispatchLogRequest(f.Customer.Id, f.Document.Id, null, "Second send"), Actor);
 
         var result = await sut.GetDocumentHistoryAsync(f.Document.Id);
 

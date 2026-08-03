@@ -12,17 +12,29 @@ public sealed record DispatchComposeDto(string Message, string DeepLinkUrl);
 /// E9-02: <c>POST /api/v1/dispatch-log</c> body. Deliberately has no staff/actor field — the
 /// staff user always comes from the caller's token (<c>User.GetRequiredUserId()</c>), never from
 /// the request body, so a caller cannot attribute a dispatch to someone else.
+///
+/// M6/E8-06 added <see cref="InvoiceId"/> alongside the original <see cref="CatalogDocumentId"/>
+/// — exactly one of the two must be supplied (<c>DispatchService.CreateAsync</c> rejects both
+/// or neither with 400), mirroring the DB-enforced invariant on <c>Dispatch</c> itself.
 /// </summary>
-public sealed record CreateDispatchLogRequest(Guid CustomerId, Guid CatalogDocumentId, string Message);
+public sealed record CreateDispatchLogRequest(Guid CustomerId, Guid? CatalogDocumentId, Guid? InvoiceId, string Message);
 
-/// <summary>The recorded dispatch log entry, with display names resolved so the caller does not need a second round trip.</summary>
+/// <summary>
+/// The recorded dispatch log entry, with display names resolved so the caller does not need a
+/// second round trip. Exactly one of the two target pairs
+/// (<see cref="CatalogDocumentId"/>/<see cref="CatalogName"/>/<see cref="CatalogDocumentFilename"/>
+/// vs <see cref="InvoiceId"/>/<see cref="InvoiceNumber"/>) is non-null on any given row —
+/// M6/E8-06 addition, mirroring <c>Dispatch</c>'s own CHECK constraint.
+/// </summary>
 public sealed record DispatchLogDto(
     Guid Id,
     Guid CustomerId,
     string CustomerName,
-    Guid CatalogDocumentId,
-    string CatalogName,
-    string CatalogDocumentFilename,
+    Guid? CatalogDocumentId,
+    string? CatalogName,
+    string? CatalogDocumentFilename,
+    Guid? InvoiceId,
+    string? InvoiceNumber,
     Guid StaffUserId,
     string StaffUserName,
     string Message,

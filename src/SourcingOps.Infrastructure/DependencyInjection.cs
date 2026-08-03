@@ -1,12 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using QuestPDF.Infrastructure;
 using SourcingOps.Application.Auth;
 using SourcingOps.Application.Interfaces;
 using SourcingOps.Infrastructure.Audit;
 using SourcingOps.Infrastructure.Auth;
 using SourcingOps.Infrastructure.Caching;
 using SourcingOps.Infrastructure.Dispatching;
+using SourcingOps.Infrastructure.Pdf;
 using SourcingOps.Infrastructure.Persistence;
 using SourcingOps.Infrastructure.Persistence.Seed;
 using SourcingOps.Infrastructure.Storage;
@@ -17,6 +19,10 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        // M6/DR-3: accepted once, here, never scattered across call sites. Community licence
+        // is free for organisations under $1M USD annual revenue — comfortably true here.
+        QuestPDF.Settings.License = LicenseType.Community;
+
         var connectionString = configuration.GetConnectionString("Default")
             ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured.");
 
@@ -46,6 +52,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditLogger, EfAuditLogger>();
         services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
         services.AddSingleton<IDispatchMessageSender, WhatsAppDeepLinkSender>();
+        services.AddSingleton<IInvoicePdfRenderer, QuestPdfInvoiceRenderer>();
 
         services.AddScoped<DbSeeder>();
 

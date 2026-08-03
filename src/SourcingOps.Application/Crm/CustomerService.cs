@@ -311,19 +311,47 @@ public sealed class CustomerService : ICustomerService
         // `dispatches` log — a dispatch is never also written as an Interaction row, so
         // there is exactly one source of truth and a deleted dispatch would disappear from
         // the timeline rather than leaving an orphaned entry behind. CatalogDocument +
-        // CatalogSection are pulled in the same query (one round trip, no N+1) purely to
-        // render the catalog name into the event text below.
+        // CatalogSection (or, since M6/E8-06, Invoice) are pulled in the same query (one round
+        // trip, no N+1) purely to render the sent item's name into the event text below.
         var dispatches = await _db.Dispatches
-            .Include(d => d.CatalogDocument).ThenInclude(doc => doc.CatalogSection)
+            // CatalogDocument is nullable since M6/E8-06 (an invoice-targeted dispatch has
+            // none) — EF translates this to a LEFT JOIN and handles the null row fine at
+            // runtime; the null-forgiving operator here is just telling the compiler that,
+            // not asserting it never happens (MapDispatchTimelineEvent branches on
+            // CatalogDocumentId precisely because it CAN be null).
+            .Include(d => d.CatalogDocument!).ThenInclude(doc => doc.CatalogSection)
+            .Include(d => d.Invoice)
             .Include(d => d.StaffUser)
             .Where(d => d.CustomerId == id)
             .ToListAsync(ct);
 
-        // ShipmentRecorded/InvoiceCreated/InvoiceStatusChanged remain structural-only
-        // placeholders — no data exists for them until M5/M6 build shipments/invoices; the
-        // response shape already accommodates them (RefType/RefId) without change.
+        // M6 pass: ShipmentRecorded fills the gap left open at M5 close-out — a shipment now
+        // has data to read (§16.6/N-18's sibling gap, not a new one). Read-only from
+        // `shipments`, same rule as CatalogDispatched above. StatusHistory is pulled so the
+        // event can name whoever recorded the shipment, matching ShipmentDetailDto.RecordedByName's
+        // own "earliest history row's actor" convention.
+        var shipments = await _db.Shipments
+            .Include(s => s.StatusHistory).ThenInclude(h => h.ChangedBy)
+            .Where(s => s.CustomerId == id)
+            .ToListAsync(ct);
+
+        // M6/E8-04: InvoiceCreated and InvoiceStatusChanged are both live sources, read from
+        // `invoices`/`invoice_status_history` — same read-don't-duplicate rule. The FIRST
+        // status-history row (written by InvoiceService.CreateAsync at creation time, always
+        // Draft) is skipped when producing InvoiceStatusChanged events: it is the same moment
+        // InvoiceCreated already reports, and surfacing both would double up one real event.
+        var invoices = await _db.Invoices
+            .Include(i => i.CreatedBy)
+            .Include(i => i.StatusHistory).ThenInclude(h => h.Status)
+            .Include(i => i.StatusHistory).ThenInclude(h => h.ChangedBy)
+            .Where(i => i.CustomerId == id)
+            .ToListAsync(ct);
+
         return interactions.Select(MapTimelineEvent)
             .Concat(dispatches.Select(MapDispatchTimelineEvent))
+            .Concat(shipments.Select(MapShipmentTimelineEvent))
+            .Concat(invoices.Select(MapInvoiceCreatedTimelineEvent))
+            .Concat(invoices.SelectMany(MapInvoiceStatusChangedTimelineEvents))
             .OrderByDescending(e => e.OccurredAtUtc)
             .ToList();
     }
@@ -582,17 +610,90 @@ public sealed class CustomerService : ICustomerService
     /// </summary>
     private static TimelineEventDto MapDispatchTimelineEvent(Dispatch d)
     {
-        var catalogName = d.CatalogDocument?.CatalogSection?.Title ?? "(unknown catalog)";
-        var documentName = d.CatalogDocument?.OriginalFilename ?? "(unknown document)";
+        if (d.CatalogDocumentId.HasValue)
+        {
+            var catalogName = d.CatalogDocument?.CatalogSection?.Title ?? "(unknown catalog)";
+            var documentName = d.CatalogDocument?.OriginalFilename ?? "(unknown document)";
+
+            return new TimelineEventDto(
+                TimelineEventKinds.CatalogDispatched,
+                AsUtc(d.SentAt),
+                "Catalog sent",
+                $"Sent \"{catalogName}\" ({documentName}) via WhatsApp.",
+                d.StaffUserId,
+                d.StaffUser?.Name,
+                "CatalogDocument",
+                d.CatalogDocumentId);
+        }
+
+        // M6/E8-06: the invoice half of a dispatch. TimelineEventKinds' vocabulary is a binding
+        // cross-track contract (see its own doc comment) and was not extended with a new
+        // "InvoiceDispatched" value for this pass, so this reuses CatalogDispatched as the
+        // general "sent via WhatsApp" kind — RefType="Invoice" (rather than "CatalogDocument")
+        // is what actually disambiguates an invoice send from a catalog send. Flagged as a
+        // deviation in the build report rather than silently reusing the name.
+        var invoiceNumber = d.Invoice?.InvoiceNumber ?? "(unknown invoice)";
 
         return new TimelineEventDto(
             TimelineEventKinds.CatalogDispatched,
             AsUtc(d.SentAt),
-            "Catalog sent",
-            $"Sent \"{catalogName}\" ({documentName}) via WhatsApp.",
+            "Invoice sent",
+            $"Sent invoice {invoiceNumber} via WhatsApp.",
             d.StaffUserId,
             d.StaffUser?.Name,
-            "CatalogDocument",
-            d.CatalogDocumentId);
+            "Invoice",
+            d.InvoiceId);
     }
+
+    /// <summary>M6 pass: read-only from `shipments` — see <see cref="GetTimelineAsync"/>'s doc comment.</summary>
+    private static TimelineEventDto MapShipmentTimelineEvent(Shipment s)
+    {
+        var recordedBy = s.StatusHistory.OrderBy(h => h.ChangedAt).FirstOrDefault();
+        var reference = s.Reference ?? "(no reference yet)";
+        var body = string.IsNullOrWhiteSpace(s.Destination)
+            ? $"Shipment {reference} recorded."
+            : $"Shipment {reference} recorded for {s.Destination}.";
+
+        return new TimelineEventDto(
+            TimelineEventKinds.ShipmentRecorded,
+            AsUtc(s.CreatedAt),
+            "Shipment recorded",
+            body,
+            recordedBy?.ChangedByUserId,
+            recordedBy?.ChangedBy?.Name,
+            "Shipment",
+            s.Id);
+    }
+
+    /// <summary>M6/E8-04: read-only from `invoices`. See <see cref="GetTimelineAsync"/>'s doc comment.</summary>
+    private static TimelineEventDto MapInvoiceCreatedTimelineEvent(Invoice i) => new(
+        TimelineEventKinds.InvoiceCreated,
+        AsUtc(i.CreatedAt),
+        "Invoice created",
+        $"Invoice {i.InvoiceNumber} created for {i.Currency} {(i.Amount + i.TaxAmount):0.00}.",
+        i.CreatedByUserId,
+        i.CreatedBy?.Name,
+        "Invoice",
+        i.Id);
+
+    /// <summary>
+    /// M6/E8-04: read-only from `invoice_status_history`, skipping the FIRST row (the Draft row
+    /// InvoiceService.CreateAsync writes at creation) — see <see cref="GetTimelineAsync"/>'s doc
+    /// comment for why.
+    /// </summary>
+    private static IEnumerable<TimelineEventDto> MapInvoiceStatusChangedTimelineEvents(Invoice i) =>
+        i.StatusHistory
+            .OrderBy(h => h.ChangedAt)
+            .Skip(1)
+            .Select(h => new TimelineEventDto(
+                TimelineEventKinds.InvoiceStatusChanged,
+                AsUtc(h.ChangedAt),
+                "Invoice status changed",
+                string.IsNullOrWhiteSpace(h.Note)
+                    ? $"Invoice {i.InvoiceNumber} status changed to {h.Status.Label}."
+                    : $"Invoice {i.InvoiceNumber} status changed to {h.Status.Label}. {h.Note}",
+                h.ChangedByUserId,
+                h.ChangedBy?.Name,
+                "Invoice",
+                i.Id));
 }

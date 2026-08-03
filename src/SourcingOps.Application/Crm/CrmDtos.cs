@@ -90,9 +90,10 @@ public sealed record TimelineEventDto(
 /// sourced from `interactions`; <see cref="CatalogDispatched"/> (M4/E9) is sourced from
 /// `dispatches` — read-only, never duplicated into `interactions` — see
 /// <c>CustomerService.GetTimelineAsync</c>/<c>MapDispatchTimelineEvent</c>.
-/// <see cref="ShipmentRecorded"/> (E7) and <see cref="InvoiceCreated"/>/
-/// <see cref="InvoiceStatusChanged"/> (E8) remain structural placeholders in the response
-/// shape only; nothing produces them yet because those modules don't exist until M5/M6.
+/// <see cref="ShipmentRecorded"/> (M6 pass, closing the gap left open at M5 close-out) is
+/// read from `shipments`; <see cref="InvoiceCreated"/>/<see cref="InvoiceStatusChanged"/> (M6/
+/// E8-04) are read from `invoices`/`invoice_status_history`. All three follow the same
+/// read-don't-duplicate rule as <see cref="CatalogDispatched"/>.
 /// </summary>
 public static class TimelineEventKinds
 {

@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using SourcingOps.Api.Tests.TestSupport;
 using SourcingOps.Application.Crm;
 using SourcingOps.Application.Inventory;
@@ -154,6 +157,87 @@ public class ShipmentsEndpointTests : IClassFixture<AdminSeededFixture>
         }
 
         references.Should().OnlyHaveUniqueItems();
+    }
+
+    /// <summary>
+    /// N-18: D-i's <c>SHP-YYMM-NNN</c> collision-retry branch had never once fired — no test
+    /// forced a real 23505 unique violation, so the retry path was unproven. The existing
+    /// "concurrent requests" test above only HOPES a race collides; this one FORCES it
+    /// deterministically, using Postgres's own unique-index insert locking: a held, uncommitted
+    /// transaction inserts a row carrying the exact reference the real request's generator will
+    /// independently compute (it cannot see the uncommitted row under READ COMMITTED), so the
+    /// real request's own INSERT blocks on that row's index lock. Committing the holder then
+    /// hands the blocked INSERT a genuine 23505, which <c>ShipmentService.SaveWithGeneratedReferenceAsync</c>
+    /// must catch and retry to pass this test at all.
+    ///
+    /// The one residual timing assumption (documented, not hidden): the 300ms delay after
+    /// firing the real request must be enough for its SELECT+INSERT to actually reach the
+    /// lock-wait state before the holder transaction commits. Against an in-process TestServer
+    /// with no real network latency this is a very safe margin, but it is a delay, not a
+    /// guarantee — flagged in the build report rather than claimed as airtight.
+    /// </summary>
+    [Fact]
+    public async Task Create_ForcedReferenceCollision_RetriesAndSucceedsWithTheNextReference()
+    {
+        var md = await GetMasterDataAsync();
+        var connectionString = _fixture.Factory.Services.GetRequiredService<IConfiguration>().GetConnectionString("Default");
+        var customerId = await CreateCustomerAsync(md);
+
+        var monthPrefix = $"SHP-{DateTime.UtcNow:yyMM}-";
+        var nextSequence = 1;
+        await using (var probeConn = new NpgsqlConnection(connectionString))
+        {
+            await probeConn.OpenAsync();
+            await using var probeCmd = new NpgsqlCommand(
+                "SELECT reference FROM shipments WHERE reference LIKE @prefix || '%'", probeConn);
+            probeCmd.Parameters.AddWithValue("prefix", monthPrefix);
+            await using var reader = await probeCmd.ExecuteReaderAsync();
+            var max = 0;
+            while (await reader.ReadAsync())
+            {
+                var reference = reader.GetString(0);
+                if (reference.Length > monthPrefix.Length && int.TryParse(reference[monthPrefix.Length..], out var seq) && seq > max)
+                {
+                    max = seq;
+                }
+            }
+            nextSequence = max + 1;
+        }
+        var collidingReference = $"{monthPrefix}{nextSequence:D3}";
+
+        await using var holderConn = new NpgsqlConnection(connectionString);
+        await holderConn.OpenAsync();
+        await using var holderTx = await holderConn.BeginTransactionAsync();
+        var holderShipmentId = Guid.NewGuid();
+        await using (var insertCmd = new NpgsqlCommand(
+            "INSERT INTO shipments (id, reference, customer_id, service_type_id, status_id, created_at) " +
+            "VALUES (@id, @reference, @customerId, @serviceTypeId, @statusId, now())", holderConn, holderTx))
+        {
+            insertCmd.Parameters.AddWithValue("id", holderShipmentId);
+            insertCmd.Parameters.AddWithValue("reference", collidingReference);
+            insertCmd.Parameters.AddWithValue("customerId", customerId);
+            insertCmd.Parameters.AddWithValue("serviceTypeId", md.ServiceTypes.Single(s => s.Code == "CIF").Id);
+            insertCmd.Parameters.AddWithValue("statusId", md.ShipmentStatuses.Single(s => s.Code == "PACKED").Id);
+            await insertCmd.ExecuteNonQueryAsync();
+        }
+
+        // The real request's generator computes the SAME collidingReference (holder's row is
+        // still uncommitted) and its INSERT blocks on Postgres's own unique-index lock.
+        var createTask = PostShipmentAsync(await ValidCreateAsync(md));
+        await Task.Delay(300);
+
+        await holderTx.CommitAsync(); // releases the lock; the blocked INSERT now gets a real 23505
+
+        var body = await createTask;
+
+        body.Reference.Should().NotBe(collidingReference, "the retry (D-i) must have produced the NEXT number after losing the race");
+        body.Reference.Should().MatchRegex(@"^SHP-\d{4}-\d{3}$");
+
+        await using var cleanupConn = new NpgsqlConnection(connectionString);
+        await cleanupConn.OpenAsync();
+        await using var cleanupCmd = new NpgsqlCommand("DELETE FROM shipments WHERE id = @id", cleanupConn);
+        cleanupCmd.Parameters.AddWithValue("id", holderShipmentId);
+        await cleanupCmd.ExecuteNonQueryAsync();
     }
 
     // ---- E7-06 / D-g: the 409 and its override --------------------------------------------------------

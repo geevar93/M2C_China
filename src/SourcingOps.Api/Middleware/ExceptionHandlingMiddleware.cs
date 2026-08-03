@@ -44,6 +44,21 @@ public sealed class ExceptionHandlingMiddleware
                 detail: "Recording this shipment would drive on-hand quantity negative for one or more items. Retry with allowNegativeStock: true to override deliberately.",
                 extensions: new Dictionary<string, object?> { ["insufficientStock"] = ex.Items });
         }
+        catch (InvoiceConflictException ex)
+        {
+            // M6 contract §2/§5: editing a non-Draft invoice, an illegal status transition, or
+            // a PDF download requested before the invoice has ever been issued. 409 for the
+            // same reason as InsufficientStockException above — the request is well-formed and
+            // the caller may legitimately retry once the invoice's state actually allows it.
+            await WriteProblemAsync(
+                context,
+                StatusCodes.Status409Conflict,
+                ex.Title,
+                errors: null,
+                correlationId: null,
+                detail: ex.Message,
+                extensions: ex.Extensions);
+        }
         catch (UnauthorizedAccessException)
         {
             await WriteProblemAsync(context, StatusCodes.Status403Forbidden, "Forbidden.", null, null);

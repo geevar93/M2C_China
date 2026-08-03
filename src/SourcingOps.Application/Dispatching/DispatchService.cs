@@ -50,8 +50,15 @@ public sealed class DispatchService : IDispatchService
         return new DispatchComposeDto(message, prepared.DeepLinkUrl);
     }
 
-    // ---- Create (E9-02) ---------------------------------------------------------------
+    // ---- Create (E9-02, M6/E8-06) -------------------------------------------------------
 
+    /// <summary>
+    /// M6/E8-06: <paramref name="request"/> must carry EXACTLY ONE of
+    /// <see cref="CreateDispatchLogRequest.CatalogDocumentId"/> /
+    /// <see cref="CreateDispatchLogRequest.InvoiceId"/> — mirroring the DB CHECK constraint on
+    /// <c>Dispatch</c> itself (both/neither is a 400, not a constraint violation the caller
+    /// only discovers at SaveChanges).
+    /// </summary>
     public async Task<DispatchLogDto> CreateAsync(CreateDispatchLogRequest request, Guid actorUserId, CancellationToken ct = default)
     {
         var message = (request.Message ?? string.Empty).Trim();
@@ -60,18 +67,37 @@ public sealed class DispatchService : IDispatchService
             throw new AppValidationException("message", "Message is required.");
         }
 
+        var hasCatalog = request.CatalogDocumentId.HasValue;
+        var hasInvoice = request.InvoiceId.HasValue;
+        if (hasCatalog == hasInvoice) // both set, or neither
+        {
+            throw new AppValidationException("catalogDocumentId", "Exactly one of catalogDocumentId or invoiceId must be supplied.");
+        }
+
         var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == request.CustomerId, ct)
             ?? throw new AppValidationException("customerId", "Unknown customer.");
 
-        var document = await _db.CatalogDocuments.Include(d => d.CatalogSection)
-            .FirstOrDefaultAsync(d => d.Id == request.CatalogDocumentId, ct)
-            ?? throw new AppValidationException("catalogDocumentId", "Unknown catalog document.");
+        CatalogDocument? document = null;
+        Invoice? invoice = null;
+
+        if (hasCatalog)
+        {
+            document = await _db.CatalogDocuments.Include(d => d.CatalogSection)
+                .FirstOrDefaultAsync(d => d.Id == request.CatalogDocumentId!.Value, ct)
+                ?? throw new AppValidationException("catalogDocumentId", "Unknown catalog document.");
+        }
+        else
+        {
+            invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.Id == request.InvoiceId!.Value, ct)
+                ?? throw new AppValidationException("invoiceId", "Unknown invoice.");
+        }
 
         var dispatch = new Dispatch
         {
             Id = Guid.NewGuid(),
             CustomerId = customer.Id,
-            CatalogDocumentId = document.Id,
+            CatalogDocumentId = document?.Id,
+            InvoiceId = invoice?.Id,
             StaffUserId = actorUserId,
             Message = message,
             SentAt = DateTime.UtcNow
@@ -82,11 +108,13 @@ public sealed class DispatchService : IDispatchService
         var staffUser = await _db.Users.FindAsync([actorUserId], ct);
 
         await _audit.LogAsync(actorUserId, "DispatchLogged", "Dispatch", dispatch.Id.ToString(),
-            new { customer.Id, CustomerName = customer.Name, CatalogDocumentId = document.Id }, ct);
+            new { customer.Id, CustomerName = customer.Name, CatalogDocumentId = document?.Id, InvoiceId = invoice?.Id }, ct);
 
         return new DispatchLogDto(
-            dispatch.Id, customer.Id, customer.Name, document.Id, document.CatalogSection.Title,
-            document.OriginalFilename, actorUserId, staffUser?.Name ?? "(unknown)", dispatch.Message,
+            dispatch.Id, customer.Id, customer.Name,
+            document?.Id, document?.CatalogSection.Title, document?.OriginalFilename,
+            invoice?.Id, invoice?.InvoiceNumber,
+            actorUserId, staffUser?.Name ?? "(unknown)", dispatch.Message,
             AsUtc(dispatch.SentAt));
     }
 

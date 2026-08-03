@@ -5,6 +5,7 @@ using SourcingOps.Application.Auth;
 using SourcingOps.Application.Catalog;
 using SourcingOps.Application.Crm;
 using SourcingOps.Application.Dispatching;
+using SourcingOps.Application.Invoicing;
 using SourcingOps.Application.Inventory;
 using SourcingOps.Application.MasterData;
 using SourcingOps.Application.Shipments;
@@ -59,6 +60,8 @@ public static class DependencyInjection
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<IShipmentService, ShipmentService>();
         services.AddScoped<IShipmentDocumentService, ShipmentDocumentService>();
+        services.AddScoped<IInvoiceService, InvoiceService>();
+        services.AddScoped<ICompanySettingsService, CompanySettingsService>();
 
         return services;
     }

@@ -716,4 +716,80 @@ public class CustomerServiceTests
 
         result.Should().BeNull();
     }
+
+    // ---- Timeline: M6 additions (ShipmentRecorded, InvoiceCreated/InvoiceStatusChanged) -----
+
+    [Fact]
+    public async Task GetTimelineAsync_WithAShipment_IncludesAShipmentRecordedEvent()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+        var created = await sut.CreateAsync(ValidCifRequest(f), Actor);
+
+        var shipmentStatus = new ShipmentStatus { Id = Guid.NewGuid(), Code = "PACKED", Label = "Packed", IsActive = true, SortOrder = 1 };
+        db.ShipmentStatuses.Add(shipmentStatus);
+        var shipment = new Shipment
+        {
+            Id = Guid.NewGuid(), Reference = "SHP-2608-001", CustomerId = created.Created!.Id,
+            ServiceTypeId = f.Cif.Id, StatusId = shipmentStatus.Id, Destination = "Mumbai", CreatedAt = DateTime.UtcNow
+        };
+        shipment.StatusHistory.Add(new ShipmentStatusHistory
+        {
+            Id = Guid.NewGuid(), ShipmentId = shipment.Id, StatusId = shipmentStatus.Id,
+            ChangedByUserId = Actor, ChangedAt = DateTime.UtcNow, Note = "Shipment created."
+        });
+        db.Shipments.Add(shipment);
+        await db.SaveChangesAsync();
+
+        var timeline = await sut.GetTimelineAsync(created.Created.Id);
+
+        var evt = timeline.Should().ContainSingle(e => e.Kind == TimelineEventKinds.ShipmentRecorded).Subject;
+        evt.RefType.Should().Be("Shipment");
+        evt.RefId.Should().Be(shipment.Id);
+        evt.Body.Should().Contain("SHP-2608-001");
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_WithAnIssuedInvoice_IncludesCreatedAndStatusChangedEvents_ButNotADuplicateForTheOpeningDraftRow()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+        var created = await sut.CreateAsync(ValidCifRequest(f), Actor);
+
+        var draft = new InvoiceStatus { Id = Guid.NewGuid(), Code = "DRAFT", Label = "Draft", IsActive = true, SortOrder = 1 };
+        var issued = new InvoiceStatus { Id = Guid.NewGuid(), Code = "ISSUED", Label = "Issued", IsActive = true, SortOrder = 2 };
+        db.InvoiceStatuses.AddRange(draft, issued);
+
+        var invoiceCreatedAt = DateTime.UtcNow.AddMinutes(-10);
+        var invoice = new Invoice
+        {
+            Id = Guid.NewGuid(), CustomerId = created.Created!.Id, InvoiceNumber = "INV-2608-001",
+            InvoiceDate = DateTime.UtcNow, Amount = 1000m, TaxAmount = 180m, Currency = "INR",
+            StatusId = draft.Id, CreatedByUserId = Actor, CreatedAt = invoiceCreatedAt
+        };
+        invoice.StatusHistory.Add(new InvoiceStatusHistory
+        {
+            Id = Guid.NewGuid(), InvoiceId = invoice.Id, StatusId = draft.Id,
+            ChangedByUserId = Actor, ChangedAt = invoiceCreatedAt, Note = "Invoice created."
+        });
+        invoice.StatusHistory.Add(new InvoiceStatusHistory
+        {
+            Id = Guid.NewGuid(), InvoiceId = invoice.Id, StatusId = issued.Id,
+            ChangedByUserId = Actor, ChangedAt = DateTime.UtcNow, Note = null
+        });
+        db.Invoices.Add(invoice);
+        await db.SaveChangesAsync();
+
+        var timeline = await sut.GetTimelineAsync(created.Created.Id);
+
+        timeline.Should().ContainSingle(e => e.Kind == TimelineEventKinds.InvoiceCreated)
+            .Which.Body.Should().Contain("INV-2608-001");
+        // Exactly ONE status-changed event, not two: the opening Draft history row must not
+        // ALSO surface as a status-changed event alongside InvoiceCreated (M6 GetTimelineAsync
+        // doc comment) — that would double-report the same moment.
+        timeline.Should().ContainSingle(e => e.Kind == TimelineEventKinds.InvoiceStatusChanged)
+            .Which.Body.Should().Contain("Issued");
+    }
 }

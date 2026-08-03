@@ -7,6 +7,7 @@ using SourcingOps.Api.Tests.TestSupport;
 using SourcingOps.Application.Catalog;
 using SourcingOps.Application.Crm;
 using SourcingOps.Application.Dispatching;
+using SourcingOps.Application.Invoicing;
 using SourcingOps.Application.MasterData;
 using SourcingOps.Application.Vendors;
 using SourcingOps.Domain.Constants;
@@ -139,7 +140,7 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
         var md = await GetMasterDataAsync();
         var customer = await CreateCustomerAsync(md);
         var document = await CreateCatalogDocumentAsync(md);
-        var request = new CreateDispatchLogRequest(customer.Id, document.Id, "Hi, here is our catalog.");
+        var request = new CreateDispatchLogRequest(customer.Id, document.Id, null, "Hi, here is our catalog.");
 
         var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log", request);
 
@@ -156,7 +157,7 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
     {
         var md = await GetMasterDataAsync();
         var document = await CreateCatalogDocumentAsync(md);
-        var request = new CreateDispatchLogRequest(Guid.NewGuid(), document.Id, "Hi there");
+        var request = new CreateDispatchLogRequest(Guid.NewGuid(), document.Id, null, "Hi there");
 
         var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log", request);
 
@@ -169,7 +170,7 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
     {
         var md = await GetMasterDataAsync();
         var customer = await CreateCustomerAsync(md);
-        var request = new CreateDispatchLogRequest(customer.Id, Guid.NewGuid(), "Hi there");
+        var request = new CreateDispatchLogRequest(customer.Id, Guid.NewGuid(), null, "Hi there");
 
         var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log", request);
 
@@ -183,11 +184,92 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
         var md = await GetMasterDataAsync();
         var customer = await CreateCustomerAsync(md);
         var document = await CreateCatalogDocumentAsync(md);
-        var request = new CreateDispatchLogRequest(customer.Id, document.Id, "   ");
+        var request = new CreateDispatchLogRequest(customer.Id, document.Id, null, "   ");
 
         var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // ---- M6/E8-06: invoice dispatch --------------------------------------------------------
+
+    private async Task<InvoiceDetailDto> CreateInvoiceAsync(Guid customerId)
+    {
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/invoices",
+            new CreateInvoiceRequest(customerId, null, new DateOnly(2026, 8, 1), "Consulting services", 1000m, 180m, "INR"));
+        await response.EnsureSuccessOrThrowWithBodyAsync();
+        return (await response.Content.ReadFromJsonAsync<InvoiceDetailDto>())!;
+    }
+
+    /// <summary>
+    /// M6 contract §7 asked to verify whether <c>POST /dispatch-log</c> accepts an invoice
+    /// reference, and to flag it as a real gap if it did not. It did not (<c>Dispatch.CatalogDocumentId</c>
+    /// was non-nullable with no invoice counterpart) — fixed in this pass; this proves it end to end.
+    /// </summary>
+    [Fact]
+    public async Task Create_InvoiceTarget_Returns201_WithCatalogFieldsNull_AndInvoiceFieldsPopulated()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var invoice = await CreateInvoiceAsync(customer.Id);
+        var request = new CreateDispatchLogRequest(customer.Id, null, invoice.Id, "Sharing your invoice.");
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = (await response.Content.ReadFromJsonAsync<DispatchLogDto>())!;
+        body.CatalogDocumentId.Should().BeNull();
+        body.CatalogName.Should().BeNull();
+        body.InvoiceId.Should().Be(invoice.Id);
+        body.InvoiceNumber.Should().Be(invoice.InvoiceNumber);
+    }
+
+    [Fact]
+    public async Task Create_NeitherCatalogNorInvoiceSupplied_Returns400ProblemDetails()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var request = new CreateDispatchLogRequest(customer.Id, null, null, "Hi there");
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Create_BothCatalogAndInvoiceSupplied_Returns400ProblemDetails()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+        var invoice = await CreateInvoiceAsync(customer.Id);
+        var request = new CreateDispatchLogRequest(customer.Id, document.Id, invoice.Id, "Hi there");
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Create_InvoiceDispatch_ThenCustomerTimeline_ShowsAnEventReferencingTheInvoice()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var invoice = await CreateInvoiceAsync(customer.Id);
+        var dispatchResponse = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log",
+            new CreateDispatchLogRequest(customer.Id, null, invoice.Id, "Sharing your invoice."));
+        await dispatchResponse.EnsureSuccessOrThrowWithBodyAsync();
+
+        var timelineResponse = await _fixture.AssociateClient.GetAsync($"/api/v1/customers/{customer.Id}/timeline");
+        await timelineResponse.EnsureSuccessOrThrowWithBodyAsync();
+        var timeline = (await timelineResponse.Content.ReadFromJsonAsync<List<TimelineEventDto>>())!;
+
+        var dispatchEvent = timeline.Should().ContainSingle(e => e.RefType == "Invoice" && e.RefId == invoice.Id
+            && e.Title == "Invoice sent").Subject;
+        dispatchEvent.Body.Should().Contain(invoice.InvoiceNumber);
+        // Also proves the InvoiceCreated event this same invoice generates, since both now
+        // share this customer's timeline (E8-04).
+        timeline.Should().Contain(e => e.Kind == TimelineEventKinds.InvoiceCreated && e.RefId == invoice.Id);
     }
 
     // ---- M4 exit criterion: dispatch shows up on the customer timeline (ACTION_PLAN §5) ----
@@ -199,7 +281,7 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
         var customer = await CreateCustomerAsync(md);
         var document = await CreateCatalogDocumentAsync(md);
         var created = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log",
-            new CreateDispatchLogRequest(customer.Id, document.Id, "Hi, here is our catalog."));
+            new CreateDispatchLogRequest(customer.Id, document.Id, null, "Hi, here is our catalog."));
         await created.EnsureSuccessOrThrowWithBodyAsync();
 
         var timelineResponse = await _fixture.AssociateClient.GetAsync($"/api/v1/customers/{customer.Id}/timeline");
@@ -242,7 +324,7 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
         var customer = await CreateCustomerAsync(md);
         var document = await CreateCatalogDocumentAsync(md);
         var created = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log",
-            new CreateDispatchLogRequest(customer.Id, document.Id, "Hi, here is our catalog."));
+            new CreateDispatchLogRequest(customer.Id, document.Id, null, "Hi, here is our catalog."));
         await created.EnsureSuccessOrThrowWithBodyAsync();
 
         var response = await _fixture.AssociateClient.GetAsync($"/api/v1/catalog-documents/{document.Id}/dispatches");
@@ -275,7 +357,7 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
     public async Task NoPermissionCaller_Gets403_OnCreate()
     {
         var client = await GetNoPermissionClientAsync();
-        var request = new CreateDispatchLogRequest(Guid.NewGuid(), Guid.NewGuid(), "Hi there");
+        var request = new CreateDispatchLogRequest(Guid.NewGuid(), Guid.NewGuid(), null, "Hi there");
 
         var response = await client.PostAsJsonAsync("/api/v1/dispatch-log", request);
 
