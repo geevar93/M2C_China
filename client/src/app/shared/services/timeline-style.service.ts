@@ -19,6 +19,11 @@ import { TimelineEventKind } from '../../customers/models/customer.models';
  *   - NoteAdded        -> '#6b7280' ("Note added" row)
  *   - StatusChanged    -> '#2e7d32' ("Status changed" row)
  *   - CatalogDispatched -> '#2d5be3' ("Catalog dispatched" row)
+ *   - InvoiceDispatched -> '#2d5be3' (D-67: a distinct KIND sharing the same
+ *     colour. Both are "sent via WhatsApp", the prototype has no separate row
+ *     for an invoice send, and inventing a colour would breach DESIGN_TOKENS.
+ *     The kinds are separate so E10 can count them apart; the colour is shared
+ *     so the timeline still reads as one family of event.)
  *   - ShipmentRecorded -> '#f57f17' ("Shipment recorded" row)
  *
  * ASSUMPTIONS (flagged — no prototype precedent, these three kinds don't
@@ -36,6 +41,7 @@ const TIMELINE_DOT: Record<TimelineEventKind, string> = {
   StatusChanged: '#2e7d32',
   OwnerChanged: '#1565c0',
   CatalogDispatched: '#2d5be3',
+  InvoiceDispatched: '#2d5be3',
   ShipmentRecorded: '#f57f17',
   InvoiceCreated: '#1565c0',
   InvoiceStatusChanged: '#2e7d32'

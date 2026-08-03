@@ -23,6 +23,15 @@ describe('TimelineStyleService', () => {
     expect(service.dotColor('InvoiceStatusChanged')).toBe('#2e7d32');
   });
 
+  it('gives InvoiceDispatched the same dispatch blue as CatalogDispatched (D-67)', () => {
+    // The two kinds are deliberately DISTINCT but share a colour: both are "sent via
+    // WhatsApp", and DESIGN_TOKENS has no precedent for a separate invoice-send colour.
+    // Pinned so nobody "fixes" the apparent duplication by inventing a new hex, and so the
+    // kind surviving as a separate value is visible here rather than only in the model union.
+    expect(service.dotColor('InvoiceDispatched')).toBe('#2d5be3');
+    expect(service.dotColor('InvoiceDispatched')).toBe(service.dotColor('CatalogDispatched'));
+  });
+
   it('falls back to the muted grey for an unknown or missing kind', () => {
     expect(service.dotColor('SomethingNew')).toBe('#6b7280');
     expect(service.dotColor(null)).toBe('#6b7280');

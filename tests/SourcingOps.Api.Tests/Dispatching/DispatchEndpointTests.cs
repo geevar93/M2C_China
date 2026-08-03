@@ -294,6 +294,36 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
         dispatchEvent.Body.Should().Contain("Spring 2026 Collection");
     }
 
+    /// <summary>
+    /// D-67 regression. An INVOICE dispatch must surface as its own `InvoiceDispatched` kind,
+    /// not as `CatalogDispatched`. Asserted with a string literal rather than the constant
+    /// (D-64): a test written against `TimelineEventKinds.InvoiceDispatched` would still pass
+    /// if someone repointed that constant at "CatalogDispatched", which is exactly the
+    /// regression this exists to catch. Both halves are pinned — a distinct kind AND the
+    /// shared dot-colour family is NOT asserted here because colour lives only in the client.
+    /// </summary>
+    [Fact]
+    public async Task Create_InvoiceTarget_ThenCustomerTimeline_ShowsInvoiceDispatchedEvent_NotCatalogDispatched()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var invoice = await CreateInvoiceAsync(customer.Id);
+        var created = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/dispatch-log",
+            new CreateDispatchLogRequest(customer.Id, null, invoice.Id, "Hi, here is your invoice."));
+        await created.EnsureSuccessOrThrowWithBodyAsync();
+
+        var timelineResponse = await _fixture.AssociateClient.GetAsync($"/api/v1/customers/{customer.Id}/timeline");
+
+        timelineResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var timeline = await timelineResponse.Content.ReadFromJsonAsync<List<TimelineEventDto>>();
+        var dispatchEvent = timeline.Should().ContainSingle(e => e.Kind == "InvoiceDispatched").Subject;
+        dispatchEvent.RefType.Should().Be("Invoice");
+        dispatchEvent.RefId.Should().Be(invoice.Id);
+        dispatchEvent.Body.Should().Contain(invoice.InvoiceNumber);
+        timeline!.Should().NotContain(e => e.Kind == "CatalogDispatched",
+            "an invoice send is not a catalog send — D-67");
+    }
+
     // ---- Sent-to history (E9-07) ----------------------------------------------------------
 
     [Fact]

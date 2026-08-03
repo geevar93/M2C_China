@@ -626,16 +626,17 @@ public sealed class CustomerService : ICustomerService
                 d.CatalogDocumentId);
         }
 
-        // M6/E8-06: the invoice half of a dispatch. TimelineEventKinds' vocabulary is a binding
-        // cross-track contract (see its own doc comment) and was not extended with a new
-        // "InvoiceDispatched" value for this pass, so this reuses CatalogDispatched as the
-        // general "sent via WhatsApp" kind — RefType="Invoice" (rather than "CatalogDocument")
-        // is what actually disambiguates an invoice send from a catalog send. Flagged as a
-        // deviation in the build report rather than silently reusing the name.
+        // M6/E8-06: the invoice half of a dispatch. D-67 RESOLVED — this is its own
+        // InvoiceDispatched kind, not a reuse of CatalogDispatched. `kind` is the client's only
+        // semantic handle on an event (Title/Body are server-authored and colour is derived
+        // from kind alone), so a shared kind would leave an invoice send uncountable separately
+        // in E10's aggregates. It shares CatalogDispatched's dot colour deliberately — same
+        // "sent via WhatsApp" family, and DESIGN_TOKENS has no precedent for a new one.
+        // RefType="Invoice" remains the pointer to the target row.
         var invoiceNumber = d.Invoice?.InvoiceNumber ?? "(unknown invoice)";
 
         return new TimelineEventDto(
-            TimelineEventKinds.CatalogDispatched,
+            TimelineEventKinds.InvoiceDispatched,
             AsUtc(d.SentAt),
             "Invoice sent",
             $"Sent invoice {invoiceNumber} via WhatsApp.",

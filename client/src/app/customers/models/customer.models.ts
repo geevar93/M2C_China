@@ -139,6 +139,7 @@ export type TimelineEventKind =
   | 'StatusChanged'
   | 'OwnerChanged'
   | 'CatalogDispatched'
+  | 'InvoiceDispatched'
   | 'ShipmentRecorded'
   | 'InvoiceCreated'
   | 'InvoiceStatusChanged';

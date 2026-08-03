@@ -102,6 +102,16 @@ public static class TimelineEventKinds
     public const string StatusChanged = "StatusChanged";
     public const string OwnerChanged = "OwnerChanged";
     public const string CatalogDispatched = "CatalogDispatched";
+
+    /// <summary>
+    /// M6/E8-06, resolving D-67. A WhatsApp send whose target is an invoice rather than a
+    /// catalog document. Deliberately a distinct kind even though it shares
+    /// <see cref="CatalogDispatched"/>'s dot colour: `kind` is the only semantic handle the
+    /// client and E10's aggregates have, so collapsing the two would make an invoice send
+    /// indistinguishable from a catalog send in any future count, filter or grouping.
+    /// </summary>
+    public const string InvoiceDispatched = "InvoiceDispatched";
+
     public const string ShipmentRecorded = "ShipmentRecorded";
     public const string InvoiceCreated = "InvoiceCreated";
     public const string InvoiceStatusChanged = "InvoiceStatusChanged";
