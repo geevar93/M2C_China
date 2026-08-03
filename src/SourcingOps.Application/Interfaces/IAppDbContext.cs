@@ -47,6 +47,7 @@ public interface IAppDbContext
     DbSet<ShipmentDocument> ShipmentDocuments { get; }
 
     DbSet<Invoice> Invoices { get; }
+    DbSet<InvoiceStatusHistory> InvoiceStatusHistory { get; }
 
     DbSet<CompanySettings> CompanySettings { get; }
 

@@ -4,17 +4,29 @@ using SourcingOps.Domain.Entities;
 
 namespace SourcingOps.Infrastructure.Persistence.Configurations;
 
+/// <summary>
+/// M6/E8-06 pass: <c>CatalogDocumentId</c> went nullable and <c>InvoiceId</c> was added — see
+/// <see cref="Dispatch"/>'s doc comment. The CHECK constraint (not just two nullable FKs, which
+/// only prevents a NOT NULL violation) is what actually enforces "exactly one of the two",
+/// following the same database-enforced-invariant precedent as
+/// <c>CompanySettingsConfiguration</c>'s singleton CHECK — see
+/// feedback-efcore-npgsql-gotchas memory: HasCheckConstraint goes inside ToTable(), not as a
+/// separate call.
+/// </summary>
 public class DispatchConfiguration : IEntityTypeConfiguration<Dispatch>
 {
     public void Configure(EntityTypeBuilder<Dispatch> b)
     {
-        b.ToTable("dispatches");
+        b.ToTable("dispatches", t => t.HasCheckConstraint(
+            "ck_dispatches_exactly_one_target",
+            "(catalog_document_id IS NOT NULL AND invoice_id IS NULL) OR (catalog_document_id IS NULL AND invoice_id IS NOT NULL)"));
         b.HasKey(x => x.Id);
         b.Property(x => x.Message).IsRequired();
         b.HasIndex(x => x.SentAt);
 
         b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Cascade);
         b.HasOne(x => x.CatalogDocument).WithMany(d => d.Dispatches).HasForeignKey(x => x.CatalogDocumentId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
         b.HasOne(x => x.StaffUser).WithMany().HasForeignKey(x => x.StaffUserId).OnDelete(DeleteBehavior.Restrict);
     }
 }
@@ -169,6 +181,7 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         b.Property(x => x.Amount).HasPrecision(18, 2);
         b.Property(x => x.TaxAmount).HasPrecision(18, 2);
         b.Property(x => x.Currency).IsRequired().HasMaxLength(3);
+        b.Property(x => x.PaidReference).HasMaxLength(300); // M6/E8-07
         b.HasIndex(x => x.InvoiceNumber).IsUnique();
         b.HasIndex(x => x.InvoiceDate);
 
@@ -176,6 +189,22 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         b.HasOne(x => x.Shipment).WithMany().HasForeignKey(x => x.ShipmentId).OnDelete(DeleteBehavior.SetNull);
         b.HasOne(x => x.Status).WithMany().HasForeignKey(x => x.StatusId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+/// <summary>M6/E8-02. Mirrors <see cref="ShipmentStatusHistoryConfiguration"/> exactly — composite index serves "this invoice's history, newest first".</summary>
+public class InvoiceStatusHistoryConfiguration : IEntityTypeConfiguration<InvoiceStatusHistory>
+{
+    public void Configure(EntityTypeBuilder<InvoiceStatusHistory> b)
+    {
+        b.ToTable("invoice_status_history");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Note).HasMaxLength(500);
+        b.HasIndex(x => new { x.InvoiceId, x.ChangedAt });
+
+        b.HasOne(x => x.Invoice).WithMany(i => i.StatusHistory).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne(x => x.Status).WithMany().HasForeignKey(x => x.StatusId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne(x => x.ChangedBy).WithMany().HasForeignKey(x => x.ChangedByUserId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
