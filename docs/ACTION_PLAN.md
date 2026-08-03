@@ -350,7 +350,7 @@ Distinct from TECH_SPEC's OI-1…OI-7 (unresolved *technical decisions*) — the
 | --- | --- | --- | --- |
 | DR-1 | **Four screens have no approved design (OI-4).** Invoicing, Login, Force-password-change and Admin are the only modules where frontend and backend cannot be built from a shared visual contract, so the two can drift and be discovered late. | Rework on E8 and E11; a launch-blocking module discovered to be unbuildable at M6. | E0 runs in M0, in parallel with engineering, and E0-06 is a hard gate on those UI stories only — their backends proceed regardless. E0-01 forces net-new designs to reuse existing atoms, narrowing the drift surface. |
 | DR-2 | **Analytics is sequenced last but reads from every module's schema.** Late schema churn in M3–M6 silently breaks M7 aggregates. | Rework at the end of the plan, when there is least slack. | Freeze the §6 schema at M1 (E1-02) and treat later schema changes as explicit, reviewed migrations. Write each aggregate's integration test against seeded data so a schema change fails CI immediately, not at M7. |
-| DR-3 | **No PDF generation library is chosen.** TECH_SPEC §3's stack table is silent on it, yet FR-BIL-03 requires storing invoices as PDFs. The obvious candidates vary hugely in footprint and licensing, which collides with constraint C1. | Either a blocked M6, or a heavy/licence-encumbered dependency chosen under time pressure. | Decide in M0 alongside OI-7 version pinning; evaluate against the C1 footprint budget and licence terms before M6 starts. |
+| DR-3 | ~~**No PDF generation library is chosen.** TECH_SPEC §3's stack table is silent on it, yet FR-BIL-03 requires storing invoices as PDFs. The obvious candidates vary hugely in footprint and licensing, which collides with constraint C1.~~ **CLOSED 2026-08-03 — QuestPDF 2026.7.2, Community licence, accepted once in Infrastructure DI. See §17.0.** | Either a blocked M6, or a heavy/licence-encumbered dependency chosen under time pressure. | ~~Decide in M0 alongside OI-7 version pinning; evaluate against the C1 footprint budget and licence terms before M6 starts.~~ Footprint was evaluated (pure-managed, no native binaries). **The licence half was closed on technical merit only — the revenue threshold has never been checked against this business, carried as N-26.** |
 | DR-4 | **FR-VEN-07 (vendor documents) has no table in TECH_SPEC §6.** The requirement is Could-have, so the schema gap is currently invisible. | If FR-VEN-07 is pulled into scope late it needs a migration plus a new upload path, mid-flight. | Keep it explicitly last in E5 and treat any decision to build it as a schema-change decision, not a UI story. Otherwise drop it per PA-4. |
 | DR-5 | **"Port the prototype 1:1" is a subjective acceptance criterion.** TECH_SPEC §5.1 itself warns that identical markup does not guarantee identical rendering. | Repeated review/rework loops on every screen-port story; disputes about what "done" means. | Define 1:1 concretely as: same DOM structure, same computed style values from E0-01's token reference, same status→colour maps. Per-screen visual diff sign-off (E12-08) is in the DoD for every UI story, done at the time — not batched into M8. |
 | DR-6 | **Configurable master data is easy to violate quietly.** Any feature component that hard-codes a category or status list to move faster breaks FSD §3.3 without failing a test. | The business's core "change it without a deploy" promise is silently false in some screens. | E3-10 provides the single service; the DoD carries an explicit "no hard-coded lookup lists" check, enforced at code review. |
@@ -1191,6 +1191,8 @@ Continuing the document's D-# sequence from D-49.
 
 ### 16.7 Next
 
+> **SUPERSEDED by §17.** The "do not start it yet" instruction below was overtaken on 2026-08-03: both blockers it names were resolved (DR-3 chosen, Q9c converted into a configurable settings row) and the M6 backend was built. §17.0 records that decision and its reasoning. The paragraph is left intact as the record of what the gate said at the time.
+
 **M6 — Invoicing (E8). Do not start it yet.** It remains **fully gated on FSD Q9c**, and **DR-3** (no PDF library chosen) must be settled *before* it starts, not during it. M5 was its prerequisite and that prerequisite is now genuinely met: E8-01 can reference a real shipment, and D-30's snapshotted `unit_cost` on `shipment_lines` exists precisely so an issued invoice's basis cannot drift when an item price later changes.
 
 **Two things worth doing before M6 rather than inside it**, both cheap now and awkward later:
@@ -1198,3 +1200,143 @@ Continuing the document's D-# sequence from D-49.
 2. **N-12's suite-wide fixture audit** — §16.3 is direct evidence that green tests are not currently sufficient evidence of a working screen. M6 will be written against the same fixture conventions.
 
 **Still needing the business owner:** FSD **Q9c** (gates M6 entirely), FSD **Q6 + Q8** (ask together), the **deployment track** (N-17), **N-10** (now 4.87 kB over budget), **D-18**, **N-19** (stock-take corrections), and newly **N-22** (is E5-07 meant to have a UI, or is it API-only by intent?).
+
+---
+
+## 17. M6 pass — Lightweight Invoicing backend (E8-01…E8-08)
+
+**Last updated:** 2026-08-03. Same evidentiary standard as §9–§16: `Done` means an executed command backs it.
+
+**M6 is 8 of 10 stories Done. E8-01…E8-08 are complete on the backend; E8-09/E8-10 (the two screens) are not started** and are deliberately left to a separate pass. `client/` was not touched by this pass — `client/src/app/invoices/` remains the E0-05 design preview running on `mock-invoices.ts`, and its own header comment still reads "epic E8 has not started". Treat that comment as accurate until E8-09 lands.
+
+### 17.0 The §16.7 gate was crossed — deliberately, and here is the reasoning
+
+§16.7 said **"M6 — Invoicing (E8). Do not start it yet."** It was started. The two blockers it named were resolved first, and this subsection exists so that decision is written down rather than inferred from the diff:
+
+- **DR-3 (no PDF library chosen) is CLOSED.** The choice is **QuestPDF 2026.7.2**, referenced from `SourcingOps.Infrastructure` only. `QuestPDF.Settings.License = LicenseType.Community` is accepted **once**, in `Infrastructure/DependencyInjection.cs`, never scattered across call sites. It is a pure-managed library with no native binaries, which is what keeps it inside TECH_SPEC §7.2/§7.3's constraint C1 (single small VPS, minimal footprint). **Residual: the Community licence is revenue-gated — see N-26.**
+- **FSD Q9c was not answered; it was made unnecessary as a blocker.** Rather than wait on the owner's GSTIN/address/bank values, this pass built the *mechanism*: `company_settings` is a Super-Admin-editable singleton exposed at `GET`/`PUT /admin/company-settings`, returned as an **all-null shape when unset** so "not configured yet" is representable without inventing placeholder values. Engineering is unblocked; **the business is not** — an invoice issued today renders with blank billing details. The exact values still owed are listed in §17.7.
+
+**What was skipped, and should not be read as done:** §16.7's two "do these before M6" items. N-12's fixture audit *was* completed (commit `64a0e92`), but **N-16's browser pass over the M4 screens was not** — it remains open and now has invoicing screens queued behind it.
+
+### 17.1 Story status
+
+| ID | Status | Verification |
+| --- | --- | --- |
+| E8-01 | **Done** | `POST /invoices` creates against a customer with invoice number, date, line description, amount, tax, currency. `ShipmentId` is nullable — CIF invoices reference a shipment, freight-only stand alone — and when supplied is validated to belong to the same customer. `CreateInvoiceRequest` deliberately carries **no** `StatusId`, `InvoiceNumber` or `PdfFilePath`: all three are server-owned. 20 unit + 28 integration tests across E8-01…E8-07. |
+| E8-02 | **Done** | `PUT /invoices/{id}/status` drives the configurable `invoice_statuses` lookup. The transition graph is enforced **by `Code`, never by the Super-Admin-editable `Label`** (D-50 precedent), via the new `InvoiceStatusCodes` constants. Every transition writes an `invoice_status_history` row and an audit entry. |
+| E8-03 | **Done** | Issuing (DRAFT→ISSUED) renders the PDF via `IInvoicePdfRenderer`, stores it through `IFileStorage` at `invoices/{id}.pdf` — TECH_SPEC §4.6's stated convention — and sets `PdfFilePath`. `GET /invoices/{id}/pdf` streams it behind `Invoicing.View`. **`PdfFilePath` never appears in any DTO**; `HasPdf` (a bool) is what the client sees. |
+| E8-04 | **Done** | Invoice creation and status changes appear on the E4-07 customer timeline, **read live** from `invoices`/`invoice_status_history` rather than duplicated into a timeline table. The creation-time DRAFT history row is skipped when emitting `InvoiceStatusChanged`, since `InvoiceCreated` already reports that same moment — otherwise one real event surfaces twice. |
+| E8-05 | **Done** | `GET /invoices` filters by customer, status, service type and date range, searches invoice number or customer name, and pages (default page size 25). Returns `statusCounts[]` with **E7-08's semantics reused verbatim**: counts computed across the whole filtered set *excluding* the status filter itself, zero-count statuses included, ordered by the lookup's `sortOrder`. |
+| E8-06 | **Done** | `dispatches` now carries a nullable `invoice_id` alongside a now-nullable `catalog_document_id`, with a DB `CHECK` constraint (`ck_dispatches_exactly_one_target`) enforcing exactly one target, mirrored by service-level validation. The invoice detail view can therefore reuse the M4 click-to-chat flow and have the send recorded in the dispatch log. **See D-67 — this reuses the `CatalogDispatched` timeline kind rather than adding `InvoiceDispatched`, and that needs a decision.** |
+| E8-07 | **Done** | `POST /invoices/{id}/mark-paid` behind its own `Invoicing.MarkPaid` policy. `PaidAt` defaults to now when omitted, `PaidReference` is optional free text. **Only reachable from ISSUED** — 409 otherwise. Deliberately *not* a value on `ChangeInvoiceStatusRequest`, so the separate permission cannot be bypassed through the general status endpoint. |
+| E8-08 | **Done, mechanism only** | `AdminCompanySettingsController` (`GET`/`PUT /admin/company-settings`) over the pre-existing `company_settings` singleton. `GenerateInvoiceNumberAsync` produces `{PREFIX}-{YYMM}-{NNN}`, with the prefix read from `CompanySettings.InvoiceNumberPrefix`. **The numbering format and every billing value are still unset — §17.7.** |
+| E8-09 | **Not started** | Invoicing list screen. `client/src/app/invoices/invoices.component.ts` still reads `MOCK_INVOICES`. |
+| E8-10 | **Not started** | Invoice generate/detail screen. Still mock-backed. |
+
+**All three permissions (`Invoicing.View`, `Invoicing.Edit`, `Invoicing.MarkPaid`) were already seeded** from M2, so this pass required no RBAC migration and no seed change.
+
+### 17.2 The status lifecycle (E8-02)
+
+Enforced in `InvoiceService` by `Code`:
+
+| From | To | Allowed |
+| --- | --- | --- |
+| *(create)* | DRAFT | Server-side only — `CreateInvoiceRequest` has no `StatusId`, and the table below has no "→ DRAFT" arrow, so DRAFT is unreachable by transition. |
+| DRAFT | ISSUED | Yes — **this is the transition that renders and stores the PDF.** |
+| DRAFT | CANCELLED | Yes |
+| ISSUED | CANCELLED | Yes |
+| ISSUED | PAID | **Not through this endpoint.** `POST /{id}/mark-paid` only, which carries `Invoicing.MarkPaid`. |
+| anything else | — | 409 `InvoiceConflictException` |
+
+An invoice is **editable only while DRAFT** (`PUT /invoices/{id}` returns 409 otherwise), which is the `UpdateShipmentRequest` precedent from D-42/D-43.
+
+### 17.3 The API contract
+
+Reads require `Invoicing.View`, general writes `Invoicing.Edit`, marking paid `Invoicing.MarkPaid`. `/admin/company-settings` is Super-Admin.
+
+| Method | Route | Notes |
+| --- | --- | --- |
+| GET | `/invoices` | `?search=&page=&pageSize=&customerId=&statusId=&serviceTypeId=&fromDate=&toDate=` → `InvoiceListResultDto { items[], page, pageSize, totalCount, statusCounts[] }` |
+| GET | `/invoices/{id}` | `InvoiceDetailDto` — list row + `lineDescription`, creator, `paidReference`, full `statusHistory[]`. One call, no second round trip. |
+| POST | `/invoices` | `CreateInvoiceRequest` → 201 `InvoiceDetailDto`, always DRAFT |
+| PUT | `/invoices/{id}` | `UpdateInvoiceRequest` → 200, **409 if not DRAFT** |
+| PUT | `/invoices/{id}/status` | `ChangeInvoiceStatusRequest { statusId, note? }` → 200, **409 on an illegal transition** |
+| POST | `/invoices/{id}/mark-paid` | `MarkInvoicePaidRequest { paidAt?, paidReference? }` → 200, **409 unless ISSUED** |
+| GET | `/invoices/{id}/pdf` | file stream, filename `{invoiceNumber}.pdf`, **409 if never issued** |
+| GET | `/admin/company-settings` | `CompanySettingsDto` — all-null when unset |
+| PUT | `/admin/company-settings` | `UpsertCompanySettingsRequest` — upsert; blank strings trim to null |
+
+**Wire-shape rules the screens must build against** (M4/M5 convention, carried forward):
+- Lookups are **embedded resolved objects** (`CustomerRefDto`, `StatusRefDto`), never bare ids.
+- `serviceType` resolves from the **customer's** service type, not the shipment's — a freight-only invoice has no shipment at all.
+- `totalAmount` is **computed** (`amount + taxAmount`), never stored.
+- `invoiceDate` is a bare date string (`DateOnly`); `paidAt` is a full UTC instant.
+- `hasPdf` is a bool; the storage path is never serialised.
+
+### 17.4 Schema — migration `20260801115938_AddM6InvoicingSchema`
+
+The `invoices` and `company_settings` tables **already existed**, created by the pre-M3 deferred-schema migration `20260727125250`. This migration only completes them:
+
+- `invoices` += `paid_at` (timestamptz, null), `paid_reference` (varchar 300, null)
+- new table `invoice_status_history` (id, invoice_id, status_id, changed_by_user_id, changed_at, note) — cascade on invoice, restrict on status and user; indexed `(invoice_id, changed_at)`
+- `dispatches.catalog_document_id` **altered to nullable**, += `invoice_id` (FK, indexed)
+- new `CHECK ck_dispatches_exactly_one_target` — exactly one of `catalog_document_id` / `invoice_id` is non-null
+
+### 17.5 Verified on this machine, this pass — 2026-08-03
+
+| What | Command | Result |
+| --- | --- | --- |
+| Solution builds | `dotnet build SourcingOps.sln` | **Clean — 0 warnings, 0 errors** |
+| Full backend suite | `dotnet test SourcingOps.sln` | **630 passed, 0 failed** — 373 unit + 257 integration. Up from 557 at §16. |
+| Migration applies from scratch | implied by the above | The integration suite runs against a **fresh `postgres:16-alpine` Testcontainer** and `Program.cs` calls `MigrateAsync()` on startup, so all 257 integration tests execute against a database built by applying every migration in order to an empty volume. **This is stronger evidence than N-17's apply-SQL-inside-the-container workaround**, and it is the same tool path a real deploy uses. |
+
+**Not verified, and not claimed:** no live HTTP pass over the new endpoints, and no browser pass (there is no UI yet). **This pass reverted to the test-evidence-only pattern of N-9/N-11** that §13.3 deliberately broke for M4. Recorded rather than smoothed over — see N-27.
+
+### 17.6 Deviations and additions from this pass
+
+| # | Deviation |
+| --- | --- |
+| **D-67** | **E8-06 reuses the `CatalogDispatched` timeline kind for invoice dispatches instead of adding `InvoiceDispatched`.** `TimelineEventKinds`' vocabulary is a **binding wire contract** with the client, so adding a value is a two-sided change this backend-only pass could not complete alone. The disambiguator is `RefType`, which is `"Invoice"` rather than `"CatalogDocument"` — so the information is not lost, but **a client switching on `kind` alone will render an invoice send as a catalog send**. E8-10 must switch on `refType`, or this must be revisited and a real `InvoiceDispatched` kind added on both sides. **Decide before E8-10, not during.** |
+| **D-68** | **The migration's `Down` is deliberately lossy, and says so.** An invoice-targeted dispatch is *unrepresentable* in the pre-M6 schema, which requires a non-null `catalog_document_id`. Reverting therefore cannot preserve those rows. This is a real asymmetry with every prior migration in this repo, all of which round-trip cleanly — do not assume M6 is reversible in the way §15's were. |
+| **D-69** | **`InvoiceConflictException` → 409, joining `InsufficientStockException` in `ExceptionHandlingMiddleware`.** Same reasoning as M5's: the request is well-formed and the caller may legitimately retry once the invoice's state allows it, so 409 rather than 400. Covers all three conflict cases — editing a non-DRAFT invoice, an illegal transition, and requesting a PDF for an invoice that was never issued. |
+| **D-70** | **`company_settings` returns an all-null DTO rather than 404 or seeded placeholders when unset**, and `PUT` trims blank strings to null, making "cleared in the form" and "never set" indistinguishable. Correct for a row a Super Admin fills in incrementally, and it is the specific design choice that let Q9c stop being an engineering blocker without anyone inventing a GSTIN. |
+| **D-71** | **Invoice numbering is `{PREFIX}-{YYMM}-{NNN}`, max-plus-one within the month prefix**, mirroring D-37's `SHP-YYMM-NNN`. It inherits D-37's collision-retry design **and its weakness** — see N-18/N-26. |
+
+### 17.7 What the business owner still owes — FSD Q9c, itemised
+
+The mechanism is built and editable at `PUT /admin/company-settings`. Until these are supplied, **an issued invoice renders with blank billing details**. Each maps to exactly one field:
+
+| Field | What is needed |
+| --- | --- |
+| `legalEntityName` | The registered legal name to print as the issuer — not the trading name, if they differ. |
+| `gstin` | The 15-character GSTIN. |
+| `registeredAddress` | Full registered address as it should appear on a tax invoice. |
+| `bankAccountName` | Account holder name as per bank records. |
+| `bankAccountNumber` | Account number. |
+| `bankIfsc` | IFSC code. |
+| `bankBranch` | Branch name. |
+| `invoiceNumberPrefix` | The prefix for `{PREFIX}-{YYMM}-{NNN}`. **Also confirm the format itself** — is `YYMM` + a 3-digit monthly sequence acceptable, or is a continuous annual/financial-year sequence required? Some accountants require the latter. **Changing this after invoices exist is disruptive**, so it is worth settling before first production use. |
+| `declarationText` | The standard declaration/footer line, if their accountant requires one. |
+
+### 17.8 Open items after M6
+
+| # | Item |
+| --- | --- |
+| **N-26** | **The QuestPDF Community licence is revenue-gated and nobody has checked the threshold against this business.** QuestPDF Community is free below a stated annual-revenue ceiling; above it a paid licence is required. This is a **commercial** question, not an engineering one, and DR-3 was closed on the technical merits alone. Cheap to answer now, expensive to discover at launch. |
+| **N-18** | **Now doubled, and still never fired.** D-37's `SHP-YYMM-NNN` collision-retry branch is joined by D-71's identical branch for invoice numbers. Neither has ever executed under test. One forced-collision test would close both. Worth doing before concurrent field use — two staff issuing invoices in the same minute is an ordinary Tuesday, not an edge case. |
+| **N-27** | **M6 was closed on test evidence alone.** No live HTTP pass; §13.3's clean-volume `docker compose` standard was not applied. The suite is genuinely strong here (630 tests, migration proven from an empty volume), but §16.3 is direct evidence in this very repo that green tests can encode the same wrong assumption the code does. Fold a live pass into the E8-09/E8-10 pass, where a contract diff is required anyway. |
+| **N-28** | **The M6 handoff contract was written outside the repo and lost.** Production XML doc comments across `InvoiceDtos`, `InvoiceService`, `InvoicesController`, `CompanySettingsDtos` and `InvoiceStatusCodes` cite an **"M6 contract §0/§1/§2/§3/§4/§5"** that exists nowhere on disk — it lived in a session that was cleared. §15.3 was written into this document specifically so M5's contract would survive its session; that lesson was not carried forward. **§17.2/§17.3/§17.4 above are a reconstruction from the code**, and the citations in the source now resolve to them only approximately. **Rule: any contract the source code cites must live in this document before the session ends.** |
+| **N-16** | **Unchanged and now more urgent.** Still open for M4's screens, and §16.7 asked for it *before* M6. It slipped again. E8-09/E8-10 will add two more unverified screens on top. DR-5 warns explicitly against batching this into M8. |
+| **N-10** | **Unchanged, and M6's screens will make it worse.** Still awaiting a number from the owner; the recommendation remains 320 kB. The backend pass did not move the bundle at all. |
+| N-1, N-3, N-5, N-9, N-11, N-13, N-14, N-15, N-19, N-25 | **Unchanged.** N-19 (stock-take corrections) and N-15 (permission-scope mismatch) still need business answers. |
+
+### 17.9 Next
+
+**E8-09 and E8-10 — the two invoicing screens — are the whole of what remains in M6.** They are no longer gated on E0-06 (closed 2026-07-27 by owner authorisation) and the E0-05 design exists in `SCREEN_DESIGNS.md`, so the path is clear.
+
+Three things the screen pass must do, all learned the hard way in earlier passes:
+1. **Diff §17.3 against a live response before wiring any component** — the §15.6 gate, which caught D-50 in M5 when no test could have.
+2. **Settle D-67 first.** If the timeline should distinguish an invoice send from a catalog send, that is a two-sided change and belongs at the start of the pass, not retrofitted.
+3. **Replace `mock-invoices.ts` entirely, and delete it.** Leaving it beside a live service is exactly how a screen ends up half-wired and passing its own tests — the E5-07/N-22 shape.
+
+**Still needing the business owner:** **FSD Q9c's nine values (§17.7)**, **N-26** (QuestPDF licence revenue check), FSD **Q6 + Q8** (ask together), the **deployment track** (N-3), **N-10** (bundle budget number), **D-18**, **N-19**, and **N-22**.
