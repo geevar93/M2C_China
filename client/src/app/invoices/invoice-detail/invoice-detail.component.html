@@ -13,118 +13,221 @@
       @if (!isGenerateMode() && invoice()) {
         <div class="detail-sub">
           <span class="chip" [style.background]="statusChip().bg" [style.color]="statusChip().fg">{{ statusChip().label }}</span>
-          <span class="muted">Issued {{ dateLabel() }}</span>
+          <span class="muted">Invoice date {{ dateLabel() }}</span>
         </div>
       }
     </div>
 
-    @if (!isGenerateMode() && invoice()) {
+    @if (!isGenerateMode() && invoice(); as inv) {
       <div class="toolbar">
-        <!-- Inert: rendering an invoice PDF is FR-BIL-03, and no PDF approach has
-             even been chosen yet (DR-3). Disabled with an explanatory title rather
-             than silently doing nothing. -->
-        <button type="button" class="btn btn-secondary" disabled title="Needs the invoicing backend and a PDF renderer (E8-03, DR-3).">
-          Download PDF
-        </button>
-        <!-- Inert: reuses the WhatsApp click-to-chat dispatch dialog, which is E9 and not built. -->
-        <button type="button" class="btn btn-secondary" disabled title="Needs the WhatsApp dispatch flow (E9, not built yet).">
+        @if (inv.hasPdf) {
+          <button type="button" class="btn btn-secondary" [disabled]="downloadingPdf()" (click)="downloadPdf()">
+            {{ downloadingPdf() ? 'Downloading…' : 'Download PDF' }}
+          </button>
+        } @else {
+          <button type="button" class="btn btn-secondary" disabled title="This invoice has not been issued yet, so no PDF has been generated.">
+            Download PDF
+          </button>
+        }
+        <!-- Inert: reuses the WhatsApp click-to-chat dispatch dialog (E9). Wiring it is out of scope for this screen. -->
+        <button type="button" class="btn btn-secondary" disabled title="Needs the WhatsApp dispatch flow (E9).">
           Send via WhatsApp
         </button>
+        @if (canEditAction()) {
+          <button type="button" class="btn btn-secondary" [disabled]="isEditing()" (click)="startEdit()">Edit</button>
+        }
+        @if (canIssueAction()) {
+          @if (canIssue()) {
+            <button type="button" class="btn btn-primary" [disabled]="statusActionLoading() === 'issue'" (click)="issueInvoice()">
+              {{ statusActionLoading() === 'issue' ? 'Issuing…' : 'Issue' }}
+            </button>
+          } @else {
+            <button type="button" class="btn btn-primary" disabled [title]="issueDisabledReason()">Issue</button>
+          }
+        }
         @if (markPaidAvailability() === 'enabled') {
           <button type="button" class="btn btn-primary" (click)="openMarkPaid()">Mark Paid</button>
         } @else if (markPaidAvailability() === 'disabled') {
           <button type="button" class="btn btn-primary" disabled [title]="markPaidDisabledReason()">Mark Paid</button>
         }
-        <button type="button" class="btn btn-secondary" disabled title="Needs the invoicing backend (E8-02).">Cancel</button>
+        @if (canCancelAction()) {
+          @if (cancelConfirmOpen()) {
+            <span class="cancel-confirm">
+              <span class="muted">Cancel this invoice?</span>
+              <button type="button" class="btn btn-secondary btn-sm" (click)="dismissCancel()">Back</button>
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm cancel-confirm__confirm"
+                [disabled]="statusActionLoading() === 'cancel'"
+                (click)="confirmCancel()"
+              >
+                {{ statusActionLoading() === 'cancel' ? 'Cancelling…' : 'Confirm cancel' }}
+              </button>
+            </span>
+          } @else {
+            <button type="button" class="btn btn-secondary" (click)="requestCancel()">Cancel</button>
+          }
+        }
       </div>
     }
   </div>
 
-  <div class="banner-warning invoices-banner">
-    Design preview on sample data — there is no invoicing backend yet (epic E8 has not started). Nothing on this
-    screen is real; it exists so the business owner has a concrete screen to review. See ACTION_PLAN.md §12.3.
-  </div>
+  @if (statusActionError()) {
+    <div class="field-error action-banner" role="alert">{{ statusActionError() }}</div>
+  }
+  @if (downloadError()) {
+    <div class="field-error action-banner" role="alert">{{ downloadError() }}</div>
+  }
 
-  @if (masterDataLoading()) {
+  @if (loading()) {
     <div class="state-panel">
       <div class="spinner"></div>
-      <span>Loading invoice statuses…</span>
+      <span>Loading invoice…</span>
     </div>
-  } @else if (masterDataError() && !hasMasterData()) {
+  } @else if (error()) {
     <div class="state-panel">
-      <span>{{ masterDataError() }}</span>
-      <button type="button" class="btn btn-secondary btn-sm" (click)="retryMasterData()">Retry</button>
-    </div>
-  } @else if (invoiceNotFound()) {
-    <div class="state-panel">
-      <span>No sample invoice with that reference exists.</span>
-      <a class="btn btn-secondary btn-sm" routerLink="/invoices">Back to invoices</a>
+      <span>{{ error() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
     </div>
   } @else {
-    @if (markPaidPreviewMessage()) {
-      <div class="banner-warning preview-message" role="status">{{ markPaidPreviewMessage() }}</div>
-    }
-
-    <!-- Numbering placeholder. Deliberately NOT a real format: E8-08 is blocked
-         on FSD Q9c, and inventing one here would quietly become the decision. -->
+    <!-- Numbering: assigned by the server on create; not editable or invented here. -->
     <div class="card number-card">
       <div class="field-label-ish">Invoice number</div>
       <div class="number-value">
         @if (isGenerateMode()) {
           Not yet assigned
         } @else {
-          {{ invoice()!.invoiceNumber }}
+          {{ invoice()?.invoiceNumber }}
         }
       </div>
-      <div class="field-hint">
-        Placeholder only — the invoice numbering format is not decided yet (E8-08, blocked on FSD Q9c).
-      </div>
+      @if (isGenerateMode()) {
+        <div class="field-hint">Assigned automatically by the server once this invoice is created.</div>
+      }
     </div>
 
     <div class="party-grid">
-      <!-- "From" renders the not-configured empty state on purpose. company_settings
-           genuinely exists and is genuinely empty, and Q9c is unanswered. Showing the
-           gap is the point — inventing a plausible GSTIN would hide the question. -->
+      <!-- "From" renders the not-configured empty state whenever the two fields the
+           API requires to issue an invoice are missing (D-70: all-null is a 200, a
+           real "not configured yet" state, not an error). Showing the gap is the
+           point — inventing a plausible GSTIN would hide it. -->
       <div class="card party-card">
         <div class="party-heading">From</div>
-        <div class="not-configured">
-          <div class="not-configured__title">Company billing details not configured</div>
-          <div class="not-configured__body">
-            The legal entity name, GSTIN, registered address and bank details have not been provided yet
-            (FSD Q9c). No invoice can be issued until they exist.
+        @if (companySettingsLoading()) {
+          <div class="muted">Loading…</div>
+        } @else if (canIssue()) {
+          <div class="party-name">{{ companySettings()!.legalEntityName }}</div>
+          @if (companySettings()!.gstin) {
+            <div class="party-line muted">GSTIN {{ companySettings()!.gstin }}</div>
+          }
+          <div class="party-line muted">{{ companySettings()!.registeredAddress }}</div>
+          @if (companySettings()!.bankAccountName || companySettings()!.bankAccountNumber) {
+            <div class="party-line muted">
+              {{ companySettings()!.bankAccountName }}@if (companySettings()!.bankAccountNumber) { <span>· {{ companySettings()!.bankAccountNumber }}</span> }
+            </div>
+          }
+        } @else {
+          <div class="not-configured">
+            <div class="not-configured__title">Company billing details not configured</div>
+            <div class="not-configured__body">
+              The legal entity name and registered address have not been set yet. No invoice can be issued until a
+              Super Admin configures them under Admin &gt; Company Settings.
+            </div>
           </div>
-        </div>
+        }
       </div>
 
       <div class="card party-card">
         <div class="party-heading">Bill to</div>
-        @if (isGenerateMode()) {
+        @if (isFormMode()) {
           <div class="field">
             <label for="inv-billto">Customer</label>
             <select
               id="inv-billto"
               class="field-input"
-              [value]="selectedCustomerId()"
-              (change)="selectedCustomerId.set($any($event.target).value)"
+              [value]="formCustomerId()"
+              (change)="formCustomerId.set($any($event.target).value)"
             >
               <option value="">Select a customer…</option>
-              @for (c of customerDirectory; track c.id) {
-                <option [value]="c.id">{{ c.businessName }}</option>
+              @for (c of customerOptions(); track c.id) {
+                <option [value]="c.id">{{ c.name }}</option>
               }
             </select>
-            <div class="field-hint">Sample directory — not the real customer list.</div>
+            @if (customersLoading()) {
+              <div class="field-hint">Loading customers…</div>
+            }
           </div>
-        }
-        @if (billToCustomer(); as cust) {
-          <div class="party-name">{{ cust.businessName }}</div>
-          <div class="party-line muted">{{ cust.contactName }}</div>
-          <div class="party-line muted">{{ cust.phone }}</div>
-          <div class="party-line muted">{{ cust.address }}</div>
-        } @else if (isGenerateMode()) {
-          <div class="party-line muted">No customer selected.</div>
+        } @else {
+          @if (invoice(); as inv) {
+            <div class="party-name">{{ inv.customer.name }}</div>
+          }
         }
       </div>
     </div>
+
+    @if (isFormMode()) {
+      <div class="card form-card">
+        <div class="field">
+          <label for="inv-date">Invoice date</label>
+          <input
+            id="inv-date"
+            class="field-input"
+            type="date"
+            [value]="formInvoiceDate()"
+            (input)="formInvoiceDate.set($any($event.target).value)"
+          />
+        </div>
+        <div class="field">
+          <label for="inv-line">Line description</label>
+          <input
+            id="inv-line"
+            class="field-input"
+            [value]="formLineDescription()"
+            (input)="formLineDescription.set($any($event.target).value)"
+            placeholder="e.g. Freight forwarding, Shenzhen to Chennai"
+          />
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="inv-amount">Amount</label>
+            <input
+              id="inv-amount"
+              class="field-input"
+              type="number"
+              min="0"
+              step="0.01"
+              [value]="formAmount()"
+              (input)="formAmount.set($any($event.target).value)"
+            />
+          </div>
+          <div class="field">
+            <label for="inv-tax">Tax amount</label>
+            <input
+              id="inv-tax"
+              class="field-input"
+              type="number"
+              min="0"
+              step="0.01"
+              [value]="formTaxAmount()"
+              (input)="formTaxAmount.set($any($event.target).value)"
+            />
+          </div>
+        </div>
+        @if (formError()) {
+          <div class="field-error">{{ formError() }}</div>
+        }
+        <div class="toolbar dialog-actions">
+          @if (isEditing()) {
+            <button type="button" class="btn btn-secondary" [disabled]="saving()" (click)="cancelEdit()">Cancel</button>
+          }
+          @if (isGenerateMode()) {
+            <a class="btn btn-secondary" routerLink="/invoices">Cancel</a>
+          }
+          <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+            {{ saving() ? 'Saving…' : isGenerateMode() ? 'Create Invoice' : 'Save Changes' }}
+          </button>
+        </div>
+      </div>
+    }
 
     @if (!isGenerateMode() && invoice(); as inv) {
       <div class="status-trail card">
@@ -147,11 +250,29 @@
             }
           </div>
         }
-        @if (inv.paidDate) {
+        @if (inv.paidAt) {
           <div class="paid-note muted">
-            Marked paid on {{ inv.paidDate }}@if (inv.paidReference) {<span> · reference {{ inv.paidReference }}</span>}
+            <!-- DATE-ONLY on purpose. `paidAt` is a full instant on the wire, but the Mark Paid
+                 dialog collects a DATE, so the server stores midnight UTC. Rendering it with
+                 formatTimelineDate showed a local-time component the user never entered
+                 ("05:30" for a midnight-UTC value in IST). formatInvoiceDate reads UTC parts
+                 and prints no time, so what is shown is exactly what was picked. The genuine
+                 wall-clock moment of the transition is still on the PAID status-history row. -->
+            Marked paid on {{ formatInvoiceDate(inv.paidAt) }}@if (inv.paidReference) {<span> · reference {{ inv.paidReference }}</span>}
           </div>
         }
+
+        <div class="status-history">
+          @for (h of inv.statusHistory; track h.id) {
+            <div class="status-history__row">
+              <span class="chip" [style.background]="historyChip(h.status.code).bg" [style.color]="historyChip(h.status.code).fg">{{ h.status.label }}</span>
+              <span class="muted">{{ formatTimelineDate(h.changedAt) }} · {{ h.changedByName }}</span>
+              @if (h.note) {
+                <span class="muted status-history__note">— {{ h.note }}</span>
+              }
+            </div>
+          }
+        </div>
       </div>
 
       <div class="table-wrap">
@@ -163,12 +284,10 @@
             </tr>
           </thead>
           <tbody>
-            @for (line of inv.lines; track line.description) {
-              <tr>
-                <td>{{ line.description }}</td>
-                <td class="align-right nowrap">{{ formatInr(line.amount) }}</td>
-              </tr>
-            }
+            <tr>
+              <td>{{ inv.lineDescription || '—' }}</td>
+              <td class="align-right nowrap">{{ formatInr(inv.amount) }}</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -176,29 +295,20 @@
       <div class="totals">
         <div class="totals-row">
           <span class="muted">Subtotal</span>
-          <span class="nowrap">{{ subtotalLabel() }}</span>
+          <span class="nowrap">{{ formatInr(inv.amount) }}</span>
         </div>
         <div class="totals-row">
-          <span class="muted">Tax ({{ taxRatePct() }}%)</span>
-          <span class="nowrap">{{ taxLabel() }}</span>
+          <span class="muted">Tax</span>
+          <span class="nowrap">{{ formatInr(inv.taxAmount) }}</span>
         </div>
         <div class="totals-row totals-row--grand">
           <span>Total</span>
-          <span class="nowrap">{{ totalLabel() }}</span>
+          <span class="nowrap">{{ formatInr(inv.totalAmount) }}</span>
         </div>
       </div>
 
       <div class="timeline-note muted">
-        Once built, invoice creation and status changes will appear on the customer's activity timeline (E8-04,
-        reusing the existing customer timeline feed).
-      </div>
-    }
-
-    @if (isGenerateMode()) {
-      <div class="state-panel">
-        <span>Line items, totals and the status trail appear once an invoice exists.</span>
-        <span class="muted">Generating one needs the invoicing backend (E8-01), which is not built.</span>
-        <a class="btn btn-secondary btn-sm" routerLink="/invoices">Back to invoices</a>
+        Invoice creation and status changes also appear on the customer's activity timeline (E8-04).
       </div>
     }
   }
@@ -236,9 +346,15 @@
           />
         </div>
 
+        @if (markPaidError()) {
+          <div class="field-error">{{ markPaidError() }}</div>
+        }
+
         <div class="toolbar dialog-actions">
-          <button type="button" class="btn btn-secondary" (click)="cancelMarkPaid()">Cancel</button>
-          <button type="button" class="btn btn-primary" (click)="confirmMarkPaid()">Confirm</button>
+          <button type="button" class="btn btn-secondary" [disabled]="markPaidSaving()" (click)="cancelMarkPaid()">Cancel</button>
+          <button type="button" class="btn btn-primary" [disabled]="markPaidSaving()" (click)="confirmMarkPaid()">
+            {{ markPaidSaving() ? 'Saving…' : 'Confirm' }}
+          </button>
         </div>
       </div>
     </div>

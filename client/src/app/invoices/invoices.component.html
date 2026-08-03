@@ -1,124 +1,117 @@
 <div>
   <div class="page-header">
     <h1 class="page-title">Invoices</h1>
-    <a class="btn btn-primary" routerLink="/invoices/new">+ Generate Invoice</a>
+    @if (canEdit()) {
+      <a class="btn btn-primary" routerLink="/invoices/new">+ Generate Invoice</a>
+    }
   </div>
 
-  <div class="banner-warning invoices-banner">
-    Design preview on sample data — there is no invoicing backend yet (epic E8 has not started). Nothing on this
-    screen is real; it exists so the business owner has a concrete screen to review. See ACTION_PLAN.md §12.3.
+  <div class="card filter-bar">
+    <div class="field filter-search">
+      <label for="inv-search">Search</label>
+      <input
+        id="inv-search"
+        class="field-input"
+        [value]="search()"
+        (input)="onSearchInput($any($event.target).value)"
+        placeholder="Invoice # or customer"
+      />
+    </div>
+    <div class="field">
+      <label for="inv-customer">Customer</label>
+      <select id="inv-customer" class="field-input" [value]="customerId()" (change)="setCustomer($any($event.target).value)">
+        <option value="">All customers</option>
+        @for (c of customerOptions(); track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="inv-svc">Service Type</label>
+      <select id="inv-svc" class="field-input" [value]="serviceTypeId()" (change)="setServiceType($any($event.target).value)">
+        <option value="">All service types</option>
+        @for (opt of serviceTypeOptions(); track opt.id) {
+          <option [value]="opt.id">{{ opt.label }}</option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="inv-from">From</label>
+      <input id="inv-from" type="date" class="field-input" [value]="dateFrom()" (change)="setDateFrom($any($event.target).value)" />
+    </div>
+    <div class="field">
+      <label for="inv-to">To</label>
+      <input id="inv-to" type="date" class="field-input" [value]="dateTo()" (change)="setDateTo($any($event.target).value)" />
+    </div>
+    <div class="filter-spacer"></div>
+    <button type="button" class="btn btn-secondary" (click)="clearFilters()">Clear</button>
   </div>
 
-  @if (masterDataLoading()) {
-    <div class="state-panel">
-      <div class="spinner"></div>
-      <span>Loading invoice filters…</span>
-    </div>
-  } @else if (masterDataError() && !hasMasterData()) {
-    <div class="state-panel">
-      <span>{{ masterDataError() }}</span>
-      <button type="button" class="btn btn-secondary btn-sm" (click)="retryMasterData()">Retry</button>
-    </div>
-  } @else {
-    <div class="card filter-bar">
-      <div class="field filter-search">
-        <label for="inv-search">Search</label>
-        <input
-          id="inv-search"
-          class="field-input"
-          [value]="search()"
-          (input)="search.set($any($event.target).value)"
-          placeholder="Invoice # or customer"
-        />
+  <div class="pill-tabs">
+    @for (t of tabs(); track t.key) {
+      <div class="pill-tab" [class.pill-tab--active]="t.active" (click)="selectTab(t.key)">
+        {{ t.label }} <span class="pill-tab__count">{{ t.count }}</span>
       </div>
-      <div class="field">
-        <label for="inv-customer">Customer</label>
-        <select id="inv-customer" class="field-input" [value]="customerId()" (change)="setCustomer($any($event.target).value)">
-          <option value="">All customers</option>
-          @for (c of customerDirectory; track c.id) {
-            <option [value]="c.id">{{ c.businessName }}</option>
-          }
-        </select>
-      </div>
-      <div class="field">
-        <label for="inv-status">Status</label>
-        <select id="inv-status" class="field-input" [value]="statusId()" (change)="setStatus($any($event.target).value)">
-          <option value="">All statuses</option>
-          @for (opt of invoiceStatusOptions(); track opt.id) {
-            <option [value]="opt.id">{{ opt.label }}</option>
-          }
-        </select>
-      </div>
-      <div class="field">
-        <label for="inv-svc">Service Type</label>
-        <select id="inv-svc" class="field-input" [value]="serviceTypeId()" (change)="setServiceType($any($event.target).value)">
-          <option value="">All service types</option>
-          @for (opt of serviceTypeOptions(); track opt.id) {
-            <option [value]="opt.id">{{ opt.label }}</option>
-          }
-        </select>
-      </div>
-      <div class="field">
-        <label for="inv-from">From</label>
-        <input id="inv-from" type="date" class="field-input" [value]="dateFrom()" (change)="dateFrom.set($any($event.target).value)" />
-      </div>
-      <div class="field">
-        <label for="inv-to">To</label>
-        <input id="inv-to" type="date" class="field-input" [value]="dateTo()" (change)="dateTo.set($any($event.target).value)" />
-      </div>
-      <div class="filter-spacer"></div>
-      <button type="button" class="btn btn-secondary" (click)="clearFilters()">Clear</button>
-    </div>
+    }
+  </div>
 
-    <div class="summary-row">
-      <div class="inv-summary">{{ rows().length }} invoices</div>
-      <div class="stat-tiles">
-        <div class="stat-tile">
-          <div class="stat-tile__label">Total Issued</div>
-          <div class="stat-tile__value">{{ totalIssuedLabel() }}</div>
-          <div class="stat-tile__sub">Issued + paid, in the current view</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-tile__label">Total Outstanding</div>
-          <div class="stat-tile__value">{{ totalOutstandingLabel() }}</div>
-          <div class="stat-tile__sub stat-tile__sub--warning">Issued, not yet paid</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="table-wrap">
-      <table>
-        <thead>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Invoice #</th>
+          <th>Customer</th>
+          <th>Date</th>
+          <th>Service type</th>
+          <th class="align-right">Amount</th>
+          <th>Status</th>
+          <th class="align-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (r of rows(); track r.id) {
           <tr>
-            <th>Invoice #</th>
-            <th>Customer</th>
-            <th>Date</th>
-            <th>Service type</th>
-            <th class="align-right">Amount</th>
-            <th>Status</th>
-            <th class="align-right">Actions</th>
+            <td><a class="row-link" [routerLink]="['/invoices', r.id]">{{ r.invoiceNumber }}</a></td>
+            <td>{{ r.customerName }}</td>
+            <td class="muted">{{ r.dateLabel }}</td>
+            <td><span class="chip" [style.background]="r.svcBg" [style.color]="r.svcFg">{{ r.svcLabel }}</span></td>
+            <td class="align-right"><strong>{{ r.amountLabel }}</strong></td>
+            <td><span class="chip" [style.background]="r.stBg" [style.color]="r.stFg">{{ r.statusLabel }}</span></td>
+            <td class="align-right nowrap">
+              <a class="btn btn-secondary btn-sm" [routerLink]="['/invoices', r.id]">Open →</a>
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          @for (r of rows(); track r.id) {
-            <tr>
-              <td>{{ r.invoiceNumber }}</td>
-              <td>{{ r.customerBusinessName }}</td>
-              <td class="muted">{{ r.dateLabel }}</td>
-              <td><span class="chip" [style.background]="r.svcBg" [style.color]="r.svcFg">{{ r.svcLabel }}</span></td>
-              <td class="align-right">{{ r.amountLabel }}</td>
-              <td><span class="chip" [style.background]="r.stBg" [style.color]="r.stFg">{{ r.statusLabel }}</span></td>
-              <td class="align-right nowrap">
-                <a class="btn btn-secondary btn-sm" [routerLink]="['/invoices', r.id]">Open →</a>
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
+        }
+      </tbody>
+    </table>
 
-      @if (noResults()) {
-        <div class="state-panel">No invoices match these filters. Clear the filters to see the full sample set.</div>
-      }
+    @if (loading()) {
+      <div class="state-panel">
+        <div class="spinner"></div>
+        <span>Loading invoices…</span>
+      </div>
+    } @else if (error()) {
+      <div class="state-panel">
+        <span>{{ error() }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+      </div>
+    } @else if (noResults()) {
+      <div class="state-panel">
+        @if (hasActiveFilters()) {
+          <span>No invoices match these filters. Clear the filters to see the full list.</span>
+        } @else {
+          <span>No invoices yet. Generate the first invoice to get started.</span>
+        }
+      </div>
+    }
+  </div>
+
+  @if (!loading() && !error() && totalCount() > 0) {
+    <div class="pager">
+      <span class="muted">{{ totalCount() }} invoices</span>
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() <= 1" (click)="prevPage()">← Prev</button>
+      <span class="muted">Page {{ page() }} of {{ totalPages() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() >= totalPages()" (click)="nextPage()">Next →</button>
     </div>
   }
 </div>

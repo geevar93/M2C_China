@@ -1,8 +1,4 @@
-.invoices-banner {
-  margin-bottom: var(--space-9);
-}
-
-.preview-message {
+.action-banner {
   margin-bottom: var(--space-9);
 }
 
@@ -95,6 +91,30 @@
   color: var(--color-text-strong-muted);
 }
 
+// ---- Generate / edit form ---------------------------------------------------
+.form-card {
+  margin-bottom: var(--space-9);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-8);
+}
+
+// ---- Cancel inline confirm ----------------------------------------------------
+.cancel-confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: 13px;
+}
+
+.cancel-confirm__confirm {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
 // ---- Status trail ----------------------------------------------------------
 .status-trail {
   margin-bottom: var(--space-9);
@@ -144,6 +164,27 @@
 .paid-note {
   font-size: 12px;
   margin-top: var(--space-6);
+}
+
+.status-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border);
+}
+
+.status-history__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.status-history__note {
+  font-style: italic;
 }
 
 // ---- Totals ----------------------------------------------------------------
@@ -199,7 +240,8 @@
 
 // ---- Phone width -----------------------------------------------------------
 @media (max-width: 480px) {
-  .party-grid {
+  .party-grid,
+  .form-row {
     grid-template-columns: 1fr;
   }
 

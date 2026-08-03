@@ -1,7 +1,3 @@
-.invoices-banner {
-  margin-bottom: var(--space-9);
-}
-
 .filter-bar {
   display: flex;
   gap: var(--space-6);
@@ -23,28 +19,8 @@
   flex: 1 1 auto;
 }
 
-.summary-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-8);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-8);
-}
-
-.inv-summary {
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-.stat-tiles {
-  display: flex;
-  gap: var(--space-6);
-  flex-wrap: wrap;
-}
-
-.stat-tiles .stat-tile {
-  min-width: 180px;
+.row-link {
+  font-weight: 600;
 }
 
 .muted {
@@ -55,13 +31,16 @@
   white-space: nowrap;
 }
 
+.pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-top: var(--space-8);
+  font-size: 13px;
+}
+
 @media (max-width: 480px) {
   .filter-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .summary-row {
     flex-direction: column;
     align-items: stretch;
   }

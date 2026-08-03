@@ -101,10 +101,16 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./shipments/shipment-detail/shipment-detail.component').then((m) => m.ShipmentDetailComponent)
       },
-      // Invoicing (E0-05). DESIGN PREVIEW ON MOCKED DATA — there is no
-      // invoicing backend (no InvoicesController, no entity, no migration;
-      // epic E8 is not started). E8-09/E8-10, the live implementation, stay
-      // open and blocked on the E8 backend plus FSD Q9c. See ACTION_PLAN §12.3.
+      // Invoicing (E8-09/E8-10) — LIVE against the M6 backend as of 2026-08-03.
+      // The design-preview-on-mocked-data phase is over: `mock-invoices.ts` is
+      // deleted and both screens read the real `/invoices` API. See ACTION_PLAN
+      // §17.3 for the contract and §17.11 for the screen pass.
+      //
+      // NOTE: an invoice cannot be ISSUED until a Super Admin fills in the
+      // company billing block (`legalEntityName` + `registeredAddress`), which
+      // is FSD Q9c and still outstanding — the detail screen surfaces that as a
+      // configuration gap rather than a failure. See §17.7.
+      //
       // 'invoices/new' must stay above 'invoices/:id', or ':id' matches first
       // and the generate screen would try to load an invoice with id "new" —
       // the same ordering trap E4-08 hit with customers/follow-ups.
