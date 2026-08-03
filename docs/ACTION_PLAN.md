@@ -1290,7 +1290,7 @@ The `invoices` and `company_settings` tables **already existed**, created by the
 | Full backend suite | `dotnet test SourcingOps.sln` | **630 passed, 0 failed** — 373 unit + 257 integration. Up from 557 at §16. |
 | Migration applies from scratch | implied by the above | The integration suite runs against a **fresh `postgres:16-alpine` Testcontainer** and `Program.cs` calls `MigrateAsync()` on startup, so all 257 integration tests execute against a database built by applying every migration in order to an empty volume. **This is stronger evidence than N-17's apply-SQL-inside-the-container workaround**, and it is the same tool path a real deploy uses. |
 
-**Not verified, and not claimed:** no live HTTP pass over the new endpoints, and no browser pass (there is no UI yet). **This pass reverted to the test-evidence-only pattern of N-9/N-11** that §13.3 deliberately broke for M4. Recorded rather than smoothed over — see N-27.
+~~**Not verified, and not claimed:** no live HTTP pass over the new endpoints, and no browser pass (there is no UI yet). **This pass reverted to the test-evidence-only pattern of N-9/N-11** that §13.3 deliberately broke for M4.~~ **Superseded — the live pass was run on 2026-08-03 as the opening move of the screen pass; see §17.10.** It found one thing 631 green tests did not: the Q9c issue-time hard block (§17.7's correction).
 
 ### 17.6 Deviations and additions from this pass
 
@@ -1304,13 +1304,17 @@ The `invoices` and `company_settings` tables **already existed**, created by the
 
 ### 17.7 What the business owner still owes — FSD Q9c, itemised
 
-The mechanism is built and editable at `PUT /admin/company-settings`. Until these are supplied, **an issued invoice renders with blank billing details**. Each maps to exactly one field:
+> **CORRECTION, 2026-08-03 (live pass).** This section previously said an invoice issued without these values "renders with blank billing details". **That is wrong, and the truth is more serious: an invoice cannot be issued at all.** `InvoiceService.RenderPdfAsync` fails loudly when `CompanySettings` is absent or `LegalEntityName`/`RegisteredAddress` is null, so `DRAFT → ISSUED` returns **400** with an `errors.companySettings` message. Since issuing is also what renders the PDF, and PAID is only reachable from ISSUED, **every downstream step is blocked**. Confirmed live: the transition returned 400 until the settings row was populated, then succeeded and produced a 42 KB PDF.
+>
+> **This means M6 cannot meet its own §5 exit criterion without Q9c** ("an invoice … moves Draft → Issued → Paid, downloads as a PDF"). Q9c is not a cosmetic gap or a polish item — it is the last hard blocker on the milestone. **This is exactly the class of thing test evidence did not surface** (the tests configure settings in their fixtures, so the gate never fired) and the live pass did — see N-27.
+
+The mechanism is built and editable at `PUT /admin/company-settings`. Only the first two are strictly required to unblock issuing; the rest shape what the PDF actually says. Each maps to exactly one field:
 
 | Field | What is needed |
 | --- | --- |
-| `legalEntityName` | The registered legal name to print as the issuer — not the trading name, if they differ. |
+| `legalEntityName` | **REQUIRED to issue.** The registered legal name to print as the issuer — not the trading name, if they differ. |
+| `registeredAddress` | **REQUIRED to issue.** Full registered address as it should appear on a tax invoice. |
 | `gstin` | The 15-character GSTIN. |
-| `registeredAddress` | Full registered address as it should appear on a tax invoice. |
 | `bankAccountName` | Account holder name as per bank records. |
 | `bankAccountNumber` | Account number. |
 | `bankIfsc` | IFSC code. |
@@ -1322,6 +1326,8 @@ The mechanism is built and editable at `PUT /admin/company-settings`. Until thes
 
 | # | Item |
 | --- | --- |
+| **N-29** | **The rendered invoice carries the seller's GSTIN but has nowhere to put the BUYER's — customers have no GSTIN field at all.** Confirmed by inspecting a real generated PDF and by grepping the customer entity/DTOs. For a GST-registered business issuing B2B invoices to Indian buyers, the recipient's GSTIN is normally required on a tax invoice, and without it the buyer generally cannot claim input credit. **This is a business/compliance question, not a bug** — FSD §6.8 scopes invoicing as "lightweight" and document-based, and A9 explicitly forbids anything resembling reconciliation, so adding a field unasked would be scope creep. **Ask the owner together with Q9c**, since it is the same conversation: *do your invoices need to carry the customer's GSTIN?* If yes it is a customer-schema change plus a PDF change, and is much cheaper before first production use. |
+| **N-30** | **Money on the PDF renders unformatted — `INR 125000.00`, no digit grouping.** Indian invoices conventionally group in lakhs (`1,25,000.00`). Cosmetic and low-risk, but it is on the one artifact that goes to a customer, so it is worth fixing before first real use rather than after. Observed on a live-generated PDF. |
 | **N-26** | **The QuestPDF Community licence is revenue-gated and nobody has checked the threshold against this business.** QuestPDF Community is free below a stated annual-revenue ceiling; above it a paid licence is required. This is a **commercial** question, not an engineering one, and DR-3 was closed on the technical merits alone. Cheap to answer now, expensive to discover at launch. |
 | **N-18** | **Now doubled, and still never fired.** D-37's `SHP-YYMM-NNN` collision-retry branch is joined by D-71's identical branch for invoice numbers. Neither has ever executed under test. One forced-collision test would close both. Worth doing before concurrent field use — two staff issuing invoices in the same minute is an ordinary Tuesday, not an edge case. |
 | **N-27** | **M6 was closed on test evidence alone.** No live HTTP pass; §13.3's clean-volume `docker compose` standard was not applied. The suite is genuinely strong here (630 tests, migration proven from an empty volume), but §16.3 is direct evidence in this very repo that green tests can encode the same wrong assumption the code does. Fold a live pass into the E8-09/E8-10 pass, where a contract diff is required anyway. |
@@ -1340,3 +1346,32 @@ Three things the screen pass must do, all learned the hard way in earlier passes
 3. **Replace `mock-invoices.ts` entirely, and delete it.** Leaving it beside a live service is exactly how a screen ends up half-wired and passing its own tests — the E5-07/N-22 shape.
 
 **Still needing the business owner:** **FSD Q9c's nine values (§17.7)**, **N-26** (QuestPDF licence revenue check), FSD **Q6 + Q8** (ask together), the **deployment track** (N-3), **N-10** (bundle budget number), **D-18**, **N-19**, and **N-22**.
+
+### 17.10 The live API pass (the §15.6 gate, run before any component was wired)
+
+Run by the coordinator, first-hand, **before** the screen brief was written and before any build agent was launched — the sequence §16.2 established and §17.9 required. Against a **fresh, empty database** (`sourcingops_ui`, created for this pass so no prior state could mask a defect) with the API run from source on `:5000` and migrations applied by `Program.cs` at startup.
+
+| # | Checked | Result |
+| --- | --- | --- |
+| 1 | `GET /health` | `Healthy`, database `Healthy` |
+| 2 | Bootstrap admin login + forced password change | 200; `mustChangePassword` flips false on re-login |
+| 3 | `GET /master-data` | `invoiceStatuses` seeded `DRAFT`/`ISSUED`/`PAID`/`CANCELLED` with sortOrder 1–4 |
+| 4 | `POST /invoices` (freight-only, no shipment) | 201. Number **`INV-2608-001`** generated; status DRAFT; `statusHistory` has exactly one row, note `"Invoice created."` |
+| 5 | `GET /admin/company-settings` unset | **200 with every field null** — D-70 confirmed, not a 404 |
+| 6 | `GET /invoices/{id}/pdf` while DRAFT | **409** `"This invoice has not been issued yet…"`, `currentStatus: DRAFT` |
+| 7 | `POST /invoices/{id}/mark-paid` while DRAFT | **409** `"can only be marked paid from 'ISSUED'…"`, `fromStatus`/`toStatus` present |
+| 8 | `PUT /invoices/{id}/status` → ISSUED, **settings unset** | **400** `errors.companySettings` — **the finding of this pass; see §17.7's correction** |
+| 9 | `PUT /admin/company-settings` then retry (8) | 200; status ISSUED, `hasPdf` true, history 2 rows |
+| 10 | `GET /invoices/{id}/pdf` after issue | 200, **42,508 bytes, `%PDF-` magic**, `Content-Disposition: attachment; filename=INV-2608-001.pdf` |
+| 11 | PDF rendered content | Opened and read. Correct issuer block, Bill-To, description, tax, total, bank block, declaration, "Page 1 of 1". Raised **N-29** (no buyer GSTIN) and **N-30** (no digit grouping) |
+| 12 | `PUT /invoices/{id}` while ISSUED | **409** `"This invoice is 'ISSUED' and can only be edited while Draft."` |
+| 13 | `POST /invoices/{id}/mark-paid` from ISSUED | 200; PAID, `paidAt` set, `paidReference` `"NEFT ref 88213"`, history 3 rows |
+| 14 | `GET /invoices` list | `statusCounts` `[(DRAFT,0,1),(ISSUED,0,2),(PAID,1,3),(CANCELLED,0,4)]` — **zero-count statuses included and sortOrder-ordered**, E7-08 semantics confirmed |
+| 15 | `POST /dispatch-log` with `invoiceId` → customer timeline | `InvoiceDispatched` / `refType=Invoice` — **D-67's fix confirmed end-to-end** |
+| 16 | Timeline event set | `InvoiceDispatched`, `InvoiceStatusChanged` ×2, `InvoiceCreated`, `EnquiryCaptured`. The creation-time DRAFT row is correctly **not** duplicated as a status change (E8-04) |
+
+**The contract in §17.3 was found accurate** — no field renames, no shape surprises. Two live details were nonetheless worth writing into the client models because they are invisible in the written contract and easy to assume wrong: `invoiceDate` is a **bare date string** while `paidAt`/`createdAt`/`changedAt` are **full instants** (both shapes in one DTO), and `customer.name` on the embedded ref already resolves to the **business name** where one exists.
+
+**Two machine-level traps cost real time and are worth recording** (both sibling to N-17/N-13):
+1. The running `china_m2c-db-1` volume's password diverges from `.env.example` (it was initialised on an earlier day), so the API 500s on startup with `28P01`. The fix is the one `appsettings.Development.json` already documents — export `ConnectionStrings__Default` for the run.
+2. **`BOOTSTRAP_ADMIN_PASSWORD` in the environment is NOT read by the API.** It is a docker-compose-level variable name; the .NET config key differs, so setting it silently has no effect and the seeder still reports `Source: generated`. The generated password is printed **once**, so a container whose volume predates the current session has an unrecoverable admin login (N-13). Creating a **fresh database** rather than mutating the existing one is the clean way out, and has the side benefit of proving the migrations apply from empty.
