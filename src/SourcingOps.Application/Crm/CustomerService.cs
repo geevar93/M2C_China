@@ -671,7 +671,7 @@ public sealed class CustomerService : ICustomerService
         TimelineEventKinds.InvoiceCreated,
         AsUtc(i.CreatedAt),
         "Invoice created",
-        $"Invoice {i.InvoiceNumber} created for {i.Currency} {(i.Amount + i.TaxAmount):0.00}.",
+        $"Invoice {i.InvoiceNumber} created for {MoneyFormatter.Format(i.Currency, i.Amount + i.TaxAmount)}.",
         i.CreatedByUserId,
         i.CreatedBy?.Name,
         "Invoice",

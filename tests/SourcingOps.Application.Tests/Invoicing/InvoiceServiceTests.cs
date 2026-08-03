@@ -165,6 +165,88 @@ public class InvoiceServiceTests
         result.InvoiceNumber.Should().StartWith("GST-", "the prefix is trimmed and uppercased (M6 contract §1)");
     }
 
+    // ---- List / per-status counts + sums (N-31/D-72) ---------------------------------------
+
+    private static InvoiceListQuery AllQuery(Guid? statusId = null) =>
+        new(null, 1, 25, null, statusId, null, null, null);
+
+    [Fact]
+    public async Task ListAsync_StatusCounts_SumAmountPlusTaxAmountPerStatus()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        // Two DRAFT invoices: 1000+180 and 500+50 -> DRAFT total 1730.
+        await sut.CreateAsync(ValidCreate(f), Actor);
+        await sut.CreateAsync(ValidCreate(f) with { Amount = 500m, TaxAmount = 50m }, Actor);
+
+        var result = await sut.ListAsync(AllQuery());
+
+        var draftCount = result.StatusCounts.Single(c => c.Code == "DRAFT");
+        draftCount.Count.Should().Be(2);
+        draftCount.TotalAmount.Should().Be(1730m);
+    }
+
+    [Fact]
+    public async Task ListAsync_StatusCounts_StatusesWithNoInvoices_ZeroFillBothCountAndTotalAmount()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        await sut.CreateAsync(ValidCreate(f), Actor);
+
+        var result = await sut.ListAsync(AllQuery());
+
+        var paidCount = result.StatusCounts.Single(c => c.Code == "PAID");
+        paidCount.Count.Should().Be(0);
+        paidCount.TotalAmount.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task ListAsync_StatusCounts_OrderedBySortOrderThenCode()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var result = await sut.ListAsync(AllQuery());
+
+        result.StatusCounts.Select(c => c.Code).Should().Equal("DRAFT", "ISSUED", "PAID", "CANCELLED");
+    }
+
+    /// <summary>
+    /// E7-08 semantics reused verbatim (M6 contract §3): the status counts/sums are computed over
+    /// EVERY filter except the status filter, so selecting a status tab must not change the
+    /// other tabs' figures. This is the test that matters most for N-31.
+    /// </summary>
+    [Fact]
+    public async Task ListAsync_StatusCounts_StatusFilterDoesNotChangeOtherStatuses_CountsOrSums()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out var storageMock, out _);
+
+        await sut.CreateAsync(ValidCreate(f), Actor); // DRAFT 1000+180
+        var toIssue = await sut.CreateAsync(ValidCreate(f) with { Amount = 2000m, TaxAmount = 200m }, Actor);
+        db.CompanySettings.Add(ValidCompanySettings());
+        await db.SaveChangesAsync();
+        await sut.ChangeStatusAsync(toIssue.Id, new ChangeInvoiceStatusRequest(f.Issued.Id, null), Actor); // ISSUED 2200
+
+        var unfiltered = await sut.ListAsync(AllQuery());
+        var filteredToIssued = await sut.ListAsync(AllQuery(f.Issued.Id));
+
+        var draftUnfiltered = unfiltered.StatusCounts.Single(c => c.Code == "DRAFT");
+        var draftFiltered = filteredToIssued.StatusCounts.Single(c => c.Code == "DRAFT");
+        draftFiltered.Count.Should().Be(draftUnfiltered.Count);
+        draftFiltered.TotalAmount.Should().Be(draftUnfiltered.TotalAmount);
+        draftFiltered.TotalAmount.Should().Be(1180m);
+
+        var issuedFiltered = filteredToIssued.StatusCounts.Single(c => c.Code == "ISSUED");
+        issuedFiltered.TotalAmount.Should().Be(2200m);
+    }
+
     // ---- Update (E8-01, editable only in Draft) ------------------------------------------
 
     [Fact]

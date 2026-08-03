@@ -100,15 +100,19 @@ public sealed class InvoiceService : IInvoiceService
     {
         var counts = await source
             .GroupBy(i => i.StatusId)
-            .Select(g => new { StatusId = g.Key, Count = g.Count() })
+            .Select(g => new { StatusId = g.Key, Count = g.Count(), TotalAmount = g.Sum(i => i.Amount + i.TaxAmount) })
             .ToListAsync(ct);
-        var countsById = counts.ToDictionary(c => c.StatusId, c => c.Count);
+        var countsById = counts.ToDictionary(c => c.StatusId, c => (c.Count, c.TotalAmount));
 
         var statuses = await _db.InvoiceStatuses.ToListAsync(ct);
 
         return statuses
             .OrderBy(s => s.SortOrder).ThenBy(s => s.Code, StringComparer.Ordinal)
-            .Select(s => new InvoiceStatusCountDto(s.Id, s.Code, s.Label, s.SortOrder, countsById.GetValueOrDefault(s.Id, 0)))
+            .Select(s =>
+            {
+                var (count, totalAmount) = countsById.GetValueOrDefault(s.Id, (0, 0m));
+                return new InvoiceStatusCountDto(s.Id, s.Code, s.Label, s.SortOrder, count, totalAmount);
+            })
             .ToList();
     }
 

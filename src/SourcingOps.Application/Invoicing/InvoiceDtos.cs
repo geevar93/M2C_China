@@ -66,14 +66,18 @@ public sealed record InvoiceDetailDto(
 /// <summary>
 /// Per-status count across the WHOLE filtered set excluding the status filter itself — E7-08's
 /// semantics, reused verbatim per M6 contract §3 (zero-count statuses included, ordered by the
-/// lookup's <c>sortOrder</c>).
+/// lookup's <c>sortOrder</c>). <see cref="TotalAmount"/> (N-31/D-72) is the sum of
+/// <c>Amount + TaxAmount</c> for that status over the same set the count uses — computed
+/// server-side, never stored, single-currency (app-wide INR-only assumption, see
+/// <c>money.util.ts</c>). Appended last so the existing positional order is undisturbed.
 /// </summary>
 public sealed record InvoiceStatusCountDto(
     Guid StatusId,
     string Code,
     string Label,
     int SortOrder,
-    int Count);
+    int Count,
+    decimal TotalAmount);
 
 public sealed record InvoiceListResultDto(
     IReadOnlyList<InvoiceListItemDto> Items,

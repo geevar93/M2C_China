@@ -792,4 +792,41 @@ public class CustomerServiceTests
         timeline.Should().ContainSingle(e => e.Kind == TimelineEventKinds.InvoiceStatusChanged)
             .Which.Body.Should().Contain("Issued");
     }
+
+    /// <summary>
+    /// N-30: this timeline body is composed server-side and renders beside client-formatted
+    /// amounts, so it must go through <c>MoneyFormatter</c> and carry Indian lakh grouping
+    /// rather than a plain <c>0.00</c> format. Per D-64's rule, the assertion terminates in a
+    /// LITERAL string, not in a value recomputed through the formatter under test.
+    /// </summary>
+    [Fact]
+    public async Task GetTimelineAsync_InvoiceCreatedBody_UsesIndianLakhGroupedAmount_NotPlainDecimal()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+        var created = await sut.CreateAsync(ValidCifRequest(f), Actor);
+
+        var draft = new InvoiceStatus { Id = Guid.NewGuid(), Code = "DRAFT", Label = "Draft", IsActive = true, SortOrder = 1 };
+        db.InvoiceStatuses.Add(draft);
+
+        var invoice = new Invoice
+        {
+            Id = Guid.NewGuid(), CustomerId = created.Created!.Id, InvoiceNumber = "INV-2608-002",
+            InvoiceDate = DateTime.UtcNow, Amount = 145000m, TaxAmount = 2500m, Currency = "INR",
+            StatusId = draft.Id, CreatedByUserId = Actor, CreatedAt = DateTime.UtcNow
+        };
+        invoice.StatusHistory.Add(new InvoiceStatusHistory
+        {
+            Id = Guid.NewGuid(), InvoiceId = invoice.Id, StatusId = draft.Id,
+            ChangedByUserId = Actor, ChangedAt = DateTime.UtcNow, Note = "Invoice created."
+        });
+        db.Invoices.Add(invoice);
+        await db.SaveChangesAsync();
+
+        var timeline = await sut.GetTimelineAsync(created.Created.Id);
+
+        timeline.Should().ContainSingle(e => e.Kind == TimelineEventKinds.InvoiceCreated)
+            .Which.Body.Should().Be("Invoice INV-2608-002 created for INR 1,47,500.00.");
+    }
 }

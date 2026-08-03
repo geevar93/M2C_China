@@ -141,6 +141,35 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
         body.StatusCounts.Sum(c => c.Count).Should().Be(body.TotalCount);
     }
 
+    /// <summary>N-31/D-72: <c>totalAmount</c> travels over the wire on the same status-counts row as <c>count</c>.</summary>
+    [Fact]
+    public async Task List_StatusCounts_CarryTotalAmountOverTheWire()
+    {
+        var md = await GetMasterDataAsync();
+        await PostInvoiceAsync(await ValidCreateAsync(md)); // 1000 + 180
+
+        var response = await _fixture.AssociateClient.GetAsync("/api/v1/invoices");
+
+        // Assert the RAW wire name first. Deserialising into InvoiceListResultDto below round-trips
+        // through the same serializer on both ends, so a camelCase/PascalCase mismatch with the
+        // Angular client would be completely invisible to it — the client reads `totalAmount` off
+        // untyped JSON and would silently see `undefined`. This is the §16.3 class of defect: the
+        // value is computed correctly, stored correctly and transmitted, and is wrong only at the
+        // point where a different runtime reads it.
+        var raw = await response.Content.ReadAsStringAsync();
+        raw.Should().Contain("\"totalAmount\":", "the Angular client's InvoiceStatusCount reads this exact property name");
+
+        var body = (await response.Content.ReadFromJsonAsync<InvoiceListResultDto>())!;
+        var draft = body.StatusCounts.Single(c => c.Code == "DRAFT");
+        draft.TotalAmount.Should().BeGreaterThanOrEqualTo(1180m, "at least the invoice this test created contributes to the DRAFT total");
+
+        var paid = body.StatusCounts.Single(c => c.Code == "PAID");
+        if (paid.Count == 0)
+        {
+            paid.TotalAmount.Should().Be(0m, "a zero-count status must zero-fill its total, not omit it or leave it null");
+        }
+    }
+
     [Fact]
     public async Task List_SearchOnInvoiceNumber_FindsTheInvoice()
     {

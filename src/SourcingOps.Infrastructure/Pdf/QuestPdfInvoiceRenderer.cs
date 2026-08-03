@@ -1,6 +1,7 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using SourcingOps.Application.Common;
 using SourcingOps.Application.Interfaces;
 
 namespace SourcingOps.Infrastructure.Pdf;
@@ -77,13 +78,13 @@ public sealed class QuestPdfInvoiceRenderer : IInvoicePdfRenderer
                         table.Cell().AlignRight().Text("Amount");
 
                         table.Cell().Text(string.IsNullOrWhiteSpace(model.LineDescription) ? "Services rendered" : model.LineDescription);
-                        table.Cell().AlignRight().Text($"{model.Currency} {model.Amount:0.00}");
+                        table.Cell().AlignRight().Text(MoneyFormatter.Format(model.Currency, model.Amount));
 
                         table.Cell().Text("Tax");
-                        table.Cell().AlignRight().Text($"{model.Currency} {model.TaxAmount:0.00}");
+                        table.Cell().AlignRight().Text(MoneyFormatter.Format(model.Currency, model.TaxAmount));
 
                         table.Cell().PaddingTop(4).Text("Total").Bold();
-                        table.Cell().PaddingTop(4).AlignRight().Text($"{model.Currency} {model.TotalAmount:0.00}").Bold();
+                        table.Cell().PaddingTop(4).AlignRight().Text(MoneyFormatter.Format(model.Currency, model.TotalAmount)).Bold();
                     });
 
                     if (model.BankDetails is not null)
