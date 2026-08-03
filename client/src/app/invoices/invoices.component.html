@@ -47,6 +47,19 @@
     <button type="button" class="btn btn-secondary" (click)="clearFilters()">Clear</button>
   </div>
 
+  <div class="inv-tiles">
+    <div class="stat-tile">
+      <div class="stat-tile__label">Total issued</div>
+      <div class="stat-tile__value">{{ totalIssuedLabel() }}</div>
+      <div class="stat-tile__sub">Issued + Paid invoices in the current filters</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile__label">Total outstanding</div>
+      <div class="stat-tile__value">{{ totalOutstandingLabel() }}</div>
+      <div class="stat-tile__sub">Issued but not yet paid</div>
+    </div>
+  </div>
+
   <div class="pill-tabs">
     @for (t of tabs(); track t.key) {
       <div class="pill-tab" [class.pill-tab--active]="t.active" (click)="selectTab(t.key)">

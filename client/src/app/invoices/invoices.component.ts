@@ -114,6 +114,39 @@ export class InvoicesComponent {
     ];
   });
 
+  /**
+   * The two money stat-tiles (E0-05a/N-31, D-72). Both are derived from
+   * `statusCounts[].totalAmount`, which the server already computes over the
+   * whole status-excluded filtered set — never the current page — so these
+   * recompute whenever the list response changes (including a filter change)
+   * but deliberately do NOT change when only the status tab is selected,
+   * since `statusCounts` itself is filter-independent of the active tab.
+   *
+   * Looked up by `code`, never `label` (D-50) — a missing code (e.g. a
+   * status row absent from this response) contributes 0 rather than
+   * throwing, via `sumByCodes`'s defensive `?? 0`.
+   */
+  readonly totalIssued = computed(() => this.sumByCodes(['ISSUED', 'PAID']));
+  readonly totalOutstanding = computed(() => this.sumByCodes(['ISSUED']));
+  /**
+   * Rendered at FULL precision (`₹3,50,000.00`), deliberately NOT through
+   * `formatInrCompact`, even though the inventory screen's On-Hand Value tile
+   * uses the compact form. That precedent does not transfer: it is justified in
+   * `money.util.ts` as a 1:1 port of a prototype tile that literally reads
+   * `₹41.2 L`, and the invoicing screens are net-new (E0 design pass), so there
+   * is no prototype tile here to be faithful to. §E0-05a asks for `.stat-tile`s
+   * and is silent on precision.
+   *
+   * The deciding difference is what the number IS. On-hand stock value is an
+   * indicative aggregate; total outstanding is RECEIVABLES — a figure the owner
+   * reconciles against a bank statement or hands to an accountant. The compact
+   * form rounds to one decimal in lakhs, so `₹1,47,500` and `₹1,52,400` both
+   * render `₹1.5 L`: an error band of ±₹5,000 on money owed, which would read
+   * as simply wrong to the person who knows the real figure.
+   */
+  readonly totalIssuedLabel = computed(() => formatInr(this.totalIssued()));
+  readonly totalOutstandingLabel = computed(() => formatInr(this.totalOutstanding()));
+
   readonly rows = computed<InvoiceRow[]>(() => this.items().map((item) => this.toRow(item)));
   readonly noResults = computed(() => !this.loading() && !this.error() && this.rows().length === 0);
 
@@ -231,6 +264,12 @@ export class InvoicesComponent {
         /* filter dropdown just stays empty; not fatal to the screen */
       }
     });
+  }
+
+  /** Sums `totalAmount` across the given `InvoiceStatusCode`s, matched by `code` (never `label`, D-50). A code absent from `statusCounts` contributes 0 rather than throwing. */
+  private sumByCodes(codes: string[]): number {
+    const counts = this.statusCounts();
+    return codes.reduce((sum, code) => sum + (counts.find((c) => c.code === code)?.totalAmount ?? 0), 0);
   }
 
   private toRow(item: InvoiceListItem): InvoiceRow {

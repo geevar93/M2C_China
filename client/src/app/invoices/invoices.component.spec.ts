@@ -48,10 +48,10 @@ function invoice(overrides: Partial<InvoiceListItem> = {}): InvoiceListItem {
 }
 
 const STATUS_COUNTS: InvoiceStatusCount[] = [
-  { statusId: 'st-1', code: 'DRAFT', label: 'Draft', sortOrder: 1, count: 0 },
-  { statusId: 'st-2', code: 'ISSUED', label: 'Issued', sortOrder: 2, count: 1 },
-  { statusId: 'st-3', code: 'PAID', label: 'Paid', sortOrder: 3, count: 1 },
-  { statusId: 'st-4', code: 'CANCELLED', label: 'Cancelled', sortOrder: 4, count: 0 }
+  { statusId: 'st-1', code: 'DRAFT', label: 'Draft', sortOrder: 1, count: 0, totalAmount: 0 },
+  { statusId: 'st-2', code: 'ISSUED', label: 'Issued', sortOrder: 2, count: 1, totalAmount: 100000 },
+  { statusId: 'st-3', code: 'PAID', label: 'Paid', sortOrder: 3, count: 1, totalAmount: 250000 },
+  { statusId: 'st-4', code: 'CANCELLED', label: 'Cancelled', sortOrder: 4, count: 0, totalAmount: 0 }
 ];
 
 function response(items: InvoiceListItem[], statusCounts: InvoiceStatusCount[] = STATUS_COUNTS, totalCount = items.length): InvoiceListResponse {
@@ -229,5 +229,73 @@ describe('InvoicesComponent (E8-09, live-wired)', () => {
     // A renamed label must still render — proving the row survives a Super-Admin
     // relabel rather than the component matching on the old English text.
     expect(fixture.nativeElement.textContent).toContain('Something Renamed By Super-Admin');
+  });
+
+  // ---- Money stat-tiles (N-31, D-72) ---------------------------------------
+
+  it('derives Total issued (ISSUED + PAID) and Total outstanding (ISSUED only) by CODE, never label', async () => {
+    await configure({ listResult: response([invoice()], STATUS_COUNTS, 1) });
+    fixture.detectChanges();
+
+    // ISSUED 100000 + PAID 250000 = 350000, at FULL precision — these are
+    // receivables, not an indicative aggregate, so the compact form the
+    // inventory tile uses is deliberately NOT used here (see the computed's doc).
+    expect(fixture.componentInstance.totalIssued()).toBe(350000);
+    expect(fixture.componentInstance.totalIssuedLabel()).toBe('₹3,50,000.00');
+    // ISSUED only = 100000.
+    expect(fixture.componentInstance.totalOutstanding()).toBe(100000);
+    expect(fixture.componentInstance.totalOutstandingLabel()).toBe('₹1,00,000.00');
+
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('₹3,50,000.00');
+    expect(text).toContain('₹1,00,000.00');
+  });
+
+  it('does not match a status by its (Super-Admin-editable) label, only by its code', async () => {
+    const relabelled: InvoiceStatusCount[] = [
+      { statusId: 'st-1', code: 'DRAFT', label: 'Draft', sortOrder: 1, count: 0, totalAmount: 0 },
+      { statusId: 'st-2', code: 'ISSUED', label: 'Invoiced', sortOrder: 2, count: 1, totalAmount: 100000 },
+      { statusId: 'st-3', code: 'PAID', label: 'Settled', sortOrder: 3, count: 1, totalAmount: 250000 },
+      { statusId: 'st-4', code: 'CANCELLED', label: 'Cancelled', sortOrder: 4, count: 0, totalAmount: 0 }
+    ];
+    await configure({ listResult: response([invoice()], relabelled, 1) });
+    fixture.detectChanges();
+
+    // Relabelling ISSUED/PAID to "Invoiced"/"Settled" must not break the lookup —
+    // it still matches by `code`.
+    expect(fixture.componentInstance.totalIssued()).toBe(350000);
+    expect(fixture.componentInstance.totalOutstanding()).toBe(100000);
+  });
+
+  it('treats a missing status code as contributing 0 rather than throwing', async () => {
+    const partialCounts: InvoiceStatusCount[] = [
+      { statusId: 'st-1', code: 'DRAFT', label: 'Draft', sortOrder: 1, count: 0, totalAmount: 0 }
+      // ISSUED and PAID rows absent entirely.
+    ];
+    await configure({ listResult: response([invoice()], partialCounts, 1) });
+
+    expect(() => fixture.detectChanges()).not.toThrow();
+    expect(fixture.componentInstance.totalIssued()).toBe(0);
+    expect(fixture.componentInstance.totalOutstanding()).toBe(0);
+    expect(fixture.componentInstance.totalIssuedLabel()).toBe('₹0.00');
+  });
+
+  it('does NOT change the tile amounts when only the status tab changes, since statusCounts is filter-independent of the active tab', async () => {
+    await configure({ listResult: response([invoice()], STATUS_COUNTS, 1) });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.totalIssued()).toBe(350000);
+    expect(fixture.componentInstance.totalOutstanding()).toBe(100000);
+
+    // Selecting a tab refetches, but the server response's statusCounts (and
+    // hence totalAmount per status) is defined to stay the same regardless of
+    // which status was requested — mirror that here rather than returning a
+    // response with different totals, which would defeat the point of the test.
+    listSpy.and.returnValue(of(response([invoice({ status: { id: 'st-2', code: 'ISSUED', label: 'Issued' } })], STATUS_COUNTS, 1)));
+    fixture.componentInstance.selectTab('st-2');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.totalIssued()).toBe(350000);
+    expect(fixture.componentInstance.totalOutstanding()).toBe(100000);
   });
 });

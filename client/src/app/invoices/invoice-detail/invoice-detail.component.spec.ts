@@ -7,6 +7,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { MasterDataResponse } from '../../core/models/master-data.models';
 import { CompanySettings, InvoiceDetail } from '../models/invoice.models';
 import { InvoiceDetailComponent } from './invoice-detail.component';
+import { ShipmentListItem } from '../../shipments/models/shipment.models';
 
 /**
  * E8-10, wired against the real `/invoices` + `/admin/company-settings` API.
@@ -145,6 +146,32 @@ describe('InvoiceDetailComponent', () => {
     httpMock.expectOne((r) => r.url === `/api/v1/invoices/${id}`).flush(payload);
   }
 
+  function shipment(overrides: Partial<ShipmentListItem> = {}): ShipmentListItem {
+    return {
+      id: 'shp-1',
+      reference: 'SHP-2608-001',
+      customer: { id: 'cust-2', name: 'Sundar Exports' },
+      destination: 'Chennai',
+      serviceType: { id: 'svc-1', code: 'CIF', label: 'CIF' },
+      dispatchDate: '2026-08-01T00:00:00Z',
+      status: { id: 'shp-st-1', code: 'DISPATCHED', label: 'Dispatched' },
+      freightCost: null,
+      totalValue: 45000,
+      mode: 'Sea',
+      awbOrBl: null,
+      eta: null,
+      lineCount: 2,
+      ...overrides
+    };
+  }
+
+  /** N-32's shipment picker fetch, scoped by `customerId` — issued whenever `formCustomerId` changes. */
+  function flushShipments(items: ShipmentListItem[] = []): void {
+    httpMock
+      .expectOne((r) => r.url === '/api/v1/shipments')
+      .flush({ items, page: 1, pageSize: 200, totalCount: items.length, statusCounts: [] });
+  }
+
   it('loads and renders a detail invoice from the real API, not a mock', async () => {
     await configure('259b39f6-0000-0000-0000-000000000001');
     fixture.detectChanges();
@@ -171,6 +198,8 @@ describe('InvoiceDetailComponent', () => {
     fixture.detectChanges();
 
     fixture.componentInstance.formCustomerId.set('cust-2');
+    fixture.detectChanges();
+    flushShipments(); // no shipments for cust-2 — stays a freight-only invoice
     fixture.componentInstance.formInvoiceDate.set('2026-08-03');
     fixture.componentInstance.formLineDescription.set('Freight forwarding');
     fixture.componentInstance.formAmount.set('50000');
@@ -204,6 +233,8 @@ describe('InvoiceDetailComponent', () => {
 
     // Simulate a race where the update is attempted anyway (e.g. a stale tab).
     fixture.componentInstance.formCustomerId.set('cust-1');
+    fixture.detectChanges();
+    flushShipments();
     fixture.componentInstance.formInvoiceDate.set('2026-08-03');
     fixture.componentInstance.formAmount.set('125000');
     fixture.componentInstance.formTaxAmount.set('22500');
@@ -382,5 +413,145 @@ describe('InvoiceDetailComponent', () => {
 
     expect(fixture.componentInstance.error()).toBe('Invoice not found');
     expect(fixture.nativeElement.textContent).toContain('Invoice not found');
+  });
+
+  // ---- Shipment picker (N-32) ---------------------------------------------
+
+  it('scopes the shipment picker to the selected customer and includes the chosen shipment on create', async () => {
+    await configure(null);
+    fixture.detectChanges();
+    flushMasterData();
+    flushCompanySettings();
+    flushCustomers();
+    fixture.detectChanges();
+
+    fixture.componentInstance.formCustomerId.set('cust-2');
+    fixture.detectChanges();
+
+    const shipmentsReq = httpMock.expectOne((r) => r.url === '/api/v1/shipments');
+    expect(shipmentsReq.request.params.get('customerId')).toBe('cust-2');
+    shipmentsReq.flush({
+      items: [shipment({ id: 'shp-9', reference: 'SHP-2608-009' })],
+      page: 1,
+      pageSize: 200,
+      totalCount: 1,
+      statusCounts: []
+    });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.shipmentOptions()).toEqual([{ id: 'shp-9', reference: 'SHP-2608-009' }]);
+
+    fixture.componentInstance.formShipmentId.set('shp-9');
+    fixture.componentInstance.formInvoiceDate.set('2026-08-03');
+    fixture.componentInstance.formAmount.set('50000');
+    fixture.componentInstance.formTaxAmount.set('9000');
+    fixture.componentInstance.save();
+
+    const req = httpMock.expectOne((r) => r.url === '/api/v1/invoices' && r.method === 'POST');
+    expect(req.request.body.shipmentId).toBe('shp-9');
+    req.flush(invoice({ id: 'new-inv-id' }));
+  });
+
+  it('re-scopes the shipment picker and drops the selection when the customer changes', async () => {
+    await configure(null);
+    fixture.detectChanges();
+    flushMasterData();
+    flushCompanySettings();
+    flushCustomers();
+    fixture.detectChanges();
+
+    fixture.componentInstance.formCustomerId.set('cust-2');
+    fixture.detectChanges();
+    httpMock
+      .expectOne((r) => r.url === '/api/v1/shipments')
+      .flush({ items: [shipment({ id: 'shp-9', reference: 'SHP-2608-009' })], page: 1, pageSize: 200, totalCount: 1, statusCounts: [] });
+    fixture.detectChanges();
+
+    fixture.componentInstance.formShipmentId.set('shp-9');
+    expect(fixture.componentInstance.formShipmentId()).toBe('shp-9');
+
+    // Switch to a different customer — the old shipment does not belong to it.
+    fixture.componentInstance.formCustomerId.set('cust-77');
+    fixture.detectChanges();
+
+    const secondReq = httpMock.expectOne((r) => r.url === '/api/v1/shipments');
+    expect(secondReq.request.params.get('customerId')).toBe('cust-77');
+    secondReq.flush({
+      items: [shipment({ id: 'shp-1', reference: 'SHP-2608-001', customer: { id: 'cust-77', name: 'Other Co' } })],
+      page: 1,
+      pageSize: 200,
+      totalCount: 1,
+      statusCounts: []
+    });
+    fixture.detectChanges();
+
+    // shp-9 is not in cust-77's options, so the stale selection is dropped.
+    expect(fixture.componentInstance.formShipmentId()).toBe('');
+    expect(fixture.componentInstance.shipmentOptions()).toEqual([{ id: 'shp-1', reference: 'SHP-2608-001' }]);
+  });
+
+  it('shows an explicit empty state, not a blank dropdown, when the selected customer has no shipments', async () => {
+    await configure(null);
+    fixture.detectChanges();
+    flushMasterData();
+    flushCompanySettings();
+    flushCustomers();
+    fixture.detectChanges();
+
+    fixture.componentInstance.formCustomerId.set('cust-2');
+    fixture.detectChanges();
+    flushShipments([]);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.hasNoShipments()).toBeTrue();
+    expect(fixture.nativeElement.textContent).toContain('This customer has no shipments yet');
+  });
+
+  it('submits shipmentId: null when no shipment is selected, keeping the normal freight-only case at least as easy', async () => {
+    await configure(null);
+    fixture.detectChanges();
+    flushMasterData();
+    flushCompanySettings();
+    flushCustomers();
+    fixture.detectChanges();
+
+    fixture.componentInstance.formCustomerId.set('cust-2');
+    fixture.detectChanges();
+    flushShipments([shipment({ id: 'shp-9', reference: 'SHP-2608-009' })]);
+    fixture.detectChanges();
+
+    // Deliberately leave formShipmentId unset.
+    fixture.componentInstance.formInvoiceDate.set('2026-08-03');
+    fixture.componentInstance.formAmount.set('50000');
+    fixture.componentInstance.formTaxAmount.set('9000');
+    fixture.componentInstance.save();
+
+    const req = httpMock.expectOne((r) => r.url === '/api/v1/invoices' && r.method === 'POST');
+    expect(req.request.body.shipmentId).toBeNull();
+    req.flush(invoice({ id: 'new-inv-id' }));
+  });
+
+  it('shows the linked shipment reference on the detail view when the invoice has one, and shows nothing when it does not', async () => {
+    await configure('inv-1');
+    fixture.detectChanges();
+    flushMasterData();
+    flushCompanySettings();
+    flushCustomers();
+    flushInvoice('inv-1', invoice({ shipmentId: 'shp-9', shipmentReference: 'SHP-2608-009' }));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('SHP-2608-009');
+  });
+
+  it('shows no linked-shipment line for a freight-only invoice', async () => {
+    await configure('inv-1');
+    fixture.detectChanges();
+    flushMasterData();
+    flushCompanySettings();
+    flushCustomers();
+    flushInvoice('inv-1', invoice({ shipmentId: null, shipmentReference: null }));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Linked shipment');
   });
 });

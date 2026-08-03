@@ -76,6 +76,16 @@ export interface InvoiceDetail extends InvoiceListItem {
  * itself** (E7-08's semantics, reused verbatim). Zero-count statuses ARE
  * included and the array is ordered by `sortOrder`, so status tabs can be
  * rendered straight from this without client-side padding or sorting.
+ *
+ * `totalAmount` (N-31) is the sum of `amount + taxAmount` for that status,
+ * computed server-side over the whole filtered set (every filter except the
+ * status filter) — NOT the current page. It backs the invoice list's two
+ * money stat-tiles ("Total issued" = ISSUED + PAID, "Total outstanding" =
+ * ISSUED only), which is why those tiles stay filter-independent of the
+ * status tab: every entry in this array already reflects the same
+ * status-excluded filtered set regardless of which tab is active. Select
+ * entries by `code`, NEVER `label` (labels are Super-Admin-editable master
+ * data — D-50).
  */
 export interface InvoiceStatusCount {
   statusId: string;
@@ -83,6 +93,7 @@ export interface InvoiceStatusCount {
   label: string;
   sortOrder: number;
   count: number;
+  totalAmount: number;
 }
 
 export interface InvoiceListResponse {

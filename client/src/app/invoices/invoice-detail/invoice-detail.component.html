@@ -156,9 +156,37 @@
               <div class="field-hint">Loading customers…</div>
             }
           </div>
+
+          <div class="field">
+            <label for="inv-shipment">Shipment (optional)</label>
+            <select
+              id="inv-shipment"
+              class="field-input"
+              [value]="formShipmentId()"
+              [disabled]="!formCustomerId() || shipmentsLoading() || hasNoShipments()"
+              (change)="formShipmentId.set($any($event.target).value)"
+            >
+              <option value="">No shipment — freight-only invoice</option>
+              @for (s of shipmentOptions(); track s.id) {
+                <option [value]="s.id">{{ s.reference }}</option>
+              }
+            </select>
+            @if (!formCustomerId()) {
+              <div class="field-hint">Select a Bill-to customer first.</div>
+            } @else if (shipmentsLoading()) {
+              <div class="field-hint">Loading shipments…</div>
+            } @else if (hasNoShipments()) {
+              <div class="field-hint">This customer has no shipments yet — this will be a freight-only invoice.</div>
+            } @else {
+              <div class="field-hint">Linking a shipment makes this a CIF invoice. Leave unset for freight-only.</div>
+            }
+          </div>
         } @else {
           @if (invoice(); as inv) {
             <div class="party-name">{{ inv.customer.name }}</div>
+            @if (inv.shipmentReference) {
+              <div class="party-line muted">Linked shipment: {{ inv.shipmentReference }}</div>
+            }
           }
         }
       </div>

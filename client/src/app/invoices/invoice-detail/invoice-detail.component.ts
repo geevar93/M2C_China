@@ -7,6 +7,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { MasterDataService } from '../../core/services/master-data.service';
 import { extractErrorMessage } from '../../core/services/problem-details.util';
 import { CustomersService } from '../../customers/services/customers.service';
+import { ShipmentsService } from '../../shipments/services/shipments.service';
 import { StatusStyleService, StatusColor } from '../../shared/services/status-style.service';
 import { formatTimelineDate } from '../../shared/utils/date-format.util';
 import { saveBlobAs } from '../../shared/utils/file-download.util';
@@ -30,6 +31,11 @@ interface TrailStep {
 interface CustomerOption {
   id: string;
   name: string;
+}
+
+interface ShipmentOption {
+  id: string;
+  reference: string;
 }
 
 type MarkPaidAvailability = 'hidden' | 'disabled' | 'enabled';
@@ -71,6 +77,7 @@ export class InvoiceDetailComponent {
   private readonly router = inject(Router);
   private readonly invoicesService = inject(InvoicesService);
   private readonly customersService = inject(CustomersService);
+  private readonly shipmentsService = inject(ShipmentsService);
   private readonly masterDataService = inject(MasterDataService);
   private readonly styles = inject(StatusStyleService);
   private readonly auth = inject(AuthService);
@@ -116,6 +123,16 @@ export class InvoiceDetailComponent {
   readonly formTaxAmount = signal('');
   readonly formError = signal<string | null>(null);
   readonly saving = signal(false);
+
+  // ---- Shipment picker (N-32) — optional, scoped to the selected Bill-to customer.
+  // Leaving no shipment selected is the normal, fully valid case (freight-only);
+  // selecting one is what makes an invoice CIF (E8-01).
+  readonly formShipmentId = signal('');
+  readonly shipmentOptions = signal<ShipmentOption[]>([]);
+  readonly shipmentsLoading = signal(false);
+  readonly hasNoShipments = computed(
+    () => !this.shipmentsLoading() && !!this.formCustomerId() && this.shipmentOptions().length === 0
+  );
 
   // ---- Status actions (Issue / Cancel) ---------------------------------------
   readonly statusActionLoading = signal<'issue' | 'cancel' | null>(null);
@@ -203,6 +220,16 @@ export class InvoiceDetailComponent {
         this.resetForm();
       }
     });
+
+    // Re-scopes the shipment picker to whichever customer is currently selected
+    // on the form (generate, edit, or a startEdit() prefill) and drops a
+    // shipment selection that no longer belongs to that customer — the server
+    // validates the customer/shipment pairing and would 409, but the user must
+    // never reach that; the option list not containing the id is enough signal.
+    effect(() => {
+      const customerId = this.formCustomerId();
+      this.loadShipmentsFor(customerId);
+    });
   }
 
   retry(): void {
@@ -224,6 +251,11 @@ export class InvoiceDetailComponent {
     this.formLineDescription.set(inv.lineDescription ?? '');
     this.formAmount.set(String(inv.amount));
     this.formTaxAmount.set(String(inv.taxAmount));
+    // Set before the customer-id effect's shipment fetch resolves; the fetch
+    // keeps this selection as long as it's present in the reloaded options
+    // for `inv.customer.id`, which it will be since it's already that
+    // customer's shipment.
+    this.formShipmentId.set(inv.shipmentId ?? '');
     this.formError.set(null);
     this.isEditing.set(true);
   }
@@ -260,7 +292,7 @@ export class InvoiceDetailComponent {
 
     const request: CreateInvoiceRequest = {
       customerId,
-      shipmentId: null,
+      shipmentId: this.formShipmentId() || null,
       invoiceDate,
       lineDescription: this.formLineDescription().trim() || null,
       amount: amountNum,
@@ -479,7 +511,44 @@ export class InvoiceDetailComponent {
     this.formLineDescription.set('');
     this.formAmount.set('');
     this.formTaxAmount.set('');
+    this.formShipmentId.set('');
     this.formError.set(null);
+  }
+
+  /**
+   * Re-fetches the shipment options for `customerId` via
+   * `ShipmentsService.list({ customerId })` (N-32). Clearing the customer
+   * clears the options outright rather than issuing an unscoped request — an
+   * unfiltered shipment list is never a valid picker for "this customer's
+   * shipments". A currently-selected shipment that does not come back in the
+   * new list is dropped, which is what makes a customer change safe: the
+   * user can never submit a shipment that belongs to a different customer.
+   */
+  private loadShipmentsFor(customerId: string): void {
+    if (!customerId) {
+      this.shipmentOptions.set([]);
+      this.formShipmentId.set('');
+      this.shipmentsLoading.set(false);
+      return;
+    }
+    this.shipmentsLoading.set(true);
+    this.shipmentsService.list({ customerId, pageSize: 200 }).subscribe({
+      next: (res) => {
+        this.shipmentsLoading.set(false);
+        const options = res.items.map((s) => ({ id: s.id, reference: s.reference ?? s.id }));
+        this.shipmentOptions.set(options);
+        if (this.formShipmentId() && !options.some((o) => o.id === this.formShipmentId())) {
+          this.formShipmentId.set('');
+        }
+      },
+      error: () => {
+        // A failure here only degrades the picker (falls back to "no shipment
+        // options"), same as the customer directory — not fatal to the screen.
+        this.shipmentsLoading.set(false);
+        this.shipmentOptions.set([]);
+        this.formShipmentId.set('');
+      }
+    });
   }
 
   private statusIdFor(code: InvoiceStatusCode): string | undefined {
