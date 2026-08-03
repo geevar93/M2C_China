@@ -1514,3 +1514,80 @@ Closed by asserting the **raw JSON property name** before deserialising. The wir
 1. **`InvoiceDispatched` was split from `CatalogDispatched` in D-67 specifically so E10-06 could count them apart.** That decision was made for M7's benefit; use it.
 2. **§18.4's rule.** E10's dashboard consumes a lot of new fields across ten aggregates, all read by a different runtime than the one that serialises them. Pin the wire names.
 
+---
+
+## 19. M7 — Analytics (E10). IN FLIGHT, NOT COMPLETE
+
+> **STATUS AT SESSION END, 2026-08-03: two build agents were mid-write when the session was checkpointed.** HEAD is `959e6cd` and everything through §18 is committed and green. The M7 work below is **uncommitted, unreviewed, unbuilt and untested** — partial files are sitting in the working tree. **Nothing in §19.1–§19.3 is a claim that anything works.** See §19.5 for the exact resume procedure.
+>
+> **This section is written NOW, before the work lands, deliberately.** N-28 records this project losing an M6 contract because it lived only in a session that was cleared, leaving production XML doc comments citing a "§0/§1/§2" that existed nowhere on disk. The rule that came out of it — *any contract the source code cites must live in this document before the session ends* — applies here exactly: both agents were briefed with the contract below and their code cites it.
+
+### 19.1 Scope of this pass — 9 of 10 stories
+
+**In:** E10-01…E10-07 (six aggregates + the shared filter contract), E10-09 (dashboard screen), E10-10 (caching).
+
+**Out, deliberately: E10-08 (CSV/Excel export).** It is a `[S]`, it is a different concern (file generation rather than aggregation), and it is absent from M7's §5 exit criterion. §17.11's lesson was that widening a pass mid-flight is how a screen ends up half-wired; it gets its own pass.
+
+### 19.2 The API contract (the handoff artifact — this is the part that must survive)
+
+One `AnalyticsController`, all routes under `/api/v1/analytics`, every one gated on the **existing** `PermissionCodes.AnalyticsView`.
+
+**All six endpoints take the same four optional query parameters** — `fromDate`, `toDate` (`DateOnly?`), `categoryId`, `serviceTypeId` (`Guid?`). This is E10-07 satisfied structurally by one shared query record rather than bolted on afterwards. `fromDate > toDate` throws `AppValidationException`, mirroring `InvoiceService.ListAsync`.
+
+| Route | Story | Response |
+| --- | --- | --- |
+| `GET /analytics/leads` | E10-01 | `LeadsAnalyticsDto` |
+| `GET /analytics/service-split` | E10-02 | `ServiceSplitAnalyticsDto` |
+| `GET /analytics/category-mix` | E10-03 | `CategoryMixAnalyticsDto` |
+| `GET /analytics/vendors` | E10-04 | `VendorAnalyticsDto` |
+| `GET /analytics/inventory` | E10-05 | `InventoryAnalyticsDto` |
+| `GET /analytics/dispatch` | E10-06 | `DispatchAnalyticsDto` |
+
+```
+LeadsAnalyticsDto {
+  series: [{ periodStart: DateOnly, count: int }]      // weekly buckets across the range
+  bySource: [{ id, code, label, sortOrder, count }]
+  byStatus: [{ id, code, label, sortOrder, count }]    // the funnel
+  totalLeads, wonCount: int
+  conversionRate: decimal        // 0..1; MUST be 0 (never NaN) when totalLeads is 0
+  currentPeriodCount, priorPeriodCount: int   // prior = same-length window immediately before
+}
+ServiceSplitAnalyticsDto { totalCustomers: int, items: [{ id, code, label, sortOrder, customerCount }] }
+CategoryMixAnalyticsDto  { items: [{ id, code, label, sortOrder, customerCount }] }
+VendorAnalyticsDto       { totalActiveVendors: int, byCategory: [{ id, code, label, sortOrder, vendorCount, catalogCount }] }
+InventoryAnalyticsDto    { onHandValue: decimal,
+                           byCategory: [{ id, code, label, sortOrder, quantity, value }],
+                           shipmentsByStatus: [{ id, code, label, sortOrder, count }],
+                           inTransitCount, pastEtaCount: int }
+DispatchAnalyticsDto     { series: [{ periodStart, count }], byStaff: [{ userId, name, count }],
+                           byKind: [{ kind, count }],   // "CatalogDispatched" | "InvoiceDispatched"
+                           totalDispatches: int }
+```
+
+**Three rules handed to both agents as non-negotiable, each paid for earlier in this project:**
+1. **Every lookup-keyed breakdown zero-fills from the master table**, ordered by `SortOrder` then `Code` ordinal. A category with no rows arrives as `count: 0`, never omitted — `InvoiceService.BuildStatusCountsAsync` is the model. A dashboard that silently drops empty categories misreports the business.
+2. **Match by `Code`, never `Label`** — labels are Super-Admin-editable master data (D-50).
+3. **`byKind` must split `CatalogDispatched` from `InvoiceDispatched`.** D-67 was resolved specifically so this aggregate could count them apart; that decision was pre-paid for this story.
+
+### 19.3 Two design decisions worth not re-litigating on resume
+
+**No `/analytics/summary` endpoint — the stat tiles derive client-side from the six aggregates.** Every tile the prototype shows is derivable, and a separate summary query could disagree with the chart printed directly beneath it. That class of defect never gets reported; it just makes the dashboard quietly untrusted.
+
+**Caching covers five of six. `/analytics/inventory` is deliberately NOT cached** — it carries live stock and live shipment status, and TECH_SPEC §4.5 plus E10-10's own wording forbid caching anything user-write-adjacent. Cache keys must incorporate the route **and every filter value**: a key that ignores filters serves one filtered dashboard to the next request, which is a correctness bug wearing a performance costume.
+
+### 19.4 A gap found BEFORE delegating, not after
+
+The prototype's **On-Hand Value** tile carries the sub-line **"3 items below reorder"**. **No reorder-level field exists anywhere in the schema** — confirmed by grep while writing the contract, so no agent burned effort on an uncomputable figure. Both were told explicitly not to invent a threshold nor hard-code the prototype's `3`; the sub-line is omitted.
+
+Recorded as **H-15**. The real question is not "add a field" but whether the business restocks against per-item minimums at all: if yes it is a field, an admin screen and a story; if no, the sub-line should be **formally dropped from the design** so it stops reading as a gap on every future review. Pairs with **H-6** (no way to correct on-hand quantity after a physical count) — both ask whether stock is managed by numbers or by judgement.
+
+### 19.5 Resume procedure — read this first
+
+The working tree contains **partial output from two agents that were still writing.** Do not assume any of it is complete or correct.
+
+1. `git status` — HEAD should be `959e6cd`. Everything at or below §18 is committed and green (643 backend, 313 frontend).
+2. **Decide per-file whether to keep or discard the in-flight work.** It was never built, never run and never reviewed. `git stash`/`git checkout` back to `959e6cd` and re-delegating from §19.2 is a perfectly good option and is often cheaper than auditing half-written files — **the contract above is the expensive artifact, and it is now safe.**
+3. If keeping it: build, run both suites, and apply **§18.4's rule** — assert the RAW JSON property names for all six endpoints, because `ReadFromJsonAsync<TDto>` round-trips through one serializer and proves the value, never the name. Six new endpoints of fields read by a different runtime is exactly the exposure that rule exists for.
+4. Then write the real §20 close-out. **This section is a contract record, not a status claim; do not let it read as one.**
+
+
