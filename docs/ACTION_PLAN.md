@@ -1424,3 +1424,93 @@ The detail screen showed **"Marked paid on 03 Aug 2026 · 05:30"** — a time th
 - `Invoicing.Edit` as the create-button permission — **checked against `PermissionCodes.cs`; correct.**
 - `shipmentId` is always sent as `null` on create, because no shipment picker was in scope. **This is a real functional gap, not a nit:** E8-01 explicitly allows a CIF invoice to reference a shipment, and D-30's snapshotted `unit_cost` exists precisely so an issued invoice's basis cannot drift. The API supports it; the UI cannot reach it. Recorded as **N-32**.
 - Currency hard-coded to `INR`, per `money.util.ts`'s documented single-currency assumption — no currency picker invented.
+
+---
+
+## 18. M6 residual pass — N-31, N-32, N-30
+
+**Why this pass exists rather than going straight to M7.** §17.8 named N-31 as "the first item of the next M6 pass, not left to M8", and N-32 is worse than a nit: **M6's own §5 exit criterion requires "an invoice is generated against a CIF shipment", and no UI path existed to create one.** Closing both here means M6's exit criterion stops being overstated — the E4-07/E5-07 "closed slightly overstated" pattern §13.2 and N-22 record. N-30 was folded in because it lives in the same contract and is a one-place fix.
+
+**Shape:** the coordinator settled the contract extension first, then two build agents ran in parallel on **disjoint file trees** (`src/` and `tests/` vs `client/`), with the coordinator owning integration, the contract, git and the seam checks. This is §17.11's sequence repeated because it worked.
+
+### 18.1 Story status
+
+| # | Item | Status |
+| --- | --- | --- |
+| **N-31** | Money totals on the invoice list | **Closed.** Per-status amount sums added server-side; the two §E0-05a stat-tiles now exist. |
+| **N-32** | Shipment picker (CIF link unreachable from the UI) | **Closed.** Optional, customer-scoped picker on the invoice form; `shipmentId` is now really sent. **No backend change was needed** — `ShipmentsService.list({ customerId })` and the nullable `shipmentId` on both requests already existed, so this was pure UI. |
+| **N-30** | Server-composed money strings bypass the app's formatting | **Closed.** One shared `MoneyFormatter`, both known sites routed through it, and a grep confirmed there is no third site. |
+
+### 18.2 The contract extension
+
+`InvoiceStatusCountDto` gains **one** appended field:
+
+```csharp
+public sealed record InvoiceStatusCountDto(Guid StatusId, string Code, string Label, int SortOrder, int Count, decimal TotalAmount);
+```
+
+`TotalAmount` is the sum of `Amount + TaxAmount` per status, computed in the **same grouped query** as the counts (one round trip, not two) and — critically — over the same **status-excluded** filtered set, so E7-08's semantics hold for money exactly as they already did for counts: selecting a status tab does not move the other statuses' figures.
+
+The client derives the two tiles from it, by `Code` and never by `Label` (D-50):
+
+| Tile | Derivation |
+| --- | --- |
+| Total issued | `ISSUED` + `PAID` |
+| Total outstanding | `ISSUED` |
+
+### 18.3 Deviations and additions from this pass
+
+| # | Deviation |
+| --- | --- |
+| **D-73** | **Per-status sums, not bespoke `totalIssued`/`totalOutstanding` fields.** The obvious shape was two scalars on `InvoiceListResultDto`. Rejected: per-status sums reuse the counts' exact query, zero-fill and ordering, and — the deciding reason — **keep the server from hard-coding a business definition of "outstanding"**. Which statuses roll into which tile is a labelling decision the owner has not confirmed (**H-14**); with per-status sums that decision is a one-line client change instead of an API change. Zero-count statuses zero-fill (`Count = 0`, `TotalAmount = 0m`) rather than being omitted or null. |
+| **D-74** | **The two money tiles render at FULL precision (`₹3,50,000.00`), NOT through `formatInrCompact`.** The build agent used the compact form, reasoning from the inventory screen's On-Hand Value tile, and flagged it as a judgement call rather than burying it — correctly, because **the precedent does not transfer**. `money.util.ts` justifies the compact helper as a *1:1 port of a prototype tile that literally reads `₹41.2 L`*; the invoicing screens are net-new from the E0 pass, so there is no prototype tile here to be faithful to, and §E0-05a is silent on precision. **The deciding difference is what the number is:** on-hand stock value is an indicative aggregate, but total outstanding is **receivables** — reconciled against a bank statement. The compact form rounds to one decimal in lakhs, so `₹1,47,500` and `₹1,52,400` both render `₹1.5 L`: a ±₹5,000 band on money owed, which reads as simply wrong to whoever knows the real figure. Overridden by the coordinator; the reasoning is in the computed's doc comment so it is not "fixed" back to match inventory later. |
+| **D-75** | **`MoneyFormatter` pins `NumberGroupSizes = [3, 2]` explicitly rather than trusting `en-IN`'s ICU data.** Plain `CultureInfo("en-IN")` was verified on this machine to already group 2,2,3 correctly — but the API also runs in `postgres`-adjacent containers and CI, where ICU data can differ, and a silently-wrong grouping on a customer-facing invoice is not a failure that announces itself. Pinning removes the dependency. |
+| **D-76** | **The PDF and timeline keep the ISO code (`INR 1,47,500.00`), not the `₹` glyph the UI uses.** Deliberate, and it means the two surfaces still differ by prefix even after N-30. The ISO code is the correct label on a tax invoice, and QuestPDF's default font is not guaranteed to carry `₹` — a missing glyph renders as a blank box on a document sent to a customer. **Grouping was the whole of N-30's complaint**; the prefix difference is intended. |
+
+### 18.4 The seam the parallel agents could not test, and what it caught
+
+Both agents' suites were green, and each had genuinely tested its own half. The seam between them was still unverified, and the check found a real hole — **in the test, not the code**.
+
+The new endpoint test asserted the wire contract via `ReadFromJsonAsync<InvoiceListResultDto>()`. That **round-trips through the same serializer on both ends**, so a camelCase/PascalCase mismatch between the API and the Angular client would have been completely invisible to it: the client reads `totalAmount` off untyped JSON and would have silently seen `undefined`, rendering `₹0.00` tiles that look like a legitimately empty month. Exactly the §16.3 class of defect — value computed, stored and transmitted correctly, wrong only where a *different runtime* reads it.
+
+Closed by asserting the **raw JSON property name** before deserialising. The wire name is confirmed `"totalAmount"`.
+
+> **Rule worth carrying:** a test that both writes and reads through the same serializer proves the value, never the wire name. Where a different runtime consumes the field, pin the raw string.
+
+### 18.5 Verified on this machine, this pass — 2026-08-03
+
+| What | Command | Result |
+| --- | --- | --- |
+| Solution builds | `dotnet build SourcingOps.sln` | **Clean — 0 warnings, 0 errors** |
+| Full backend suite | `dotnet test SourcingOps.sln` | **643 passed, 0 failed** — 384 unit + 259 integration. Up from 631 at §17. |
+| Frontend suite | `ng test --watch=false --browsers=ChromeHeadless` | **313 passed** — up from 303. Re-run by the coordinator after the D-74 override, not taken from the agent's report. |
+| Raw wire name | targeted integration test | `"totalAmount":` present in the live JSON body |
+| Mutation verification | manual, both halves | Breaking the sum expression failed 2 tests; reverting `MoneyFormatter` to `0.00` failed 4. Both restored and re-run green. |
+
+**Not verified, and not claimed:** no live HTTP pass over a running API and **no browser pass** — the standing instruction is that browser verification happens only on explicit request. §17.11's browser pass found a real defect, and §18.4 above is a reminder that the seams are where they hide; that trade is recorded as **H-10**, accepted rather than forgotten.
+
+### 18.6 Open items after this pass
+
+| # | Item |
+| --- | --- |
+| **H-14** (new) | **The two tiles' meaning is assumed, not confirmed.** Shipping as issued = `ISSUED + PAID`, outstanding = `ISSUED`. The alternative reading — issued meaning currently-unpaid — would make both tiles identical, which is why this reading was chosen, but it is a cash figure the owner reads at a glance. D-73 deliberately made this cheap to change. |
+| **N-33** | **Unchanged.** Login still drops `returnUrl`, so every deep link lands on `/dashboard`. Pre-existing, affects the whole app, and matters most for this business's actual habit of pasting links into WhatsApp. |
+| **N-16 / H-9** | **Unchanged.** The WhatsApp dispatch dialog has still never been driven — now five passes. The prototype calls it one of the two things staff do from a phone. |
+| **N-18** | **Unchanged.** Both collision-retry branches (`SHP-` and `INV-`) have still never executed under test. One forced-collision test closes both. |
+| **N-26 / H-4** | **Unchanged.** QuestPDF Community's revenue ceiling still unchecked against this business. |
+| — | **Git state of `docs/HUMAN_TASKS.md` is deliberately half-resolved.** Committed once as `4620947`, then added to `.gitignore` in `f1bb012`. Because `.gitignore` governs only *untracked* files, the entry is **inert** while the file is tracked, and edits still appear in `git status`. Making it effective needs `git rm --cached docs/HUMAN_TASKS.md`, which un-commits it while leaving it on disk. **Not done — it inverts the intent of the commit made minutes earlier and is the owner's call.** The register's own changelog and the `.gitignore` comment both say so, so the half-state cannot be mistaken for an oversight. |
+| N-1, N-3, N-5, N-9, N-10, N-11, N-13, N-14, N-15, N-19, N-25, N-27, N-28, N-29 | **Unchanged.** |
+
+**Closed by this pass:** N-31, N-32, N-30.
+
+### 18.7 Next
+
+**M6 is now complete on engineering terms, and its §5 exit criterion is no longer overstated** — a CIF invoice can be created against a shipment from the UI, which was the half that was unreachable.
+
+**It is still not satisfiable in production, and that is not an engineering gap:** issuing any invoice requires FSD Q9c's company billing values (**H-1**), without which `DRAFT → ISSUED` returns 400. §17.10 crossed that gate with coordinator-invented placeholders in a throwaway database. **H-1 remains `Asked`, not `Answered`.**
+
+**Next milestone is M7 — Analytics (E10-01…E10-10), ten stories**, per §5's dependency order. E10 reads aggregates from schema that M3–M6 have now finished shaping, which is exactly why §5 puts it last among feature milestones (DR-2). Two things it should inherit from this pass:
+
+1. **`InvoiceDispatched` was split from `CatalogDispatched` in D-67 specifically so E10-06 could count them apart.** That decision was made for M7's benefit; use it.
+2. **§18.4's rule.** E10's dashboard consumes a lot of new fields across ten aggregates, all read by a different runtime than the one that serialises them. Pin the wire names.
+
