@@ -57,7 +57,8 @@ public sealed record InventoryAnalyticsDto(
     IReadOnlyList<InventoryCategoryStatDto> ByCategory,
     IReadOnlyList<LookupCountDto> ShipmentsByStatus,
     int InTransitCount,
-    int PastEtaCount);
+    int PastEtaCount,
+    int BelowReorderCount);
 
 public sealed record DispatchStaffCountDto(Guid UserId, string Name, int Count);
 

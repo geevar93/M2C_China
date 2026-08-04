@@ -338,6 +338,73 @@ public class AnalyticsServiceTests
         after.OnHandValue.Should().Be(999m, "inventory is the one endpoint that must never be served from cache (E10-10)");
     }
 
+    [Fact]
+    public async Task Inventory_BelowReorderCount_StrictlyBelow_ExcludesExactlyAtThreshold()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        // Below threshold: counted.
+        db.InventoryItems.Add(new InventoryItem { Id = Guid.NewGuid(), Name = "Below", CategoryId = f.Jewellery.Id, Category = f.Jewellery, OnHandQty = 4, ReorderThreshold = 5, Unit = "pcs" });
+        // Exactly at threshold: NOT counted — the predicate is strict "<", not "<=".
+        db.InventoryItems.Add(new InventoryItem { Id = Guid.NewGuid(), Name = "AtThreshold", CategoryId = f.Jewellery.Id, Category = f.Jewellery, OnHandQty = 5, ReorderThreshold = 5, Unit = "pcs" });
+        // Comfortably above threshold: not counted.
+        db.InventoryItems.Add(new InventoryItem { Id = Guid.NewGuid(), Name = "Above", CategoryId = f.Jewellery.Id, Category = f.Jewellery, OnHandQty = 20, ReorderThreshold = 5, Unit = "pcs" });
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db);
+
+        var result = await sut.GetInventoryAsync(new AnalyticsQuery(null, null, null, null));
+
+        result.BelowReorderCount.Should().Be(1,
+            "only the item strictly below its threshold counts — matches StockLevels.For's Low predicate (< not <=)");
+    }
+
+    [Fact]
+    public async Task Inventory_BelowReorderCount_ZeroStockZeroThreshold_IsNotCounted()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        // Default/unset ReorderThreshold is 0 and OnHandQty 0 -- 0 < 0 is false, so this
+        // reflects the real current business state (no thresholds configured yet) honestly.
+        db.InventoryItems.Add(new InventoryItem { Id = Guid.NewGuid(), Name = "Unset", CategoryId = f.Jewellery.Id, Category = f.Jewellery, OnHandQty = 0, ReorderThreshold = 0, Unit = "pcs" });
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db);
+
+        var result = await sut.GetInventoryAsync(new AnalyticsQuery(null, null, null, null));
+
+        result.BelowReorderCount.Should().Be(0, "threshold 0 / stock 0 is not below reorder — do not treat 0 as \"unset\"");
+    }
+
+    [Fact]
+    public async Task Inventory_BelowReorderCount_NegativeStock_IsCounted()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        db.InventoryItems.Add(new InventoryItem { Id = Guid.NewGuid(), Name = "Overdrawn", CategoryId = f.Jewellery.Id, Category = f.Jewellery, OnHandQty = -3, ReorderThreshold = 0, Unit = "pcs" });
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db);
+
+        var result = await sut.GetInventoryAsync(new AnalyticsQuery(null, null, null, null));
+
+        result.BelowReorderCount.Should().Be(1, "negative stock is below any non-negative threshold — consistent with the 'Low or negative' filter semantics");
+    }
+
+    [Fact]
+    public async Task Inventory_BelowReorderCount_RespectsCategoryFilter()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        db.InventoryItems.Add(new InventoryItem { Id = Guid.NewGuid(), Name = "Ring", CategoryId = f.Jewellery.Id, Category = f.Jewellery, OnHandQty = 1, ReorderThreshold = 10, Unit = "pcs" });
+        db.InventoryItems.Add(new InventoryItem { Id = Guid.NewGuid(), Name = "Chair", CategoryId = f.Furniture.Id, Category = f.Furniture, OnHandQty = 1, ReorderThreshold = 10, Unit = "pcs" });
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db);
+
+        var jewelleryOnly = await sut.GetInventoryAsync(new AnalyticsQuery(null, null, f.Jewellery.Id, null));
+        var furnitureOnly = await sut.GetInventoryAsync(new AnalyticsQuery(null, null, f.Furniture.Id, null));
+
+        jewelleryOnly.BelowReorderCount.Should().Be(1, "categoryId must narrow BelowReorderCount the same way it narrows OnHandValue/ByCategory");
+        furnitureOnly.BelowReorderCount.Should().Be(1);
+    }
+
     // ---- Dispatch (E10-06) ------------------------------------------------------------------
 
     [Fact]

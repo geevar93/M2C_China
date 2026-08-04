@@ -122,6 +122,8 @@ export interface InventoryAnalytics {
   shipmentsByStatus: AnalyticsShipmentStatusItem[];
   inTransitCount: number;
   pastEtaCount: number;
+  /** Count of items whose on-hand quantity is strictly below `InventoryItem.ReorderThreshold` (negative stock counts as below). */
+  belowReorderCount: number;
 }
 
 /** `dispatch.byKind[].kind` — the only two values the contract defines. */

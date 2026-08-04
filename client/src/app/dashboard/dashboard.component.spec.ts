@@ -59,7 +59,8 @@ const INVENTORY: InventoryAnalytics = {
     { id: 'ship-delivered', code: 'DELIVERED', label: 'DELIVERED', sortOrder: 4, count: 132 }
   ],
   inTransitCount: 14,
-  pastEtaCount: 2
+  pastEtaCount: 2,
+  belowReorderCount: 3
 };
 
 const DISPATCH: DispatchAnalytics = {
@@ -127,9 +128,57 @@ describe('DashboardComponent', () => {
     expect(tiles[0].sub).toBe('+20% vs prior period');
     expect(tiles[1].sub).toBe('60 CIF · 36 freight-only');
     expect(tiles[2].sub).toBe('180 of 214 catalog sends');
-    expect(tiles[3].sub).toBeNull(); // On-Hand Value: no reorder-level field in the schema — the known gap.
+    expect(tiles[3].sub).toBe('3 items below reorder');
+    expect(tiles[3].subClass).toBe('warning');
     expect(tiles[4].sub).toBe('2 past ETA');
     expect(tiles[5].sub).toBe('23 won of 128 leads');
+  });
+
+  it('singularises the On-Hand Value sub-line at exactly 1 item below reorder', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushLeads();
+    flushServiceSplit();
+    flushCategoryMix();
+    flushInventory({ ...INVENTORY, belowReorderCount: 1 });
+    flushDispatch();
+    fixture.detectChanges();
+
+    const tile = fixture.componentInstance.kpis()[3];
+    expect(tile.sub).toBe('1 item below reorder');
+    expect(tile.subClass).toBe('warning');
+  });
+
+  it('pluralises the On-Hand Value sub-line at 2 items below reorder', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushLeads();
+    flushServiceSplit();
+    flushCategoryMix();
+    flushInventory({ ...INVENTORY, belowReorderCount: 2 });
+    flushDispatch();
+    fixture.detectChanges();
+
+    const tile = fixture.componentInstance.kpis()[3];
+    expect(tile.sub).toBe('2 items below reorder');
+    expect(tile.subClass).toBe('warning');
+  });
+
+  it('renders the On-Hand Value sub-line in the neutral colour, not amber, when nothing is below reorder', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushLeads();
+    flushServiceSplit();
+    flushCategoryMix();
+    flushInventory({ ...INVENTORY, belowReorderCount: 0 });
+    flushDispatch();
+    fixture.detectChanges();
+
+    const tile = fixture.componentInstance.kpis()[3];
+    // Zero below-reorder is good news, not a warning — must not reuse the amber/warning class,
+    // and must still show the sub-line (not hide it) so the feature reads as present and working.
+    expect(tile.sub).toBe('0 items below reorder');
+    expect(tile.subClass).toBe('muted');
   });
 
   it('guards the New Leads tile against a priorPeriodCount of 0 (no Infinity/NaN)', async () => {

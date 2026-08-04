@@ -282,8 +282,15 @@ public sealed class AnalyticsService : IAnalyticsService
             items = items.Where(i => i.CategoryId == query.CategoryId.Value);
         }
 
-        var itemRows = await items.Select(i => new { i.CategoryId, i.OnHandQty, i.UnitCost }).ToListAsync(ct);
+        var itemRows = await items.Select(i => new { i.CategoryId, i.OnHandQty, i.UnitCost, i.ReorderThreshold }).ToListAsync(ct);
         var onHandValue = itemRows.Sum(i => i.OnHandQty * (i.UnitCost ?? 0m));
+
+        // Below-reorder count: same categoryId filter as the rest of this on-hand snapshot
+        // (see the no-op note above — fromDate/toDate/serviceTypeId don't apply here either).
+        // Predicate MUST stay in step with SourcingOps.Application.Inventory.StockLevels.For's
+        // "Low" branch (onHandQty < reorderThreshold) — that helper is an in-memory static and
+        // can't be pushed into the EF query above, so it is replicated here rather than shared.
+        var belowReorderCount = itemRows.Count(i => i.OnHandQty < i.ReorderThreshold);
 
         var categories = await _db.Categories.ToListAsync(ct);
         var byCategoryRaw = itemRows
@@ -324,7 +331,7 @@ public sealed class AnalyticsService : IAnalyticsService
         var pastEtaCount = await shipments.CountAsync(
             s => s.Eta.HasValue && s.Eta.Value < todayUtc && s.Status.Code != ShipmentDeliveredCode, ct);
 
-        return new InventoryAnalyticsDto(onHandValue, byCategory, shipmentsByStatus, inTransitCount, pastEtaCount);
+        return new InventoryAnalyticsDto(onHandValue, byCategory, shipmentsByStatus, inTransitCount, pastEtaCount, belowReorderCount);
     }
 
     // ---- E10-06: Dispatch -------------------------------------------------------------------

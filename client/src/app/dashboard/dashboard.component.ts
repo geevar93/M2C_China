@@ -95,11 +95,13 @@ const DATE_RANGE_OPTIONS: DateRangeOption[] = ['Last 7 days', 'Last 30 days', 'T
  * vendors aggregate, only `DashboardAnalyticsService.vendors()` exists for a
  * future Vendors-analytics screen to reuse.
  *
- * KNOWN GAP (flagged to the coordinator, not silently absorbed): the
- * prototype's On-Hand Value tile has a "3 items below reorder" sub-line.
- * There is no reorder-level field anywhere in the `/analytics/inventory`
- * schema, so it cannot be computed — this port omits the sub-line rather
- * than inventing a threshold or hard-coding a number.
+ * The On-Hand Value tile's "N items below reorder" sub-line (N-34) is amber
+ * only when `belowReorderCount > 0`; at `0` it renders in the neutral/muted
+ * colour rather than amber — amber signals "needs attention", and a
+ * permanently-amber tile reading zero (reorder thresholds default to 0 today,
+ * so this will read 0 for the foreseeable future) would train the user to
+ * ignore the colour. The sub-line is never hidden at zero: showing "0 items
+ * below reorder" is what tells the user the feature exists and is working.
  */
 @Component({
   selector: 'app-dashboard',
@@ -364,9 +366,14 @@ export class DashboardComponent {
     if (s.status === 'error' || !s.data) {
       return { label, status: 'error', value: '—', sub: s.error ?? 'Could not load', subClass: 'danger' };
     }
-    // No sub-line: the prototype's "3 items below reorder" has no reorder-level
-    // field anywhere in the /analytics/inventory schema (KNOWN GAP, see class doc).
-    return { label, status: 'ready', value: formatInrCompact(s.data.onHandValue), sub: null, subClass: 'muted' };
+    const { belowReorderCount } = s.data;
+    return {
+      label,
+      status: 'ready',
+      value: formatInrCompact(s.data.onHandValue),
+      sub: pluralize(belowReorderCount, 'item') + ' below reorder',
+      subClass: belowReorderCount > 0 ? 'warning' : 'muted'
+    };
   }
 
   private inTransitTile(): KpiTile {

@@ -67,7 +67,7 @@ describe('DashboardAnalyticsService', () => {
     service.inventory(PARAMS).subscribe();
     const req = httpMock.expectOne((r) => r.url === '/api/v1/analytics/inventory');
     expect(req.request.method).toBe('GET');
-    req.flush({ onHandValue: 0, byCategory: [], shipmentsByStatus: [], inTransitCount: 0, pastEtaCount: 0 });
+    req.flush({ onHandValue: 0, byCategory: [], shipmentsByStatus: [], inTransitCount: 0, pastEtaCount: 0, belowReorderCount: 0 });
   });
 
   it('GETs /analytics/dispatch', () => {

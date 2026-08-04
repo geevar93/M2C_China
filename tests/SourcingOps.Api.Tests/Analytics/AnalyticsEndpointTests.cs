@@ -166,7 +166,7 @@ public class AnalyticsEndpointTests : IClassFixture<AdminSeededFixture>
         foreach (var name in new[]
         {
             "\"onHandValue\"", "\"byCategory\"", "\"quantity\"", "\"value\"",
-            "\"shipmentsByStatus\"", "\"inTransitCount\"", "\"pastEtaCount\""
+            "\"shipmentsByStatus\"", "\"inTransitCount\"", "\"pastEtaCount\"", "\"belowReorderCount\""
         })
         {
             raw.Should().Contain(name, "the Angular client reads this exact property name off /analytics/inventory");
