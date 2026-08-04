@@ -1575,9 +1575,11 @@ DispatchAnalyticsDto     { series: [{ periodStart, count }], byStaff: [{ userId,
 
 **Caching covers five of six. `/analytics/inventory` is deliberately NOT cached** — it carries live stock and live shipment status, and TECH_SPEC §4.5 plus E10-10's own wording forbid caching anything user-write-adjacent. Cache keys must incorporate the route **and every filter value**: a key that ignores filters serves one filtered dashboard to the next request, which is a correctness bug wearing a performance costume.
 
-### 19.4 A gap found BEFORE delegating, not after
+### 19.4 A gap found BEFORE delegating, not after — AND THE CLAIM IN IT WAS WRONG
 
-The prototype's **On-Hand Value** tile carries the sub-line **"3 items below reorder"**. **No reorder-level field exists anywhere in the schema** — confirmed by grep while writing the contract, so no agent burned effort on an uncomputable figure. Both were told explicitly not to invent a threshold nor hard-code the prototype's `3`; the sub-line is omitted.
+> **CORRECTION, 2026-08-04.** The premise of this section is false and is preserved only because it was acted on. **`InventoryItem.ReorderThreshold` exists** (`Inventory.cs:27`) and the inventory module already derives `Low`/`Negative` stock levels from it and filters on it. The coordinator's pre-delegation grep was **case-sensitive and searched for `ReorderLevel`**, so it missed the real field and every use of it. Both build agents were consequently told the figure was uncomputable, and the dashboard shipped without it. **The backend agent found the field during M7 and reported it instead of quietly using it — which is exactly the behaviour the brief asked for, and it is what caught this.** Fix recorded as **N-34**; **H-15** rewritten from an invented decision into the real dependency (someone must set thresholds; they default to `0`, at which nothing is ever below reorder). **Lesson: grep case-insensitively before asserting a field does not exist.** An absence claim is far more dangerous than a presence claim, because nobody downstream re-checks it.
+
+The prototype's **On-Hand Value** tile carries the sub-line **"3 items below reorder"**. ~~**No reorder-level field exists anywhere in the schema** — confirmed by grep while writing the contract, so no agent burned effort on an uncomputable figure.~~ **Superseded by the correction above.** Both were told explicitly not to invent a threshold nor hard-code the prototype's `3`; the sub-line is omitted.
 
 Recorded as **H-15**. The real question is not "add a field" but whether the business restocks against per-item minimums at all: if yes it is a field, an admin screen and a story; if no, the sub-line should be **formally dropped from the design** so it stops reading as a gap on every future review. Pairs with **H-6** (no way to correct on-hand quantity after a physical count) — both ask whether stock is managed by numbers or by judgement.
 
@@ -1589,5 +1591,75 @@ The working tree contains **partial output from two agents that were still writi
 2. **Decide per-file whether to keep or discard the in-flight work.** It was never built, never run and never reviewed. `git stash`/`git checkout` back to `959e6cd` and re-delegating from §19.2 is a perfectly good option and is often cheaper than auditing half-written files — **the contract above is the expensive artifact, and it is now safe.**
 3. If keeping it: build, run both suites, and apply **§18.4's rule** — assert the RAW JSON property names for all six endpoints, because `ReadFromJsonAsync<TDto>` round-trips through one serializer and proves the value, never the name. Six new endpoints of fields read by a different runtime is exactly the exposure that rule exists for.
 4. Then write the real §20 close-out. **This section is a contract record, not a status claim; do not let it read as one.**
+
+> **§19.5 is now spent — M7 landed. See §20.** The resume procedure above was followed: the in-flight work was kept rather than discarded, and the missing integration tests were finished by resuming the same agent.
+
+---
+
+## 20. M7 close-out — Analytics (E10), 9 of 10
+
+**M7 is done bar E10-08.** The §5 exit criterion — "the dashboard renders real data across all five Must aggregates with filters applied" — is met by six live aggregates behind a shared filter contract and a fully ported dashboard screen.
+
+### 20.1 Story status
+
+| # | Story | Status |
+| --- | --- | --- |
+| E10-01 | Leads & conversion aggregate | **Done** |
+| E10-02 | Service-type split | **Done** |
+| E10-03 | Category mix | **Done** |
+| E10-04 | Vendor overview | **Done (endpoint only — see N-35)** |
+| E10-05 | Inventory & shipments | **Done** |
+| E10-06 | Dispatch activity | **Done** — `byKind` splits catalog from invoice sends, which is what D-67 was resolved for |
+| E10-07 | Global date/category/service-type filters | **Done** — one shared `AnalyticsQuery` across all six routes, not six near-copies |
+| E10-09 | Port the Dashboard screen | **Done** |
+| E10-10 | Cache aggregates | **Done** — five cached, `/inventory` deliberately not |
+| E10-08 | CSV/Excel export | **Not started — deliberately out of scope (§19.1)** |
+
+### 20.2 Verified on this machine — 2026-08-04
+
+| What | Result |
+| --- | --- |
+| `dotnet build SourcingOps.sln` | **Clean — 0 warnings, 0 errors** |
+| `dotnet test SourcingOps.sln` | **681 passed, 0 failed** — 399 unit + 282 integration. Up from 643 at §18. |
+| Frontend suite | **355 passed** — up from 313. |
+| Raw wire-name assertions | **Read by the coordinator, not taken on report.** Genuine: each of the six endpoints reads the body as a string and asserts literal quoted names (`"periodStart"`, `"pastEtaCount"`, `"byKind"`…) before any deserialisation. |
+| Client-vs-server contract diff | **Every field matches**, all six endpoints, checked field by field before the integration tests existed. |
+
+### 20.3 What the pre-launch contract bought
+
+Two agents built the two halves **in parallel, with no contact, across three session deaths**, and the wire contract matched on the first integration check — no renames, no shape surprises. §19.2 was fixed before either agent started, which is the whole of the reason.
+
+This is the §17.11/§18 pattern paying off a third time, and it is worth stating as the settled house method: **the coordinator's job is to decide the cross-cutting contract, own git, and re-check the seams. Everything else parallelises.**
+
+### 20.4 Deviations and additions
+
+| # | Deviation |
+| --- | --- |
+| **D-77** | **No `/analytics/summary` endpoint — the six stat tiles derive client-side from the aggregates.** A separate summary query could disagree with the chart printed directly beneath it, and that class of defect is never reported: the dashboard just becomes quietly untrusted. Deriving guarantees the tile and the chart cannot diverge. |
+| **D-78** | **`/analytics/inventory` is the one uncached endpoint**, deliberately, per TECH_SPEC §4.5 — it carries live stock and live shipment status. The other five use a 60s TTL keyed `analytics:{route}:{fromDate}:{toDate}:{categoryId}:{serviceTypeId}`. **The key includes every filter value**; a key that ignored them would serve one filtered dashboard to the next request, which is a correctness bug wearing a performance costume. |
+| **D-79** | **The dashboard's tile suffixes are dynamic (`7d`/`30d`/`qtr`), not the prototype's static "· 7d" / "· 30d".** The prototype hard-codes strings that contradict its own default range — a mock-data artifact. Porting them faithfully would have shipped a label that lies whenever the range selector moves. **Fidelity to intent over fidelity to literal.** |
+| **D-80** | **The line chart's five week labels were generalised** from the prototype's fixed 12-point mock to five evenly-spaced indices over whatever length the real series returns. The hard-coded labels only worked because the mock never changed length. |
+| **D-81** | **`leads.bySource` zero-fills against distinct recorded values, not a lookup table** — `Customer.SourceChannel` is free text with no master table, so there is nothing to zero-fill *from*. Ids are deterministic content hashes. **This is the one breakdown that cannot honour the zero-fill rule the other five do**, because the rule presumes a master list; a channel nobody has ever used cannot appear. |
+| **D-82** | **`Category` has no `Code` column** (only `Name`), so category-keyed DTOs put `Name` in both `code` and `label`. The client matches on `code` per the D-50 rule, which here resolves to the name — **so for categories specifically, the "never match on an editable label" protection does not actually hold.** Renaming a category would break a client-side code match. Not fixed here; recorded because it is invisible from the wire shape. |
+
+### 20.5 Open items after M7
+
+| # | Item |
+| --- | --- |
+| **N-34** | **Build the "N items below reorder" figure on the On-Hand Value tile.** `InventoryItem.ReorderThreshold` exists and the inventory module already computes `Low`/`Negative` from it; §19.4's claim that it did not was wrong. Small: one count in the inventory aggregate plus a tile sub-line. **Note it will read `0` until thresholds are actually set (H-15)** — build it anyway, but expect a zero. |
+| **N-35** | **`/analytics/vendors` has no UI consumer.** E10-04's acceptance criterion is endpoint-only and the prototype has no vendor panel, so nothing is unmet and the build agent was right not to invent one. But a **Must**-priority aggregate is now computed, cached and tested with nothing rendering it. Either surface it (a new story) or accept it as API-only — worth a decision rather than drift. |
+| **N-36** | **`Category` has no `Code`, so D-50's protection is nominal there (D-82).** Adding a stable `Code` to categories would make the client's code-matching real rather than a rename away from breaking. |
+| **N-10 / H-8** | **The bundle is now 306.20 kB** against the stale 300 kB budget, up from 304.87. Still a warning, not an error (threshold 500 kB). Still awaiting a number from the owner — **asked three times now**. |
+| **N-33, N-16/H-9, N-18, N-26/H-4** | **Unchanged.** N-16 in particular: the WhatsApp dispatch dialog has still never been driven, now six passes. |
+
+### 20.6 Next
+
+**M8 — Admin UI, hardening and launch (E11-06…E11-09, E12).** It is the last milestone, and per §5 it is where the deferred infrastructure work finally lands.
+
+**Two things gate it, and neither is engineering:**
+1. **H-2 — the legacy data sample.** Still never asked. **E12-07 cannot be scoped and E12-02 has no volume assumptions without it**, so M8 cannot be honestly estimated, let alone planned.
+2. **H-3 — the production VPS.** No VPS has ever existed; "verified against the deployed prod-like stack" has meant local `docker compose` for eight milestones. It is the one outstanding item whose lead time is outside our control.
+
+**Recommended before M8, and cheap:** **E10-08** (the deferred CSV/Excel export) and **N-34**, as a short residual pass in the §18 mould — both are small, both sit on contracts that are fresh right now, and both get more expensive once attention has moved to launch readiness.
 
 
