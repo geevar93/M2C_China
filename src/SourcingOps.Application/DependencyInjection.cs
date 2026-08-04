@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SourcingOps.Application.Admin;
+using SourcingOps.Application.Analytics;
 using SourcingOps.Application.Auth;
 using SourcingOps.Application.Catalog;
 using SourcingOps.Application.Crm;
@@ -62,6 +63,7 @@ public static class DependencyInjection
         services.AddScoped<IShipmentDocumentService, ShipmentDocumentService>();
         services.AddScoped<IInvoiceService, InvoiceService>();
         services.AddScoped<ICompanySettingsService, CompanySettingsService>();
+        services.AddScoped<IAnalyticsService, AnalyticsService>();
 
         return services;
     }
