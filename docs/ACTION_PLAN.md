@@ -1662,4 +1662,62 @@ This is the §17.11/§18 pattern paying off a third time, and it is worth statin
 
 **Recommended before M8, and cheap:** **E10-08** (the deferred CSV/Excel export) and **N-34**, as a short residual pass in the §18 mould — both are small, both sit on contracts that are fresh right now, and both get more expensive once attention has moved to launch readiness.
 
+> **Superseded in part — see §21.** The owner Q&A of 2026-08-04 answered nine long-open questions, four of which created build work. N-34 was done in that pass; **E10-08 remains the outstanding deferred item.** Two of §20.6's gates also moved: **H-2 is answered** (no legacy data yet — M8 is now estimable) and **H-3 is parked** by owner decision.
+
+---
+
+## 21. Owner Q&A pass — four build items, and the answers behind them
+
+**Not a milestone.** A round of nine long-open business questions was put to the owner one at a time and answered, and the four that created engineering work were built. Everything here is committed and green.
+
+### 21.1 What was built
+
+| # | Item | Commit |
+| --- | --- | --- |
+| **N-39** | Initial bundle budget 300 → 320 kB | `3df8615` |
+| **N-34** | "N items below reorder" figure on the dashboard | `da0d978` |
+| **N-37** | Customer GSTIN, recorded and printed on the invoice | `102fe65` |
+| **N-39b** | Per-chunk budget 150 → 200 kB — **build now warning-free** | `be5d5a2` |
+| **N-38** | Stock adjustments after a physical count | *(this pass)* |
+
+### 21.2 Verified on this machine — 2026-08-04
+
+| What | Result |
+| --- | --- |
+| `dotnet build SourcingOps.sln` | **Clean — 0 warnings, 0 errors** |
+| `dotnet test SourcingOps.sln` | **730 passed** — 429 unit + 301 integration. Up from 708 at §20. |
+| Frontend suite | **377 passed** — up from 365. |
+| Production build | **Zero budget warnings**, 306.20 kB raw / 87.18 kB transferred |
+
+All re-run by the coordinator, not taken from agent reports.
+
+### 21.3 Decisions worth not re-litigating
+
+| # | Decision |
+| --- | --- |
+| **D-83** | **Stock corrections are a RECORDED ADJUSTMENT, never an editable quantity field.** An unrestricted "set `OnHandQty` to anything" control would destroy the audit trail the module rests on (D-42) and erase the evidence a discrepancy existed. `UpdateInventoryItemRequest` still carries no `OnHandQty`; its doc comment explaining why remains true. `PreviousQty` and `Delta` are **stored, not computed** — the record is about what the numbers were *at that moment*. |
+| **D-84** | **Reason is mandatory on an adjustment; a zero-delta adjustment is still recorded.** A correction with no stated reason is precisely the audit hole the feature closes, and "we counted and it was correct" is a meaningful audit fact rather than a no-op. |
+| **D-85** | **Counted quantity may not be negative; on-hand may be.** An item oversold to −40 can be counted back to 15 (D-35 precedent). Only the human's counted figure is constrained — you cannot physically count minus three of something. |
+| **D-86** | **New `Inventory.Adjust` permission, deliberately NOT `AdminOnly`.** The staff who count stock are exactly who needs it; Super-Admin-only would block the workflow the feature exists to serve. Write-gated only — history stays on `Inventory.View`. The UI gates the action independently of `Inventory.Edit`, so "record counts" can be granted without full edit rights. |
+| **D-87** | **Customer GSTIN is optional, and validation stops at 15 alphanumeric characters** — no checksum, no structural regex. A wrongly-*rejected* GSTIN is a worse failure than a wrongly-accepted one: the person typing it knows their customer's number and the app does not. Mandatory would block non-registered customers and strand every existing row. |
+| **D-88** | **The seller's GSTIN is now uppercased too**, matching the buyer side. Both print on the same PDF — issuer block and Bill To — so normalising them differently would render the same identifier two ways on one document. Deliberately left *unvalidated for length* on the seller side: that is the Super-Admin settings screen, and an over-strict check would block the one path that unblocks invoicing at all (H-1). |
+| **D-89** | **The below-reorder tile renders zero in MUTED, not amber.** It will read `0` until thresholds are entered, and a permanently amber tile showing zero trains users to ignore the colour. Amber only when something needs attention. Pinned by a spec so it cannot be silently undone. |
+
+### 21.4 Open items after this pass
+
+| # | Item |
+| --- | --- |
+| **N-40** | **`Inventory.Adjust`'s separation from `Inventory.Edit` is untestable with the seeded roles.** The Associate role holds every non-`Admin.*` permission as one bloc, so no role exists with View-but-not-Adjust and the 403 path cannot be exercised. The same limitation is already documented for the `Invoicing.Edit`/`Invoicing.MarkPaid` split. **The permission separation is real in code and unproven in test** — recorded rather than faked. Fixing it means a finer-grained seeded role, which is a business question about who should be allowed to do what. |
+| **N-41** | **There is no customer EDIT form.** Only intake exists; `customer-detail` has an inert Edit button marked "Edit is a later CRM story". **Consequence made newly visible by N-37: a GSTIN can only be set when CREATING a customer** — existing customers cannot be given one through the UI. `CustomersService.update()` and the API both support it. Needs a story. |
+| **N-42** | **CI does not build the client at all.** `.github/workflows/ci.yml` (itself a never-run draft) sets up .NET only — no Node, no `npm ci`, no `ng build`. **CI therefore cannot catch a frontend regression**, which matters most for the pending Angular upgrade. Fix before that upgrade, not after. |
+| **H-16** | **Node ≥ 20.19 must be installed before Angular can be upgraded.** Machine has v20.12.2 and no version manager. Owner has approved the upgrade (H-5) but not yet chosen `nvm-windows` (project-scoped, recommended) vs a global install (machine-wide blast radius). |
+| **E10-08** | **CSV/Excel export — still the one unbuilt E10 story.** Unchanged. |
+| **N-16/H-9, N-18, N-33, N-35, N-36** | **Unchanged.** The WhatsApp dispatch dialog has still never been driven — now seven passes. |
+
+### 21.5 Next
+
+1. **Node install (H-16)** → then the staged **Angular 19 → 20** upgrade. **Fix N-42 first** so the upgrade has a safety net beyond a local test run. **Do not run `npm audit fix --force`** — it proposes Angular 22, a two-major jump.
+2. **E10-08** (CSV/Excel export), the last unbuilt feature story.
+3. **M8 — Admin UI, hardening and launch.** Now estimable (H-2 answered). H-3 is parked by owner decision, so the deployment half stays deferred until reopened.
+
 
