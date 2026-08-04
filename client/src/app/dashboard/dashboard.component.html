@@ -1,0 +1,183 @@
+<div>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Operations Dashboard</h1>
+      <div class="dash-subtitle">{{ subtitle() }}</div>
+    </div>
+    <div class="toolbar">
+      <select
+        class="field-input"
+        [value]="dateRange()"
+        (change)="setRange($any($event.target).value)"
+        aria-label="Date range"
+      >
+        @for (opt of dateRangeOptions; track opt) {
+          <option [value]="opt">{{ opt }}</option>
+        }
+      </select>
+      <a class="btn btn-primary" routerLink="/customers/intake">+ New Lead</a>
+    </div>
+  </div>
+
+  <div class="dash-kpis">
+    @for (k of kpis(); track k.label) {
+      <div class="stat-tile">
+        <div class="stat-tile__label">{{ k.label }}</div>
+        @if (k.status === 'loading') {
+          <div class="dash-tile-loading"><span class="spinner"></span></div>
+        } @else {
+          <div class="stat-tile__value">{{ k.value }}</div>
+          @if (k.sub) {
+            <div class="stat-tile__sub" [ngClass]="'stat-tile__sub--' + k.subClass">{{ k.sub }}</div>
+          }
+        }
+      </div>
+    }
+  </div>
+
+  <div class="dash-row dash-row--charts">
+    <div class="card">
+      <div class="dash-panel-header">
+        <div class="dash-panel-title">New Leads Over Time</div>
+      </div>
+
+      @if (leadsChartStatus() === 'loading') {
+        <div class="state-panel dash-state-panel"><span class="spinner"></span><span>Loading…</span></div>
+      } @else if (leadsChartStatus() === 'error') {
+        <div class="state-panel dash-state-panel">
+          <span>{{ leadsChartError() }}</span>
+          <button type="button" class="btn btn-secondary btn-sm" (click)="retryLeads()">Retry</button>
+        </div>
+      } @else {
+        @if (leadsChart(); as chart) {
+          <svg viewBox="0 0 640 180" class="dash-line-chart" preserveAspectRatio="none">
+            <line x1="0" y1="45" x2="640" y2="45" class="dash-gridline"></line>
+            <line x1="0" y1="90" x2="640" y2="90" class="dash-gridline"></line>
+            <line x1="0" y1="135" x2="640" y2="135" class="dash-gridline"></line>
+            <line x1="0" y1="179" x2="640" y2="179" class="dash-baseline"></line>
+            <polyline [attr.points]="chart.polyline" fill="none" class="dash-line"></polyline>
+          </svg>
+          <div class="dash-axis">
+            @for (label of chart.axisLabels; track $index) {
+              <span>{{ label }}</span>
+            }
+          </div>
+        }
+      }
+    </div>
+
+    <div class="card">
+      <div class="dash-panel-title dash-panel-title--spaced">Service Type Split</div>
+
+      @if (serviceSplitStatus() === 'loading') {
+        <div class="state-panel dash-state-panel"><span class="spinner"></span><span>Loading…</span></div>
+      } @else if (serviceSplitStatus() === 'error') {
+        <div class="state-panel dash-state-panel">
+          <span>{{ serviceSplitError() }}</span>
+          <button type="button" class="btn btn-secondary btn-sm" (click)="retryServiceSplit()">Retry</button>
+        </div>
+      } @else {
+        @if (serviceSplitView(); as split) {
+          <div class="dash-donut-row">
+            <svg viewBox="0 0 120 120" class="dash-donut">
+              <circle cx="60" cy="60" r="46" fill="none" class="dash-donut-track"></circle>
+              <circle
+                cx="60"
+                cy="60"
+                r="46"
+                fill="none"
+                class="dash-donut-arc"
+                [attr.stroke-dasharray]="split.dash"
+                transform="rotate(-90 60 60)"
+              ></circle>
+              <text x="60" y="58" text-anchor="middle" class="dash-donut-total">{{ split.total }}</text>
+              <text x="60" y="74" text-anchor="middle" class="dash-donut-caption">CUSTOMERS</text>
+            </svg>
+            <div class="dash-donut-legend">
+              <div>
+                <div class="dash-legend-row"><span class="dash-legend-dot dash-legend-dot--accent"></span><span>{{ split.cifLabel }}</span></div>
+                <div class="dash-legend-value">{{ split.cifCount }} <span class="dash-legend-pct">· {{ split.cifPct }}%</span></div>
+              </div>
+              <div>
+                <div class="dash-legend-row"><span class="dash-legend-dot dash-legend-dot--warning"></span><span>{{ split.freightLabel }}</span></div>
+                <div class="dash-legend-value">{{ split.freightCount }} <span class="dash-legend-pct">· {{ split.freightPct }}%</span></div>
+              </div>
+            </div>
+          </div>
+        }
+      }
+    </div>
+  </div>
+
+  <div class="dash-row dash-row--panels">
+    <div class="card">
+      <div class="dash-panel-title dash-panel-title--spaced">Lead Funnel</div>
+
+      @if (funnelStatus() === 'loading') {
+        <div class="state-panel dash-state-panel"><span class="spinner"></span><span>Loading…</span></div>
+      } @else if (funnelStatus() === 'error') {
+        <div class="state-panel dash-state-panel">
+          <span>{{ funnelError() }}</span>
+          <button type="button" class="btn btn-secondary btn-sm" (click)="retryLeads()">Retry</button>
+        </div>
+      } @else {
+        @if (funnelView(); as funnel) {
+          @for (f of funnel.rows; track f.label) {
+            <div class="dash-bar-row">
+              <div class="dash-bar-row__label"><span>{{ f.label }}</span><span class="muted">{{ f.n }} · {{ f.pct }}</span></div>
+              <div class="dash-bar-track"><div class="dash-bar-fill dash-bar-fill--accent" [style.width.%]="f.w"></div></div>
+            </div>
+          }
+          <div class="dash-funnel-footer">Lead → Won conversion <strong>{{ funnel.conversion }}</strong></div>
+        }
+      }
+    </div>
+
+    <div class="card">
+      <div class="dash-panel-title dash-panel-title--spaced">Category Mix</div>
+
+      @if (categoryMixStatus() === 'loading') {
+        <div class="state-panel dash-state-panel"><span class="spinner"></span><span>Loading…</span></div>
+      } @else if (categoryMixStatus() === 'error') {
+        <div class="state-panel dash-state-panel">
+          <span>{{ categoryMixError() }}</span>
+          <button type="button" class="btn btn-secondary btn-sm" (click)="retryCategoryMix()">Retry</button>
+        </div>
+      } @else {
+        @if (categoryMixView(); as catMix) {
+          @for (c of catMix; track c.label) {
+            <div class="dash-catmix-row">
+              <div class="dash-catmix-label">{{ c.label }}</div>
+              <div class="dash-bar-track dash-bar-track--flex"><div class="dash-bar-fill dash-bar-fill--navy" [style.width.%]="c.w"></div></div>
+              <div class="dash-catmix-n">{{ c.n }}</div>
+            </div>
+          }
+        }
+      }
+    </div>
+
+    <div class="card">
+      <div class="dash-panel-title dash-panel-title--spaced">Shipments by Status</div>
+
+      @if (shipmentsByStatusStatus() === 'loading') {
+        <div class="state-panel dash-state-panel"><span class="spinner"></span><span>Loading…</span></div>
+      } @else if (shipmentsByStatusStatus() === 'error') {
+        <div class="state-panel dash-state-panel">
+          <span>{{ shipmentsByStatusError() }}</span>
+          <button type="button" class="btn btn-secondary btn-sm" (click)="retryInventory()">Retry</button>
+        </div>
+      } @else {
+        @if (shipmentsByStatusView(); as ship) {
+          @for (s of ship.rows; track s.label) {
+            <div class="dash-catmix-row">
+              <div class="dash-ship-chip-wrap"><span class="chip" [style.background]="s.bg" [style.color]="s.fg">{{ s.label }}</span></div>
+              <div class="dash-bar-track dash-bar-track--flex"><div class="dash-bar-fill" [style.width.%]="s.w" [style.background]="s.fg"></div></div>
+              <div class="dash-catmix-n">{{ s.n }}</div>
+            </div>
+          }
+          <div class="dash-funnel-footer">{{ ship.overdueLabel }}</div>
+        }
+      }
+    </div>
+  </div>
+</div>
