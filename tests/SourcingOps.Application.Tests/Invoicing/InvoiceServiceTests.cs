@@ -344,6 +344,40 @@ public class InvoiceServiceTests
         storageMock.Verify(s => s.SaveAsync($"invoices/{created.Id}.pdf", It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>N-37: the buyer's GSTIN (distinct from the seller's on CompanySettings) flows into the PDF model.</summary>
+    [Fact]
+    public async Task ChangeStatusAsync_CustomerHasGstin_PopulatesCustomerGstinOnPdfModel()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        f.Customer.Gstin = "27ABCDE1234F1Z5";
+        db.CompanySettings.Add(ValidCompanySettings());
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db, out _, out _, out var rendererMock);
+        var created = await sut.CreateAsync(ValidCreate(f), Actor);
+
+        await sut.ChangeStatusAsync(created.Id, new ChangeInvoiceStatusRequest(f.Issued.Id, null), Actor);
+
+        rendererMock.Verify(r => r.Render(It.Is<InvoicePdfModel>(m => m.CustomerGstin == "27ABCDE1234F1Z5")), Times.Once);
+    }
+
+    /// <summary>N-37: a customer with no GSTIN on file must not leak a stray non-null value onto the PDF model.</summary>
+    [Fact]
+    public async Task ChangeStatusAsync_CustomerHasNoGstin_PopulatesNullCustomerGstinOnPdfModel()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        // f.Customer.Gstin left null (the default from SeedMasterData).
+        db.CompanySettings.Add(ValidCompanySettings());
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db, out _, out _, out var rendererMock);
+        var created = await sut.CreateAsync(ValidCreate(f), Actor);
+
+        await sut.ChangeStatusAsync(created.Id, new ChangeInvoiceStatusRequest(f.Issued.Id, null), Actor);
+
+        rendererMock.Verify(r => r.Render(It.Is<InvoicePdfModel>(m => m.CustomerGstin == null)), Times.Once);
+    }
+
     [Theory]
     [InlineData("DRAFT", "PAID")]
     [InlineData("ISSUED", "DRAFT")]

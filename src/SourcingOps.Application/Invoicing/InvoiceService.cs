@@ -386,6 +386,7 @@ public sealed class InvoiceService : IInvoiceService
             ResolveCustomerName(invoice.Customer),
             invoice.Customer.City,
             invoice.Customer.Region,
+            invoice.Customer.Gstin,
             invoice.LineDescription,
             invoice.Amount,
             invoice.TaxAmount,

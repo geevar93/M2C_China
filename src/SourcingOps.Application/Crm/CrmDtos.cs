@@ -46,7 +46,8 @@ public sealed record CustomerDetailDto(
     string? ExternalSupplierName,
     decimal? ExternalOrderValue,
     string? ExternalOrderCurrency,
-    DateTime? ExternalOrderDate);
+    DateTime? ExternalOrderDate,
+    string? Gstin);
 
 public sealed record CustomerListResultDto(IReadOnlyList<CustomerListItemDto> Items, int Page, int PageSize, int TotalCount);
 
@@ -137,6 +138,7 @@ public sealed record CreateCustomerRequest(
     decimal? ExternalOrderValue,
     string? ExternalOrderCurrency,
     DateTime? ExternalOrderDate,
+    string? Gstin,
     bool ConfirmDuplicate = false);
 
 /// <summary>
@@ -163,7 +165,8 @@ public sealed record UpdateCustomerRequest(
     string? ExternalSupplierName,
     decimal? ExternalOrderValue,
     string? ExternalOrderCurrency,
-    DateTime? ExternalOrderDate);
+    DateTime? ExternalOrderDate,
+    string? Gstin);
 
 /// <summary><see cref="Type"/> defaults to "Note" when omitted; the three system-reserved type strings are rejected (see <see cref="CustomerService"/>).</summary>
 public sealed record CreateInteractionRequest(string? Type, string Text, DateTime? FollowUpDate);

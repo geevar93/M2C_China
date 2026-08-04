@@ -10,6 +10,16 @@ public class Customer
     /// <summary>Normalised international format (e.g. +91XXXXXXXXXX) — FR-CRM-04.</summary>
     public string Phone { get; set; } = string.Empty;
     public string? Email { get; set; }
+
+    /// <summary>
+    /// The BUYER's GST identification number (N-37), distinct from the seller's own GSTIN on
+    /// <c>CompanySettings</c>. Deliberately nullable/optional — required-on-save would block
+    /// creating customers who are not GST-registered (individuals, small retailers) and would
+    /// strand every existing row. Stored trimmed and uppercased; see
+    /// <c>CustomerService</c>'s normalisation/validation for the exact rule.
+    /// </summary>
+    public string? Gstin { get; set; }
+
     public string? City { get; set; }
     public string? Region { get; set; }
     public string? SourceChannel { get; set; }

@@ -49,7 +49,7 @@ public class ShipmentsEndpointTests : IClassFixture<AdminSeededFixture>
             CategoryIds: null, OwnerUserId: null, Tags: null, Notes: null,
             ExternalMarketplace: null, ExternalOrderRef: null, ExternalSupplierName: null,
             ExternalOrderValue: null, ExternalOrderCurrency: null, ExternalOrderDate: null,
-            ConfirmDuplicate: true);
+            Gstin: null, ConfirmDuplicate: true);
 
         var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers", request);
         await response.EnsureSuccessOrThrowWithBodyAsync();

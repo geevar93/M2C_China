@@ -46,6 +46,7 @@ const savedDetail: CustomerDetail = {
   ...existingCustomer,
   id: 'cust-new',
   email: null,
+  gstin: null,
   notes: null,
   externalMarketplace: null,
   externalOrderRef: null,
@@ -162,6 +163,82 @@ describe('CustomerIntakeComponent', () => {
     expect(req.request.body.externalMarketplace).toBeNull();
     expect(req.request.body.externalOrderRef).toBeNull();
     req.flush(savedDetail, { status: 201, statusText: 'Created' });
+  });
+
+  describe('GSTIN (N-37)', () => {
+    it('sends null and stays valid when GSTIN is left empty', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      fixture.detectChanges();
+      fillRequiredFields();
+
+      fixture.componentInstance.save();
+
+      expect(fixture.componentInstance.form.invalid).toBeFalse();
+      const req = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+      expect(req.request.body.gstin).toBeNull();
+      req.flush(savedDetail, { status: 201, statusText: 'Created' });
+    });
+
+    it('uppercases a valid 15-character value and sends it as-typed-but-uppercased', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      fixture.detectChanges();
+      fillRequiredFields();
+      fixture.componentInstance.form.controls.gstin.setValue('24aaaaa0000a1z5');
+
+      fixture.componentInstance.save();
+
+      const req = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+      expect(req.request.body.gstin).toBe('24AAAAA0000A1Z5');
+      req.flush(savedDetail, { status: 201, statusText: 'Created' });
+    });
+
+    it('uppercases the field value itself on blur', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      fixture.detectChanges();
+
+      fixture.componentInstance.form.controls.gstin.setValue('24aaaaa0000a1z5');
+      fixture.componentInstance.onGstinBlur();
+
+      expect(fixture.componentInstance.form.controls.gstin.value).toBe('24AAAAA0000A1Z5');
+    });
+
+    it('rejects a value that is not 15 alphanumeric characters and blocks submit', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      fixture.detectChanges();
+      fillRequiredFields();
+      fixture.componentInstance.form.controls.gstin.setValue('TOO-SHORT');
+
+      fixture.componentInstance.save();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.form.controls.gstin.invalid).toBeTrue();
+      expect(fixture.nativeElement.textContent).toContain('GSTIN must be 15 alphanumeric characters.');
+      httpMock.expectNone((r) => r.url === '/api/v1/customers');
+    });
+
+    it('surfaces a server-side 400 field error for gstin on the field itself', () => {
+      fixture.detectChanges();
+      flushMasterData();
+      fixture.detectChanges();
+      fillRequiredFields();
+      fixture.componentInstance.form.controls.gstin.setValue('24AAAAA0000A1Z5');
+
+      fixture.componentInstance.save();
+
+      const req = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+      req.flush(
+        { title: 'Bad Request', errors: { gstin: ['GSTIN must be 15 alphanumeric characters.'] } },
+        { status: 400, statusText: 'Bad Request' }
+      );
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.gstinServerError()).toBe('GSTIN must be 15 alphanumeric characters.');
+      expect(fixture.nativeElement.textContent).toContain('GSTIN must be 15 alphanumeric characters.');
+    });
   });
 
   describe('tag editor (E4-11)', () => {

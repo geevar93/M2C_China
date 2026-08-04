@@ -47,6 +47,19 @@ function phoneDigitsValidator(control: AbstractControl): ValidationErrors | null
   return digits.length === 10 ? null : { phoneDigits: true };
 }
 
+/**
+ * Deliberately light (N-37 brief): 15 alphanumeric characters when the user
+ * has typed anything at all. No checksum, no positional structure check —
+ * the server enforces the same length + alphanumeric rule and a wrongly
+ * rejected real GSTIN is worse than a wrongly accepted one. Empty is valid;
+ * this field is optional.
+ */
+function gstinFormatValidator(control: AbstractControl): ValidationErrors | null {
+  const value = String(control.value ?? '').trim();
+  if (!value) return null;
+  return /^[A-Za-z0-9]{15}$/.test(value) ? null : { gstinFormat: true };
+}
+
 interface DuplicateInfo {
   businessName: string;
   name: string;
@@ -107,6 +120,11 @@ export class CustomerIntakeComponent {
   readonly saving = signal(false);
   readonly submitError = signal<string | null>(null);
   readonly duplicate = signal<DuplicateInfo | null>(null);
+  /** Server-side 400 field error for `gstin` (same shape the backend already
+   *  uses for the invoice-issue gate's `errors` dictionary — see
+   *  InvoiceDetailComponent.extractIssueError — applied here per-field
+   *  instead of as a banner, since GSTIN has one specific home to surface in). */
+  readonly gstinServerError = signal<string | null>(null);
 
   readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
@@ -114,6 +132,7 @@ export class CustomerIntakeComponent {
     cc: ['+91', Validators.required],
     phone: ['', [Validators.required, phoneDigitsValidator]],
     email: ['', Validators.email],
+    gstin: ['', gstinFormatValidator],
     city: [''],
     sourceChannel: ['WhatsApp', Validators.required],
     notes: [''],
@@ -181,6 +200,17 @@ export class CustomerIntakeComponent {
     return this.phoneDigits.length > 0 && !this.phoneOk ? '#e53935' : '#6b7280';
   }
 
+  /**
+   * Uppercase on blur, not mid-typing — the server stores GSTINs uppercased,
+   * so this keeps what's saved matching what's shown without rewriting the
+   * field under the user's cursor while they type (no existing precedent
+   * elsewhere in this form to match instead).
+   */
+  onGstinBlur(): void {
+    const value = this.form.controls.gstin.value;
+    if (value) this.form.controls.gstin.setValue(value.toUpperCase());
+  }
+
   get showExtRef(): boolean {
     return this.selectedServiceTypeRow()?.code === SERVICE_TYPE_FREIGHT_ONLY;
   }
@@ -225,6 +255,7 @@ export class CustomerIntakeComponent {
   save(): void {
     if (this.saving()) return;
     this.submitError.set(null);
+    this.gstinServerError.set(null);
     this.form.markAllAsTouched();
     if (this.form.invalid || !this.serviceTypeId() || !this.statusId()) {
       if (!this.phoneOk) this.submitError.set('Enter a valid 10-digit WhatsApp/phone number.');
@@ -263,6 +294,15 @@ export class CustomerIntakeComponent {
           });
           return;
         }
+        if (err instanceof HttpErrorResponse && err.status === 400) {
+          const body = err.error as { errors?: Record<string, string[]> } | undefined;
+          const gstinMessages = body?.errors?.['gstin'];
+          if (gstinMessages?.length) {
+            this.gstinServerError.set(gstinMessages.join(' '));
+            this.form.controls.gstin.markAsTouched();
+            return;
+          }
+        }
         this.submitError.set(extractErrorMessage(err, 'Could not save this lead. Please try again.'));
       }
     });
@@ -283,6 +323,7 @@ export class CustomerIntakeComponent {
       businessName: raw.businessName.trim(),
       phone: this.rawPhone(),
       email: raw.email.trim() || null,
+      gstin: raw.gstin.trim() ? raw.gstin.trim().toUpperCase() : null,
       city: raw.city.trim() || null,
       sourceChannel: raw.sourceChannel,
       serviceTypeId: this.serviceTypeId(),

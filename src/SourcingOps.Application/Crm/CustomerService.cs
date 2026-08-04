@@ -140,6 +140,7 @@ public sealed class CustomerService : ICustomerService
 
         var categoryIds = await ResolveCategoryIdsAsync(request.CategoryIds, ct);
         var owner = await ResolveOwnerAsync(request.OwnerUserId, ct);
+        var gstin = NormalizeAndValidateGstin(request.Gstin);
 
         if (!request.ConfirmDuplicate)
         {
@@ -160,6 +161,7 @@ public sealed class CustomerService : ICustomerService
             BusinessName = Trim(request.BusinessName),
             Phone = normalizedPhone,
             Email = Trim(request.Email),
+            Gstin = gstin,
             City = Trim(request.City),
             Region = Trim(request.Region),
             SourceChannel = Trim(request.SourceChannel),
@@ -233,6 +235,7 @@ public sealed class CustomerService : ICustomerService
             request.ExternalSupplierName, request.ExternalOrderValue, request.ExternalOrderCurrency, request.ExternalOrderDate);
 
         var categoryIds = await ResolveCategoryIdsAsync(request.CategoryIds, ct);
+        var gstin = NormalizeAndValidateGstin(request.Gstin);
 
         var statusChanged = customer.StatusId != status.Id;
         var previousStatusLabel = statusChanged ? customer.Status?.Label ?? (await _db.LeadStatuses.FindAsync([customer.StatusId], ct))?.Label : null;
@@ -241,6 +244,7 @@ public sealed class CustomerService : ICustomerService
         customer.BusinessName = Trim(request.BusinessName);
         customer.Phone = normalizedPhone;
         customer.Email = Trim(request.Email);
+        customer.Gstin = gstin;
         customer.City = Trim(request.City);
         customer.Region = Trim(request.Region);
         customer.SourceChannel = Trim(request.SourceChannel);
@@ -548,6 +552,36 @@ public sealed class CustomerService : ICustomerService
 
     private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    /// <summary>
+    /// N-37: the buyer's GSTIN, optional (see <see cref="Customer.Gstin"/>'s doc comment).
+    /// Blank/whitespace trims to null — "cleared" and "never set" are the same state, matching
+    /// how <c>CompanySettingsService.UpsertAsync</c> already treats every other trimmed field
+    /// (D-70 precedent). Stored uppercased since GSTINs are canonically uppercase and mixed
+    /// case would make stored values compare/display inconsistently.
+    ///
+    /// Validation is deliberately shallow: exactly 15 alphanumeric characters, nothing more.
+    /// No checksum digit validation and no full structural regex (state-code prefix, PAN
+    /// segment, entity-code digit, etc.) — a wrongly-rejected real GSTIN is a worse failure
+    /// here than a wrongly-accepted malformed one, and the human entering it knows their
+    /// customer's number better than this service does. Do not "improve" this into a stricter
+    /// pattern without a product decision behind it.
+    /// </summary>
+    private static string? NormalizeAndValidateGstin(string? value)
+    {
+        var trimmed = Trim(value)?.ToUpperInvariant();
+        if (trimmed is null)
+        {
+            return null;
+        }
+
+        if (trimmed.Length != 15 || !trimmed.All(char.IsLetterOrDigit))
+        {
+            throw new AppValidationException("gstin", "GSTIN must be exactly 15 alphanumeric characters.");
+        }
+
+        return trimmed;
+    }
+
     private static string[] NormalizeTags(IReadOnlyList<string>? tags) =>
         (tags ?? []).Select(t => t?.Trim() ?? string.Empty).Where(t => t.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
@@ -570,7 +604,8 @@ public sealed class CustomerService : ICustomerService
         c.Tags.ToList(), AsUtc(c.CreatedAt),
         c.Email, c.Notes,
         c.ExternalMarketplace, c.ExternalOrderRef, c.ExternalSupplierName,
-        c.ExternalOrderValue, c.ExternalOrderCurrency, AsUtcOrNull(c.ExternalOrderDate));
+        c.ExternalOrderValue, c.ExternalOrderCurrency, AsUtcOrNull(c.ExternalOrderDate),
+        c.Gstin);
 
     private static TimelineEventDto MapTimelineEvent(Interaction i)
     {

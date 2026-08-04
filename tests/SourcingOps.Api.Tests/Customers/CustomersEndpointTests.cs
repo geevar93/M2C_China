@@ -55,7 +55,8 @@ public class CustomersEndpointTests : IClassFixture<AdminSeededFixture>
         ExternalSupplierName: null,
         ExternalOrderValue: null,
         ExternalOrderCurrency: null,
-        ExternalOrderDate: null);
+        ExternalOrderDate: null,
+        Gstin: null);
 
     private static string UniquePhone() => "90000" + Random.Shared.Next(10000, 99999);
 
@@ -134,6 +135,118 @@ public class CustomersEndpointTests : IClassFixture<AdminSeededFixture>
         overrideResponse.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
+    // ---- GSTIN (N-37) ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Create_WithGstin_RoundTripsOnDetail()
+    {
+        var md = await GetMasterDataAsync();
+        var request = ValidCifRequest(md, UniquePhone()) with { Gstin = "27ABCDE1234F1Z5" };
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = await response.Content.ReadFromJsonAsync<CustomerDetailDto>();
+        body!.Gstin.Should().Be("27ABCDE1234F1Z5");
+    }
+
+    /// <summary>Optionality is the most important property of this field — omitting it must still succeed.</summary>
+    [Fact]
+    public async Task Create_WithoutGstin_Succeeds_StoredAsNull()
+    {
+        var md = await GetMasterDataAsync();
+        var request = ValidCifRequest(md, UniquePhone()) with { Gstin = null };
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = await response.Content.ReadFromJsonAsync<CustomerDetailDto>();
+        body!.Gstin.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Create_LowercaseGstinWithWhitespace_IsStoredTrimmedAndUppercased()
+    {
+        var md = await GetMasterDataAsync();
+        var request = ValidCifRequest(md, UniquePhone()) with { Gstin = "  27abcde1234f1z5  " };
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = await response.Content.ReadFromJsonAsync<CustomerDetailDto>();
+        body!.Gstin.Should().Be("27ABCDE1234F1Z5");
+    }
+
+    [Fact]
+    public async Task Create_BlankGstin_TrimsToNull()
+    {
+        var md = await GetMasterDataAsync();
+        var request = ValidCifRequest(md, UniquePhone()) with { Gstin = "   " };
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = await response.Content.ReadFromJsonAsync<CustomerDetailDto>();
+        body!.Gstin.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("27ABCDE1234F1Z")]     // 14 chars
+    [InlineData("27ABCDE1234F1Z55")]  // 16 chars
+    [InlineData("27ABCDE1234F1Z-")]   // non-alphanumeric
+    public async Task Create_InvalidGstin_Returns400_WithGstinFieldKey(string invalidGstin)
+    {
+        var md = await GetMasterDataAsync();
+        var request = ValidCifRequest(md, UniquePhone()) with { Gstin = invalidGstin };
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var problemJson = await response.Content.ReadFromJsonAsync<JsonElement>();
+        problemJson.GetProperty("errors").TryGetProperty("gstin", out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Update_InvalidGstin_Returns400_WithGstinFieldKey()
+    {
+        var md = await GetMasterDataAsync();
+        var created = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers", ValidCifRequest(md, UniquePhone()));
+        var body = await created.Content.ReadFromJsonAsync<CustomerDetailDto>();
+
+        var updateRequest = new UpdateCustomerRequest(
+            body!.Name, body.BusinessName, body.Phone, body.Email, body.City, body.Region, body.SourceChannel,
+            body.ServiceTypeId, body.StatusId, body.CategoryIds, body.Tags, body.Notes,
+            body.ExternalMarketplace, body.ExternalOrderRef, body.ExternalSupplierName,
+            body.ExternalOrderValue, body.ExternalOrderCurrency, body.ExternalOrderDate, "TOO-SHORT");
+
+        var response = await _fixture.AssociateClient.PutAsJsonAsync($"/api/v1/customers/{body.Id}", updateRequest);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var problemJson = await response.Content.ReadFromJsonAsync<JsonElement>();
+        problemJson.GetProperty("errors").TryGetProperty("gstin", out _).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Mandatory wire-name assertion (per this repo's convention — see AnalyticsEndpointTests):
+    /// asserted against the RAW JSON string before deserialising, since ReadFromJsonAsync round
+    /// trips through the same serializer on both ends and would never catch a wire-name mismatch.
+    /// </summary>
+    [Fact]
+    public async Task Get_RawJson_ContainsGstinWireName()
+    {
+        var md = await GetMasterDataAsync();
+        var created = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers",
+            ValidCifRequest(md, UniquePhone()) with { Gstin = "27ABCDE1234F1Z5" });
+        var createdBody = await created.Content.ReadFromJsonAsync<CustomerDetailDto>();
+
+        var response = await _fixture.AssociateClient.GetAsync($"/api/v1/customers/{createdBody!.Id}");
+        await response.EnsureSuccessOrThrowWithBodyAsync();
+        var raw = await response.Content.ReadAsStringAsync();
+
+        raw.Should().Contain("\"gstin\"", "the Angular client reads this exact property name off GET /customers/{id}");
+        raw.Should().Contain("27ABCDE1234F1Z5");
+    }
+
     // ---- List / search / filter (E4-06) ----------------------------------------------
 
     [Fact]
@@ -197,7 +310,7 @@ public class CustomersEndpointTests : IClassFixture<AdminSeededFixture>
             body!.Name, body.BusinessName, body.Phone, body.Email, body.City, body.Region, body.SourceChannel,
             body.ServiceTypeId, newStatus.Id, body.CategoryIds, body.Tags, body.Notes,
             body.ExternalMarketplace, body.ExternalOrderRef, body.ExternalSupplierName,
-            body.ExternalOrderValue, body.ExternalOrderCurrency, body.ExternalOrderDate);
+            body.ExternalOrderValue, body.ExternalOrderCurrency, body.ExternalOrderDate, body.Gstin);
 
         var updateResponse = await _fixture.AssociateClient.PutAsJsonAsync($"/api/v1/customers/{body.Id}", updateRequest);
 

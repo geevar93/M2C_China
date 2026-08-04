@@ -44,7 +44,15 @@ public sealed class CompanySettingsService : ICompanySettingsService
         }
 
         settings.LegalEntityName = Trim(request.LegalEntityName);
-        settings.Gstin = Trim(request.Gstin);
+        // Uppercased as well as trimmed, matching the BUYER-side normalisation in
+        // CustomerService.NormalizeAndValidateGstin (N-37). Both GSTINs print on the same
+        // invoice PDF — the seller's in the issuer block, the buyer's in Bill To — so
+        // normalising them differently would render the same kind of identifier two ways
+        // on one document. GSTINs are canonically uppercase.
+        // NOT length/alphanumeric-validated here, deliberately, unlike the buyer side:
+        // this is a Super-Admin-only settings screen, and an over-strict check that
+        // refuses to save would block the one path that unblocks invoicing at all (H-1).
+        settings.Gstin = Trim(request.Gstin)?.ToUpperInvariant();
         settings.RegisteredAddress = Trim(request.RegisteredAddress);
         settings.BankAccountName = Trim(request.BankAccountName);
         settings.BankAccountNumber = Trim(request.BankAccountNumber);

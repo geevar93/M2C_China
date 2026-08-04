@@ -28,6 +28,9 @@ export interface CustomerListItem {
 
 export interface CustomerDetail extends CustomerListItem {
   email: string | null;
+  /** Buyer's GST registration number (N-37). `string | null`, max length 15.
+   *  Deliberately NOT on CustomerListItem — the list payload stays lean. */
+  gstin: string | null;
   notes: string | null;
   externalMarketplace: string | null;
   externalOrderRef: string | null;
@@ -72,6 +75,8 @@ export interface CreateCustomerRequest {
   businessName: string;
   phone: string;
   email?: string | null;
+  /** N-37. `string | null`, max length 15; server stores it uppercased. */
+  gstin?: string | null;
   city?: string | null;
   region?: string | null;
   sourceChannel: string;

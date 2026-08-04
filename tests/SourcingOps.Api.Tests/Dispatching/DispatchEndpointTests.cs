@@ -50,7 +50,8 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
             StatusId: md.LeadStatuses.OrderBy(s => s.SortOrder).First().Id,
             CategoryIds: null, OwnerUserId: null, Tags: null, Notes: null,
             ExternalMarketplace: null, ExternalOrderRef: null, ExternalSupplierName: null,
-            ExternalOrderValue: null, ExternalOrderCurrency: null, ExternalOrderDate: null);
+            ExternalOrderValue: null, ExternalOrderCurrency: null, ExternalOrderDate: null,
+            Gstin: null);
         var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers", request);
         await response.EnsureSuccessOrThrowWithBodyAsync();
         return (await response.Content.ReadFromJsonAsync<CustomerDetailDto>())!;

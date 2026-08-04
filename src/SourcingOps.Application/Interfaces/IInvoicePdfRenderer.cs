@@ -21,6 +21,7 @@ public sealed record InvoicePdfModel(
     string CustomerName,
     string? CustomerCity,
     string? CustomerRegion,
+    string? CustomerGstin,
     string? LineDescription,
     decimal Amount,
     decimal TaxAmount,

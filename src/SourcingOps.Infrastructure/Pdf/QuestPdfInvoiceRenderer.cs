@@ -63,6 +63,10 @@ public sealed class QuestPdfInvoiceRenderer : IInvoicePdfRenderer
                     {
                         col.Item().Text(location);
                     }
+                    if (!string.IsNullOrWhiteSpace(model.CustomerGstin))
+                    {
+                        col.Item().Text($"GSTIN: {model.CustomerGstin}");
+                    }
 
                     col.Item().PaddingTop(15).LineHorizontal(0.5f);
 

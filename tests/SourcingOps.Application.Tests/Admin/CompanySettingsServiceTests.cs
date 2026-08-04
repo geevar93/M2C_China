@@ -90,4 +90,23 @@ public class CompanySettingsServiceTests
 
         result.Gstin.Should().BeNull();
     }
+
+    /// <summary>
+    /// N-37: the SELLER's GSTIN is uppercased on save, matching the buyer-side rule in
+    /// <c>CustomerService.NormalizeAndValidateGstin</c>. Both print on the same invoice PDF,
+    /// so they must not normalise differently. Literal assertion (D-64) — not recomputed
+    /// through the helper under test.
+    /// </summary>
+    [Fact]
+    public async Task UpsertAsync_LowercaseGstin_IsStoredUppercased()
+    {
+        using var db = TestDbContextFactory.Create();
+        db.Users.Add(new User { Id = Actor, Name = "Priya Sharma", Email = $"admin-{Guid.NewGuid():N}@example.com", IsActive = true, CreatedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db, out _);
+
+        var result = await sut.UpsertAsync(ValidRequest() with { Gstin = "  29bbbbb1111b2z6  " }, Actor);
+
+        result.Gstin.Should().Be("29BBBBB1111B2Z6");
+    }
 }

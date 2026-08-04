@@ -45,7 +45,7 @@ public class ShipmentDocumentsEndpointTests : IClassFixture<AdminSeededFixture>
             CategoryIds: null, OwnerUserId: null, Tags: null, Notes: null,
             ExternalMarketplace: null, ExternalOrderRef: null, ExternalSupplierName: null,
             ExternalOrderValue: null, ExternalOrderCurrency: null, ExternalOrderDate: null,
-            ConfirmDuplicate: true);
+            Gstin: null, ConfirmDuplicate: true);
         var customerResponse = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers", customerRequest);
         await customerResponse.EnsureSuccessOrThrowWithBodyAsync();
         using var doc = JsonDocument.Parse(await customerResponse.Content.ReadAsStringAsync());

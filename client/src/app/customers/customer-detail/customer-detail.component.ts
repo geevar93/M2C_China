@@ -125,6 +125,13 @@ export class CustomerDetailComponent {
       { k: 'Phone', v: c.phone },
       { k: 'Email', v: c.email ?? '—' },
       { k: 'City', v: c.city ?? '—' },
+      // Unlike the other nullable identity fields above, GSTIN renders no row
+      // at all when absent rather than an em-dash (N-37) — most customers
+      // aren't GST-registered, and a permanent "GSTIN: —" row on every
+      // customer would be more noise than signal. Same conditional-inclusion
+      // technique already used below for the freight-only external-* block,
+      // just applied to a single field instead of a group.
+      ...(c.gstin ? [{ k: 'GSTIN', v: c.gstin }] : []),
       // `sourceChannel` is a non-nullable string on the DTO, so it never hits the
       // `?? '—'` the nullable fields use — but it can be EMPTY, and an empty string
       // rendered a blank row where every neighbour shows an em-dash. Found in the

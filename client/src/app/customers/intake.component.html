@@ -73,6 +73,23 @@
           </select>
         </div>
       </div>
+      <div class="field">
+        <label for="in-gstin">GSTIN <span class="label-hint">(optional)</span></label>
+        <input
+          id="in-gstin"
+          class="field-input"
+          formControlName="gstin"
+          placeholder="e.g. 24AAAAA0000A1Z5"
+          maxlength="15"
+          (blur)="onGstinBlur()"
+          (input)="gstinServerError.set(null)"
+        />
+        @if (form.controls.gstin.touched && form.controls.gstin.invalid) {
+          <div class="field-error">GSTIN must be 15 alphanumeric characters.</div>
+        } @else if (gstinServerError()) {
+          <div class="field-error">{{ gstinServerError() }}</div>
+        }
+      </div>
     </div>
 
     <div class="card intake-card">

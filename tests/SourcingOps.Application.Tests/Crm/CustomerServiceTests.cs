@@ -83,7 +83,8 @@ public class CustomerServiceTests
         ExternalSupplierName: null,
         ExternalOrderValue: null,
         ExternalOrderCurrency: null,
-        ExternalOrderDate: null);
+        ExternalOrderDate: null,
+        Gstin: null);
 
     // ---- Create (E4-01…E4-05) --------------------------------------------------
 
@@ -123,6 +124,120 @@ public class CustomerServiceTests
         var outcome = await sut.CreateAsync(ValidCifRequest(f, phone: "098250-41122"), Actor);
 
         outcome.Created!.Phone.Should().Be("+919825041122");
+    }
+
+    // ---- GSTIN (N-37) --------------------------------------------------------------
+
+    [Fact]
+    public async Task CreateAsync_WithGstin_RoundTripsOnDetail()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+        var request = ValidCifRequest(f) with { Gstin = "27ABCDE1234F1Z5" };
+
+        var outcome = await sut.CreateAsync(request, Actor);
+
+        outcome.Created!.Gstin.Should().Be("27ABCDE1234F1Z5");
+    }
+
+    /// <summary>The single most important property of this field: omitting it must still succeed, stored as null.</summary>
+    [Fact]
+    public async Task CreateAsync_WithoutGstin_Succeeds_StoredAsNull()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+        var request = ValidCifRequest(f) with { Gstin = null };
+
+        var outcome = await sut.CreateAsync(request, Actor);
+
+        outcome.Created.Should().NotBeNull();
+        outcome.Created!.Gstin.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CreateAsync_LowercaseGstinWithSurroundingWhitespace_IsStoredTrimmedAndUppercased()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+        var request = ValidCifRequest(f) with { Gstin = "  27abcde1234f1z5  " };
+
+        var outcome = await sut.CreateAsync(request, Actor);
+
+        outcome.Created!.Gstin.Should().Be("27ABCDE1234F1Z5");
+    }
+
+    /// <summary>D-70 precedent (CompanySettings): a cleared/blank value is the same state as never having set one.</summary>
+    [Fact]
+    public async Task CreateAsync_BlankGstin_TrimsToNull_NotEmptyString()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+        var request = ValidCifRequest(f) with { Gstin = "   " };
+
+        var outcome = await sut.CreateAsync(request, Actor);
+
+        outcome.Created!.Gstin.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("27ABCDE1234F1Z")]    // 14 chars — too short
+    [InlineData("27ABCDE1234F1Z55")] // 16 chars — too long
+    public async Task CreateAsync_GstinWrongLength_ThrowsValidationException_WithGstinFieldKey(string invalidGstin)
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+        var request = ValidCifRequest(f) with { Gstin = invalidGstin };
+
+        var act = async () => await sut.CreateAsync(request, Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("gstin");
+    }
+
+    [Fact]
+    public async Task CreateAsync_GstinWithNonAlphanumericCharacter_ThrowsValidationException_WithGstinFieldKey()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+        var request = ValidCifRequest(f) with { Gstin = "27ABCDE1234F1Z-" };
+
+        var act = async () => await sut.CreateAsync(request, Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("gstin");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_AddingGstinToCustomerCreatedWithoutOne_RoundTripsOnDetail()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+        var created = await sut.CreateAsync(ValidCifRequest(f) with { Gstin = null }, Actor);
+        var updateRequest = UpdateRequestFrom(created.Created!, f.Cif.Id, f.New.Id) with { Gstin = "29XYZAB5678C1Z9" };
+
+        var updated = await sut.UpdateAsync(created.Created!.Id, updateRequest, Actor);
+
+        updated!.Gstin.Should().Be("29XYZAB5678C1Z9");
+    }
+
+    /// <summary>Optionality holds on update too: clearing a previously-set GSTIN back to null must still succeed.</summary>
+    [Fact]
+    public async Task UpdateAsync_ClearingGstin_Succeeds_StoredAsNull()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+        var created = await sut.CreateAsync(ValidCifRequest(f) with { Gstin = "27ABCDE1234F1Z5" }, Actor);
+        var updateRequest = UpdateRequestFrom(created.Created!, f.Cif.Id, f.New.Id) with { Gstin = null };
+
+        var updated = await sut.UpdateAsync(created.Created!.Id, updateRequest, Actor);
+
+        updated!.Gstin.Should().BeNull();
     }
 
     [Fact]
@@ -284,7 +399,8 @@ public class CustomerServiceTests
         ExternalSupplierName: d.ExternalSupplierName,
         ExternalOrderValue: d.ExternalOrderValue,
         ExternalOrderCurrency: d.ExternalOrderCurrency,
-        ExternalOrderDate: d.ExternalOrderDate);
+        ExternalOrderDate: d.ExternalOrderDate,
+        Gstin: d.Gstin);
 
     [Fact]
     public async Task UpdateAsync_UnknownId_ReturnsNull()
@@ -297,7 +413,8 @@ public class CustomerServiceTests
             Name: "X", BusinessName: null, Phone: "9000000000", Email: null, City: null, Region: null, SourceChannel: null,
             ServiceTypeId: f.Cif.Id, StatusId: f.New.Id, CategoryIds: null, Tags: null, Notes: null,
             ExternalMarketplace: null, ExternalOrderRef: null, ExternalSupplierName: null,
-            ExternalOrderValue: null, ExternalOrderCurrency: null, ExternalOrderDate: null);
+            ExternalOrderValue: null, ExternalOrderCurrency: null, ExternalOrderDate: null,
+            Gstin: null);
 
         var result = await sut.UpdateAsync(Guid.NewGuid(), request, Actor);
 

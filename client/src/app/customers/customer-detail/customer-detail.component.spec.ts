@@ -37,6 +37,7 @@ const detail: CustomerDetail = {
   tags: [],
   createdAt: '2026-02-11T00:00:00Z',
   email: null,
+  gstin: null,
   notes: null,
   externalMarketplace: null,
   externalOrderRef: null,
@@ -155,6 +156,29 @@ describe('CustomerDetailComponent', () => {
     const text: string = fixture.nativeElement.textContent;
     expect(text).toContain('Tags');
     expect(text).toContain('VIP, Repeat Buyer');
+  });
+
+  it('renders the GSTIN row when present (N-37)', () => {
+    configure();
+    fixture.detectChanges();
+    httpMock.expectOne((r) => r.url === '/api/v1/master-data').flush(MASTER_DATA);
+    httpMock.expectOne((r) => r.url === '/api/v1/customers/cust-1').flush({ ...detail, gstin: '24AAAAA0000A1Z5' });
+    httpMock.expectOne((r) => r.url === '/api/v1/customers/cust-1/timeline').flush(timeline);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.profileFields()).toContain({ k: 'GSTIN', v: '24AAAAA0000A1Z5' });
+    expect(fixture.nativeElement.textContent).toContain('24AAAAA0000A1Z5');
+  });
+
+  it('renders no GSTIN row at all when gstin is null (N-37)', () => {
+    configure();
+    fixture.detectChanges();
+    flushAll();
+    fixture.detectChanges();
+
+    const keys = fixture.componentInstance.profileFields().map((f) => f.k);
+    expect(keys).not.toContain('GSTIN');
+    expect(fixture.nativeElement.textContent).not.toContain('GSTIN');
   });
 
   it('posts a note and reloads the timeline on save', () => {

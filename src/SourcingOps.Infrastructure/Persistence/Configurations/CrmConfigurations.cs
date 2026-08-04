@@ -12,6 +12,7 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         b.HasKey(x => x.Id);
         b.Property(x => x.Name).IsRequired().HasMaxLength(200);
         b.Property(x => x.Phone).IsRequired().HasMaxLength(32);
+        b.Property(x => x.Gstin).HasMaxLength(15);
         b.Property(x => x.Tags).HasColumnType("text[]");
         b.HasIndex(x => x.Phone); // FR-CRM-09 duplicate detection
         b.HasIndex(x => x.CreatedAt);

@@ -28,6 +28,7 @@ describe('CustomersService', () => {
   const detail: CustomerDetail = {
     ...listItem,
     email: null,
+    gstin: null,
     notes: null,
     externalMarketplace: null,
     externalOrderRef: null,
