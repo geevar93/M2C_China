@@ -1,12 +1,16 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import {
+  AdjustmentEntry,
+  AdjustmentListResult,
   CreateInventoryItemRequest,
   InboundEntry,
   InventoryItem,
   InventoryListParams,
   InventoryListResponse,
+  RecordAdjustmentRequest,
+  RecordAdjustmentResult,
   RecordInboundRequest,
   RecordInboundResult,
   UpdateInventoryItemRequest
@@ -19,6 +23,11 @@ import {
  *
  * Gated on `Inventory.View` (reads) / `Inventory.Edit` (writes) — enforced
  * server-side; this service does not duplicate that check client-side.
+ * `recordAdjustment` is the one exception: it sits behind its own
+ * `Inventory.Adjust` policy (N-38, confirmed in `InventoryController`), not
+ * `Inventory.Edit` — a business can grant "record physical counts" without
+ * granting full item edit rights, so `InventoryComponent` gates that action
+ * on a separate `canAdjust` check, not `canEdit`.
  */
 @Injectable({ providedIn: 'root' })
 export class InventoryService {
@@ -59,5 +68,15 @@ export class InventoryService {
 
   listInbound(id: string): Observable<InboundEntry[]> {
     return this.api.get<InboundEntry[]>(`/inventory/${id}/inbound`);
+  }
+
+  /** Writes an `inventory_adjustments` row and sets `onHandQty` to `countedQty` in one transaction; returns both the adjustment and the re-computed item (N-38, `Inventory.Adjust`-gated — see this class's doc comment). */
+  recordAdjustment(id: string, request: RecordAdjustmentRequest): Observable<RecordAdjustmentResult> {
+    return this.api.post<RecordAdjustmentResult>(`/inventory/${id}/adjustments`, request);
+  }
+
+  /** Newest first per the N-38 contract. Unwraps the API's `{ items: [...] }` envelope (`InventoryStockAdjustmentListResultDto`) — unlike `listInbound`, this endpoint doesn't return a bare array. */
+  listAdjustments(id: string): Observable<AdjustmentEntry[]> {
+    return this.api.get<AdjustmentListResult>(`/inventory/${id}/adjustments`).pipe(map((res) => res.items));
   }
 }

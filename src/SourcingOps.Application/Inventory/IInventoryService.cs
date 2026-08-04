@@ -19,4 +19,10 @@ public interface IInventoryService
 
     /// <summary>E7-02: the item's inbound entries, newest first. Null when the item does not exist.</summary>
     Task<InventoryInboundEntryListResultDto?> ListInboundEntriesAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>N-38: records a physical-count correction and sets on-hand quantity to the counted value in one transaction.</summary>
+    Task<RecordAdjustmentResultDto?> RecordAdjustmentAsync(Guid id, RecordAdjustmentRequest request, Guid actorUserId, CancellationToken ct = default);
+
+    /// <summary>N-38: the item's stock-adjustment history, newest first. Null when the item does not exist.</summary>
+    Task<InventoryStockAdjustmentListResultDto?> ListStockAdjustmentsAsync(Guid id, CancellationToken ct = default);
 }

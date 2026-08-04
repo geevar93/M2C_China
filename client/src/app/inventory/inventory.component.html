@@ -94,6 +94,9 @@
                   <button type="button" class="row-action-link" (click)="openInboundForRow(r)">+ Inbound</button>
                   <button type="button" class="row-action-link" (click)="openEdit(r)">Edit</button>
                 }
+                @if (canAdjust()) {
+                  <button type="button" class="row-action-link" (click)="openAdjustForRow(r)">Adjust Stock</button>
+                }
               </div>
             </td>
             <td class="muted">{{ r.categoryName }}</td>
@@ -152,5 +155,9 @@
       (closed)="cancelInbound()"
       (recorded)="onInboundRecorded($event)"
     ></app-inbound-dialog>
+  }
+
+  @if (adjustTargetItem(); as ai) {
+    <app-adjust-dialog [item]="ai" (closed)="cancelAdjust()" (adjusted)="onAdjusted($event)"></app-adjust-dialog>
   }
 </div>

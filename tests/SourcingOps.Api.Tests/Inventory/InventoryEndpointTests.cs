@@ -217,6 +217,172 @@ public class InventoryEndpointTests : IClassFixture<AdminSeededFixture>
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // ---- Stock adjustments (N-38) -----------------------------------------------------------
+
+    [Fact]
+    public async Task RecordAdjustment_Returns201_SetsOnHand_AndIsListable()
+    {
+        var md = await GetMasterDataAsync();
+        var created = await CreateItemAsync(md, "Adjust-Item", onHand: 260m, reorder: 400m, unitCost: 1400m);
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync($"/api/v1/inventory/{created.Id}/adjustments",
+            new RecordAdjustmentRequest(300m, "Physical count found more stock", new DateOnly(2026, 7, 21)));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = (await response.Content.ReadFromJsonAsync<RecordAdjustmentResultDto>())!;
+        body.Item.OnHandQty.Should().Be(300m);
+        body.Adjustment.PreviousQty.Should().Be(260m);
+        body.Adjustment.Delta.Should().Be(40m);
+        body.Adjustment.Reason.Should().Be("Physical count found more stock");
+        body.Adjustment.AdjustedOn.Should().Be(new DateOnly(2026, 7, 21));
+
+        var listResponse = await _fixture.AssociateClient.GetAsync($"/api/v1/inventory/{created.Id}/adjustments");
+        listResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var history = (await listResponse.Content.ReadFromJsonAsync<InventoryStockAdjustmentListResultDto>())!;
+        history.Items.Should().ContainSingle().Which.Reason.Should().Be("Physical count found more stock");
+    }
+
+    [Fact]
+    public async Task RecordAdjustment_AdjustingDown_SetsOnHandAndNegativeDelta()
+    {
+        var md = await GetMasterDataAsync();
+        var created = await CreateItemAsync(md, "Adjust-Down-Item", onHand: 260m, reorder: 400m);
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync($"/api/v1/inventory/{created.Id}/adjustments",
+            new RecordAdjustmentRequest(200m, "Shrinkage found on count", null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = (await response.Content.ReadFromJsonAsync<RecordAdjustmentResultDto>())!;
+        body.Item.OnHandQty.Should().Be(200m);
+        body.Adjustment.Delta.Should().Be(-60m);
+    }
+
+    [Fact]
+    public async Task RecordAdjustment_FromNegativeStock_CanCountUpToPositive()
+    {
+        // D-35: existing on-hand can be negative (oversold). Only the counted VALUE is
+        // constrained to non-negative; adjusting FROM negative TO positive must work.
+        var md = await GetMasterDataAsync();
+
+        // No shipment-independent route to drive on-hand negative in a fresh test item, so this
+        // uses an initial negative opening balance instead — CreateAsync places no floor on it.
+        var negativeCreate = new CreateInventoryItemRequest(
+            $"Adjust-Negative-{Guid.NewGuid():N}", null, null,
+            md.Categories.First(c => c.Name == "Jewellery").Id, null, "pcs", -40m, 200m, null);
+        var createResponse = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/inventory", negativeCreate);
+        await createResponse.EnsureSuccessOrThrowWithBodyAsync();
+        var negativeItem = (await createResponse.Content.ReadFromJsonAsync<InventoryItemDto>())!;
+        negativeItem.OnHandQty.Should().Be(-40m);
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync($"/api/v1/inventory/{negativeItem.Id}/adjustments",
+            new RecordAdjustmentRequest(15m, "Physical recount after oversell", null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = (await response.Content.ReadFromJsonAsync<RecordAdjustmentResultDto>())!;
+        body.Item.OnHandQty.Should().Be(15m);
+        body.Adjustment.PreviousQty.Should().Be(-40m);
+        body.Adjustment.Delta.Should().Be(55m);
+    }
+
+    [Fact]
+    public async Task RecordAdjustment_ZeroDelta_IsStillRecorded()
+    {
+        var md = await GetMasterDataAsync();
+        var created = await CreateItemAsync(md, "Adjust-NoOp-Item", onHand: 100m, reorder: 10m);
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync($"/api/v1/inventory/{created.Id}/adjustments",
+            new RecordAdjustmentRequest(100m, "Count matched exactly", null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = (await response.Content.ReadFromJsonAsync<RecordAdjustmentResultDto>())!;
+        body.Adjustment.Delta.Should().Be(0m);
+
+        var listResponse = await _fixture.AssociateClient.GetAsync($"/api/v1/inventory/{created.Id}/adjustments");
+        var history = (await listResponse.Content.ReadFromJsonAsync<InventoryStockAdjustmentListResultDto>())!;
+        history.Items.Should().ContainSingle("a no-op adjustment is still a meaningful audit fact, not silently skipped");
+    }
+
+    [Fact]
+    public async Task RecordAdjustment_NegativeCountedQty_Returns400ProblemDetails()
+    {
+        var md = await GetMasterDataAsync();
+        var created = await CreateItemAsync(md, "Adjust-BadQty-Item");
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync($"/api/v1/inventory/{created.Id}/adjustments",
+            new RecordAdjustmentRequest(-1m, "Bad count", null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+    }
+
+    [Fact]
+    public async Task RecordAdjustment_BlankReason_Returns400ProblemDetails()
+    {
+        var md = await GetMasterDataAsync();
+        var created = await CreateItemAsync(md, "Adjust-BadReason-Item");
+
+        var response = await _fixture.AssociateClient.PostAsJsonAsync($"/api/v1/inventory/{created.Id}/adjustments",
+            new RecordAdjustmentRequest(50m, "   ", null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+    }
+
+    [Fact]
+    public async Task RecordAdjustment_UnknownItem_Returns404()
+    {
+        var response = await _fixture.AssociateClient.PostAsJsonAsync($"/api/v1/inventory/{Guid.NewGuid()}/adjustments",
+            new RecordAdjustmentRequest(10m, "Count", null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task ListAdjustments_UnknownItem_Returns404()
+    {
+        var response = await _fixture.AssociateClient.GetAsync($"/api/v1/inventory/{Guid.NewGuid()}/adjustments");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task NoPermissionCaller_Gets403_OnRecordAdjustment()
+    {
+        var client = await GetNoPermissionClientAsync();
+        var response = await client.PostAsJsonAsync($"/api/v1/inventory/{Guid.NewGuid()}/adjustments",
+            new RecordAdjustmentRequest(10m, "Count", null));
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // NOTE: the DoD also implies "a caller with Inventory.View but NOT Inventory.Adjust gets
+    // 403 on POST /adjustments" — genuinely untestable with the two seeded roles (Associate
+    // holds every non-Admin.* permission, including Inventory.Adjust, as one bloc; SuperAdmin
+    // holds everything). Same limitation InvoicesEndpointTests already records for the
+    // Invoicing.Edit/Invoicing.MarkPaid split. GET history working with only Inventory.View is
+    // covered by every read above (AssociateClient), which is the permission that actually gates it.
+
+    [Fact]
+    public async Task ListAdjustments_RawJson_ContainsExpectedWireNames()
+    {
+        var md = await GetMasterDataAsync();
+        var created = await CreateItemAsync(md, "Adjust-WireNames-Item", onHand: 50m, reorder: 10m);
+        var recordResponse = await _fixture.AssociateClient.PostAsJsonAsync($"/api/v1/inventory/{created.Id}/adjustments",
+            new RecordAdjustmentRequest(60m, "Wire-name check", null));
+        await recordResponse.EnsureSuccessOrThrowWithBodyAsync();
+
+        var response = await _fixture.AssociateClient.GetAsync($"/api/v1/inventory/{created.Id}/adjustments");
+        await response.EnsureSuccessOrThrowWithBodyAsync();
+        var raw = await response.Content.ReadAsStringAsync();
+
+        foreach (var name in new[]
+        {
+            "\"countedQty\"", "\"previousQty\"", "\"delta\"", "\"reason\"", "\"adjustedOn\"", "\"adjustedAt\""
+        })
+        {
+            raw.Should().Contain(name, "the Angular client reads this exact property name off /inventory/{id}/adjustments");
+        }
+    }
+
     // ---- List, filters and the D-k summary (E7-03/E7-04) --------------------------------------------
 
     [Fact]

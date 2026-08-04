@@ -147,6 +147,39 @@ public sealed record RecordInboundRequest(
     DateOnly? EntryDate,
     string? Reference);
 
+/// <summary>A recorded physical-count correction (N-38). <see cref="PreviousQty"/> and <see cref="Delta"/> are stored, not computed — see <c>InventoryStockAdjustment</c>'s doc comment.</summary>
+public sealed record InventoryStockAdjustmentDto(
+    Guid Id,
+    Guid InventoryItemId,
+    decimal CountedQty,
+    decimal PreviousQty,
+    decimal Delta,
+    string Reason,
+    DateOnly AdjustedOn,
+    DateTime AdjustedAt,
+    Guid AdjustedByUserId,
+    string AdjustedByName);
+
+public sealed record InventoryStockAdjustmentListResultDto(IReadOnlyList<InventoryStockAdjustmentDto> Items);
+
+/// <summary>
+/// Returned by <c>POST /inventory/{id}/adjustments</c>. Carries the item back alongside the new
+/// adjustment record, same reason <see cref="RecordInboundResultDto"/> does for inbound entries —
+/// the caller re-renders both <c>onHandQty</c> and the history in one round trip.
+/// </summary>
+public sealed record RecordAdjustmentResultDto(InventoryStockAdjustmentDto Adjustment, InventoryItemDto Item);
+
+/// <summary>
+/// N-38. <see cref="AdjustedOn"/> defaults to today (UTC) when omitted, matching
+/// <see cref="RecordInboundRequest.EntryDate"/>'s convention. <see cref="Reason"/> is
+/// REQUIRED (unlike <see cref="RecordInboundRequest.Reference"/>) — a stock correction with no
+/// stated reason is precisely the audit hole this feature exists to close.
+/// </summary>
+public sealed record RecordAdjustmentRequest(
+    decimal CountedQty,
+    string Reason,
+    DateOnly? AdjustedOn);
+
 /// <summary>E7-03: search (name + sku) plus the three named filters and paging.</summary>
 public sealed record InventoryListQuery(
     string? Search,

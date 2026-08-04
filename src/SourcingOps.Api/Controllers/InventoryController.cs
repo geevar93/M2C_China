@@ -94,4 +94,26 @@ public sealed class InventoryController : ControllerBase
         var result = await _service.ListInboundEntriesAsync(id, ct);
         return result is null ? NotFound() : Ok(result);
     }
+
+    /// <summary>
+    /// N-38: records a physical-count correction and sets on-hand quantity to the counted
+    /// value in one transaction. Gated on <see cref="PermissionCodes.InventoryAdjust"/> rather
+    /// than <see cref="PermissionCodes.InventoryEdit"/> — see that constant's doc comment.
+    /// </summary>
+    [HttpPost("{id:guid}/adjustments")]
+    [Authorize(Policy = PermissionCodes.InventoryAdjust)]
+    public async Task<IActionResult> RecordAdjustment(Guid id, [FromBody] RecordAdjustmentRequest request, CancellationToken ct)
+    {
+        var result = await _service.RecordAdjustmentAsync(id, request, User.GetRequiredUserId(), ct);
+        return result is null ? NotFound() : StatusCode(StatusCodes.Status201Created, result);
+    }
+
+    /// <summary>N-38: the item's stock-adjustment history, newest first. Stays on Inventory.View — viewing history is not restricted.</summary>
+    [HttpGet("{id:guid}/adjustments")]
+    [Authorize(Policy = PermissionCodes.InventoryView)]
+    public async Task<IActionResult> ListAdjustments(Guid id, CancellationToken ct)
+    {
+        var result = await _service.ListStockAdjustmentsAsync(id, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
 }

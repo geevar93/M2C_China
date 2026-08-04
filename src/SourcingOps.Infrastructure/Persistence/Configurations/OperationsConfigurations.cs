@@ -84,6 +84,34 @@ public class InventoryInboundEntryConfiguration : IEntityTypeConfiguration<Inven
     }
 }
 
+/// <summary>
+/// N-38. Mirrors <see cref="InventoryInboundEntryConfiguration"/> exactly: the FK index EF
+/// Core creates automatically on <see cref="InventoryStockAdjustment.InventoryItemId"/> serves
+/// the only query made ("this item's adjustment history, newest first") once paired with the
+/// explicit AdjustedOn index below.
+/// </summary>
+public class InventoryStockAdjustmentConfiguration : IEntityTypeConfiguration<InventoryStockAdjustment>
+{
+    public void Configure(EntityTypeBuilder<InventoryStockAdjustment> b)
+    {
+        b.ToTable("inventory_stock_adjustments");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.CountedQty).HasPrecision(18, 3);
+        b.Property(x => x.PreviousQty).HasPrecision(18, 3);
+        b.Property(x => x.Delta).HasPrecision(18, 3);
+        b.Property(x => x.Reason).IsRequired().HasMaxLength(500);
+
+        // DateOnly -> Postgres `date`, matching InventoryInboundEntryConfiguration's EntryDate.
+        // AdjustedOn is the business date of the count; AdjustedAt is when it was keyed in.
+        b.Property(x => x.AdjustedOn).HasColumnType("date");
+
+        b.HasIndex(x => new { x.InventoryItemId, x.AdjustedOn });
+
+        b.HasOne(x => x.InventoryItem).WithMany(i => i.StockAdjustments).HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne(x => x.AdjustedByUser).WithMany().HasForeignKey(x => x.AdjustedByUserId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 public class ShipmentConfiguration : IEntityTypeConfiguration<Shipment>
 {
     public void Configure(EntityTypeBuilder<Shipment> b)

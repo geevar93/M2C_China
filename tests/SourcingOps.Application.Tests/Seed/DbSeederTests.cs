@@ -48,7 +48,7 @@ public class DbSeederTests
         "Customers.View", "Customers.Edit",
         "Vendors.View", "Vendors.Edit",
         "Catalogs.View", "Catalogs.Edit",
-        "Inventory.View", "Inventory.Edit",
+        "Inventory.View", "Inventory.Edit", "Inventory.Adjust",
         "Shipments.View", "Shipments.Edit",
         "Invoicing.View", "Invoicing.Edit", "Invoicing.MarkPaid",
         "Dispatch.Send",
@@ -97,7 +97,7 @@ public class DbSeederTests
             "Customers.View", "Customers.Edit",
             "Vendors.View", "Vendors.Edit",
             "Catalogs.View", "Catalogs.Edit",
-            "Inventory.View", "Inventory.Edit",
+            "Inventory.View", "Inventory.Edit", "Inventory.Adjust",
             "Shipments.View", "Shipments.Edit",
             "Invoicing.View", "Invoicing.Edit", "Invoicing.MarkPaid",
             "Dispatch.Send",
@@ -247,7 +247,7 @@ public class DbSeederTests
         // twice did not duplicate", and a count derived from the seeder's own input cannot
         // distinguish "17 rows, correct" from "17 rows, wrong set".
         db.Permissions.Select(p => p.Code).Should().BeEquivalentTo(ExpectedPermissionCodes); // no duplicates
-        db.Permissions.Should().HaveCount(17);
+        db.Permissions.Should().HaveCount(18);
         db.Roles.Select(r => r.Name).Should().BeEquivalentTo(RoleNames.All);
         db.Categories.Count().Should().Be(6);
         db.Users.Count(u => u.Email == "owner@example.com").Should().Be(1);

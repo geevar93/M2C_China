@@ -5,10 +5,11 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
 import { MasterDataService } from '../core/services/master-data.service';
 import { extractErrorMessage } from '../core/services/problem-details.util';
+import { AdjustDialogComponent, AdjustTargetItem } from './adjust-dialog/adjust-dialog.component';
 import { InboundDialogComponent, InboundTargetItem } from './inbound-dialog/inbound-dialog.component';
 import { ItemFormDialogComponent } from './item-form-dialog/item-form-dialog.component';
 import { InventoryService } from './services/inventory.service';
-import { InventoryItem, InventorySummary, RecordInboundResult, StockLevel } from './models/inventory.models';
+import { InventoryItem, InventorySummary, RecordAdjustmentResult, RecordInboundResult, StockLevel } from './models/inventory.models';
 import { formatQty, formatStockValue } from './utils/format.util';
 import { formatInrCompact } from '../shared/utils/money.util';
 import { stockBarWidth, stockLevelColor, stockLevelTextColor } from './utils/stock-level.util';
@@ -48,7 +49,7 @@ const EMPTY_SUMMARY: InventorySummary = { onHandValue: 0, itemCount: 0, lowStock
 @Component({
   selector: 'app-inventory',
   standalone: true,
-  imports: [RouterLink, ItemFormDialogComponent, InboundDialogComponent],
+  imports: [RouterLink, ItemFormDialogComponent, InboundDialogComponent, AdjustDialogComponent],
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.scss'
 })
@@ -60,6 +61,8 @@ export class InventoryComponent {
   readonly categoryOptions = toSignal(this.masterDataService.categoryOptions(), { initialValue: [] });
 
   readonly canEdit = computed(() => this.auth.hasPermission('Inventory.Edit'));
+  /** N-38 — recording a stock adjustment sits behind its own `Inventory.Adjust` policy server-side (see `InventoryController.RecordAdjustment`), distinct from `Inventory.Edit`: a business can grant "record physical counts" without granting full item edit rights. */
+  readonly canAdjust = computed(() => this.auth.hasPermission('Inventory.Adjust'));
 
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
@@ -103,6 +106,8 @@ export class InventoryComponent {
   readonly inboundCandidates = computed<InboundTargetItem[]>(() =>
     this.items().map((i) => ({ id: i.id, name: i.name, sku: i.sku, unit: i.unit }))
   );
+
+  readonly adjustTargetItem = signal<AdjustTargetItem | null>(null);
 
   private readonly search$ = new Subject<string>();
 
@@ -200,6 +205,23 @@ export class InventoryComponent {
   onInboundRecorded(result: RecordInboundResult): void {
     this.inboundOpen.set(false);
     this.inboundPresetItem.set(null);
+    this.items.update((items) => items.map((i) => (i.id === result.item.id ? result.item : i)));
+  }
+
+  /** N-38 — same per-row entry point convention as `openInboundForRow`: the row already carries everything the dialog needs, including `onHandQty` for the live delta preview. */
+  openAdjustForRow(row: InventoryRow): void {
+    const item = this.items().find((i) => i.id === row.id);
+    if (!item) return;
+    this.adjustTargetItem.set({ id: item.id, name: item.name, sku: item.sku, unit: item.unit, onHandQty: item.onHandQty });
+  }
+
+  cancelAdjust(): void {
+    this.adjustTargetItem.set(null);
+  }
+
+  /** Same "patch from the response" convention as `onInboundRecorded` — the assumed `RecordAdjustmentResult` shape (see its doc comment) carries the re-computed item. */
+  onAdjusted(result: RecordAdjustmentResult): void {
+    this.adjustTargetItem.set(null);
     this.items.update((items) => items.map((i) => (i.id === result.item.id ? result.item : i)));
   }
 

@@ -37,6 +37,7 @@ public class InventoryItem
 
     public ICollection<ShipmentLine> ShipmentLines { get; set; } = new List<ShipmentLine>();
     public ICollection<InventoryInboundEntry> InboundEntries { get; set; } = new List<InventoryInboundEntry>();
+    public ICollection<InventoryStockAdjustment> StockAdjustments { get; set; } = new List<InventoryStockAdjustment>();
 }
 
 /// <summary>
@@ -68,4 +69,49 @@ public class InventoryInboundEntry
     public User RecordedBy { get; set; } = null!;
 
     public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// A recorded physical-count correction (N-38). D-42 already made deliberate that
+/// <see cref="InventoryItem.OnHandQty"/> moves only through <see cref="InventoryInboundEntry"/>
+/// and shipment lines — a stock-take discrepancy had no way to correct it. This is NOT an
+/// editable quantity field: it is the same durable, queryable business record shape as
+/// <see cref="InventoryInboundEntry"/> (see that type's doc comment), so the fact a count ever
+/// disagreed with the system stays visible rather than being silently overwritten.
+///
+/// <see cref="PreviousQty"/> and <see cref="Delta"/> are STORED, not recomputed. Unlike stock
+/// value elsewhere in this module (always computed from current state), the point of this
+/// record is what the numbers were AT THAT MOMENT — recomputing later from whatever
+/// <see cref="InventoryItem.OnHandQty"/> happens to be now would defeat the audit purpose.
+///
+/// Recording an adjustment sets <see cref="InventoryItem.OnHandQty"/> to
+/// <see cref="CountedQty"/> in the same transaction and is additionally audit-logged, exactly
+/// as <see cref="InventoryInboundEntry"/> does for inbound receipts.
+/// </summary>
+public class InventoryStockAdjustment
+{
+    public Guid Id { get; set; }
+
+    public Guid InventoryItemId { get; set; }
+    public InventoryItem InventoryItem { get; set; } = null!;
+
+    /// <summary>What the human physically counted. Never negative — a count of nothing is zero, not less.</summary>
+    public decimal CountedQty { get; set; }
+
+    /// <summary>Snapshot of <see cref="InventoryItem.OnHandQty"/> immediately before this adjustment applied. Can be negative (D-35 oversold).</summary>
+    public decimal PreviousQty { get; set; }
+
+    /// <summary>Stored, not computed: <c>CountedQty - PreviousQty</c> at the moment this was recorded. May be zero — "we counted and it was correct" is still a fact worth keeping.</summary>
+    public decimal Delta { get; set; }
+
+    /// <summary>Free text, required — a correction with no stated reason is exactly the audit hole this feature closes.</summary>
+    public string Reason { get; set; } = string.Empty;
+
+    /// <summary>The business date the count happened, distinct from <see cref="AdjustedAt"/> (when it was keyed in).</summary>
+    public DateOnly AdjustedOn { get; set; }
+
+    public DateTime AdjustedAt { get; set; }
+
+    public Guid AdjustedByUserId { get; set; }
+    public User AdjustedByUser { get; set; } = null!;
 }

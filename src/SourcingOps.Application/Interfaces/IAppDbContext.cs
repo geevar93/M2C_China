@@ -40,6 +40,7 @@ public interface IAppDbContext
 
     DbSet<InventoryItem> InventoryItems { get; }
     DbSet<InventoryInboundEntry> InventoryInboundEntries { get; }
+    DbSet<InventoryStockAdjustment> InventoryStockAdjustments { get; }
 
     DbSet<Shipment> Shipments { get; }
     DbSet<ShipmentLine> ShipmentLines { get; }

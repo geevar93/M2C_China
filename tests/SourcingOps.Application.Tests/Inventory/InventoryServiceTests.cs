@@ -423,6 +423,157 @@ public class InventoryServiceTests
         result!.Items.Select(e => e.Reference).Should().ContainInOrder("newest", "middle", "oldest");
     }
 
+    // ---- N-38: stock adjustments (physical count corrections) -------------------------------
+
+    [Fact]
+    public async Task RecordAdjustmentAsync_UnknownItem_ReturnsNull()
+    {
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db, out _);
+
+        (await sut.RecordAdjustmentAsync(Guid.NewGuid(), new RecordAdjustmentRequest(10m, "Count", null), Actor)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RecordAdjustmentAsync_SetsOnHandAndRecordsPreviousAndDelta()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Item", onHand: 260m, reorder: 400m);
+        var sut = CreateSut(db, out var audit);
+
+        var adjustedOn = new DateOnly(2026, 7, 21);
+        var result = await sut.RecordAdjustmentAsync(item.Id, new RecordAdjustmentRequest(300m, "Physical count found more stock", adjustedOn), Actor);
+
+        result!.Item.OnHandQty.Should().Be(300m);
+        result.Adjustment.CountedQty.Should().Be(300m);
+        result.Adjustment.PreviousQty.Should().Be(260m);
+        result.Adjustment.Delta.Should().Be(40m);
+        result.Adjustment.Reason.Should().Be("Physical count found more stock");
+        result.Adjustment.AdjustedOn.Should().Be(adjustedOn);
+        result.Adjustment.AdjustedByUserId.Should().Be(Actor);
+        result.Adjustment.AdjustedByName.Should().Be("Acting Staff");
+
+        audit.Verify(a => a.LogAsync(Actor, "InventoryStockAdjustmentRecorded", "InventoryItem", item.Id.ToString(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RecordAdjustmentAsync_AdjustingDown_SetsOnHandAndNegativeDelta()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Item", onHand: 260m, reorder: 400m);
+        var sut = CreateSut(db, out _);
+
+        var result = await sut.RecordAdjustmentAsync(item.Id, new RecordAdjustmentRequest(200m, "Shrinkage", null), Actor);
+
+        result!.Item.OnHandQty.Should().Be(200m);
+        result.Adjustment.PreviousQty.Should().Be(260m);
+        result.Adjustment.Delta.Should().Be(-60m);
+    }
+
+    [Fact]
+    public async Task RecordAdjustmentAsync_FromNegativeStock_CanCountUpToPositive()
+    {
+        // D-35: existing OnHandQty can be negative (oversold). The counted VALUE cannot be
+        // negative, but adjusting FROM a negative on-hand TO a positive count is legitimate.
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Oversold Item", onHand: -40m, reorder: 200m);
+        var sut = CreateSut(db, out _);
+
+        var result = await sut.RecordAdjustmentAsync(item.Id, new RecordAdjustmentRequest(15m, "Physical recount", null), Actor);
+
+        result!.Item.OnHandQty.Should().Be(15m);
+        result.Adjustment.PreviousQty.Should().Be(-40m);
+        result.Adjustment.Delta.Should().Be(55m);
+    }
+
+    [Fact]
+    public async Task RecordAdjustmentAsync_ZeroDelta_IsStillRecorded()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Item", onHand: 100m, reorder: 10m);
+        var sut = CreateSut(db, out _);
+
+        var result = await sut.RecordAdjustmentAsync(item.Id, new RecordAdjustmentRequest(100m, "Count matched exactly", null), Actor);
+
+        result!.Adjustment.Delta.Should().Be(0m);
+        result.Item.OnHandQty.Should().Be(100m);
+
+        var history = await sut.ListStockAdjustmentsAsync(item.Id);
+        history!.Items.Should().ContainSingle("a no-op adjustment is still a meaningful audit fact");
+    }
+
+    [Fact]
+    public async Task RecordAdjustmentAsync_NegativeCountedQty_Throws()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Item", onHand: 10m, reorder: 1m);
+        var sut = CreateSut(db, out _);
+
+        var act = () => sut.RecordAdjustmentAsync(item.Id, new RecordAdjustmentRequest(-1m, "Bad count", null), Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("countedQty");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RecordAdjustmentAsync_BlankReason_Throws(string? reason)
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Item", onHand: 10m, reorder: 1m);
+        var sut = CreateSut(db, out _);
+
+        var act = () => sut.RecordAdjustmentAsync(item.Id, new RecordAdjustmentRequest(10m, reason!, null), Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("reason");
+    }
+
+    [Fact]
+    public async Task RecordAdjustmentAsync_OmittedAdjustedOn_DefaultsToToday()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Item", onHand: 0m, reorder: 0m);
+        var sut = CreateSut(db, out _);
+
+        var result = await sut.RecordAdjustmentAsync(item.Id, new RecordAdjustmentRequest(5m, "Opening count", null), Actor);
+
+        result!.Adjustment.AdjustedOn.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow));
+    }
+
+    [Fact]
+    public async Task ListStockAdjustmentsAsync_UnknownItem_ReturnsNull()
+    {
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db, out _);
+
+        (await sut.ListStockAdjustmentsAsync(Guid.NewGuid())).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ListStockAdjustmentsAsync_ReturnsNewestFirst()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Item", onHand: 0m, reorder: 0m);
+        var sut = CreateSut(db, out _);
+
+        await sut.RecordAdjustmentAsync(item.Id, new RecordAdjustmentRequest(10m, "oldest", new DateOnly(2026, 7, 1)), Actor);
+        await sut.RecordAdjustmentAsync(item.Id, new RecordAdjustmentRequest(10m, "newest", new DateOnly(2026, 7, 20)), Actor);
+        await sut.RecordAdjustmentAsync(item.Id, new RecordAdjustmentRequest(10m, "middle", new DateOnly(2026, 7, 10)), Actor);
+
+        var result = await sut.ListStockAdjustmentsAsync(item.Id);
+
+        result!.Items.Select(e => e.Reason).Should().ContainInOrder("newest", "middle", "oldest");
+    }
+
     // ---- E7-03: list, filters and the D-k summary --------------------------------------------------
 
     private static void SeedListScenario(AppDbContext db, Fixture f)

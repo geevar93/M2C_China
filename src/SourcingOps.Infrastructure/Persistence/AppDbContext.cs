@@ -40,6 +40,7 @@ public class AppDbContext : DbContext, IAppDbContext
 
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<InventoryInboundEntry> InventoryInboundEntries => Set<InventoryInboundEntry>();
+    public DbSet<InventoryStockAdjustment> InventoryStockAdjustments => Set<InventoryStockAdjustment>();
 
     public DbSet<Shipment> Shipments => Set<Shipment>();
     public DbSet<ShipmentLine> ShipmentLines => Set<ShipmentLine>();

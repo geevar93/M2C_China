@@ -1,0 +1,101 @@
+<div class="dialog-backdrop">
+  <div class="dialog-panel dialog-panel--narrow">
+    <div class="adj-header">
+      <div>
+        <div class="section-title">Adjust Stock</div>
+        <div class="muted">Records a correction against a physical count — this does not silently overwrite the on-hand quantity.</div>
+      </div>
+      <div class="dialog-close" (click)="cancel()">✕</div>
+    </div>
+
+    @if (error()) {
+      <div class="field-error adj-banner" role="alert">{{ error() }}</div>
+    }
+
+    <div class="field">
+      <label>Item</label>
+      <div class="field-static">{{ item.sku ? item.name + ' · ' + item.sku : item.name }}</div>
+    </div>
+
+    <div class="adj-grid-2">
+      <div class="field">
+        <label for="adj-qty">Counted Quantity <span class="muted">({{ item.unit }})</span></label>
+        <input id="adj-qty" class="field-input" inputmode="decimal" [value]="countedQty()" (input)="countedQty.set($any($event.target).value)" />
+        @if (delta() !== null) {
+          <div class="adj-delta" [style.color]="deltaColor()">{{ currentQtyLabel() }} → {{ countedQty() }} {{ item.unit }} · {{ deltaLabel() }}</div>
+        } @else {
+          <div class="field-hint">Current on-hand: {{ currentQtyLabel() }}</div>
+        }
+      </div>
+      <div class="field">
+        <label for="adj-date">Count Date <span class="muted">(optional)</span></label>
+        <input id="adj-date" type="date" class="field-input" [value]="adjustedOn()" (change)="adjustedOn.set($any($event.target).value)" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="adj-reason">Reason <span class="muted">— why the count differs</span></label>
+      <textarea
+        id="adj-reason"
+        class="field-input"
+        rows="2"
+        [value]="reason()"
+        (input)="onReasonInput($any($event.target).value)"
+        (blur)="reasonTouched.set(true)"
+      ></textarea>
+      @if (reasonTouched() && !reason().trim()) {
+        <div class="field-error">Reason is required.</div>
+      } @else if (reasonServerError()) {
+        <div class="field-error">{{ reasonServerError() }}</div>
+      }
+    </div>
+
+    <div class="adj-actions">
+      <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        {{ saving() ? 'Recording…' : 'Record Adjustment' }}
+      </button>
+    </div>
+
+    <div class="adj-history">
+      <div class="adj-history-title">Adjustment History</div>
+      @if (historyLoading()) {
+        <div class="state-panel state-panel--sm">
+          <div class="spinner"></div>
+          <span>Loading history…</span>
+        </div>
+      } @else if (historyError()) {
+        <div class="state-panel state-panel--sm">{{ historyError() }}</div>
+      } @else if (history().length === 0) {
+        <div class="state-panel state-panel--sm">No adjustments recorded yet.</div>
+      } @else {
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th class="align-right">Previous</th>
+                <th class="align-right">Counted</th>
+                <th class="align-right">Delta</th>
+                <th>Reason</th>
+                <th>By</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (h of history(); track h.id) {
+                <tr>
+                  <td class="muted">{{ formatCountDate(h.adjustedOn) }}</td>
+                  <td class="align-right muted">{{ h.previousQty }}</td>
+                  <td class="align-right"><strong>{{ h.countedQty }}</strong></td>
+                  <td class="align-right">{{ formatDelta(h) }}</td>
+                  <td>{{ h.reason }}</td>
+                  <td class="muted">{{ h.adjustedByName }} · {{ formatRecordedAt(h.adjustedAt) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  </div>
+</div>

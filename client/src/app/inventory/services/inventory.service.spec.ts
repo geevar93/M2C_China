@@ -114,4 +114,46 @@ describe('InventoryService', () => {
     expect(req.request.method).toBe('GET');
     req.flush([]);
   });
+
+  it('POSTs an adjustment and receives both the adjustment and the recomputed item (N-38)', () => {
+    service.recordAdjustment('inv-1', { countedQty: 1837, reason: 'Physical count', adjustedOn: '2026-07-29' }).subscribe();
+
+    const req = httpMock.expectOne('/api/v1/inventory/inv-1/adjustments');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ countedQty: 1837, reason: 'Physical count', adjustedOn: '2026-07-29' });
+    req.flush({
+      adjustment: {
+        id: 'adj-1',
+        countedQty: 1837,
+        previousQty: 1840,
+        delta: -3,
+        reason: 'Physical count',
+        adjustedOn: '2026-07-29',
+        adjustedAt: '2026-07-29T10:00:00Z',
+        adjustedByUserId: 'user-1',
+        adjustedByName: 'Priya Sharma'
+      },
+      item: { ...ITEM, onHandQty: 1837 }
+    });
+  });
+
+  it('GETs the adjustment history for an item and unwraps the `items` envelope', () => {
+    let received: unknown = null;
+    service.listAdjustments('inv-1').subscribe((r) => (received = r));
+    const req = httpMock.expectOne('/api/v1/inventory/inv-1/adjustments');
+    expect(req.request.method).toBe('GET');
+    const row = {
+      id: 'adj-1',
+      countedQty: 1837,
+      previousQty: 1840,
+      delta: -3,
+      reason: 'Physical count',
+      adjustedOn: '2026-07-29',
+      adjustedAt: '2026-07-29T10:00:00Z',
+      adjustedByUserId: 'user-1',
+      adjustedByName: 'Priya Sharma'
+    };
+    req.flush({ items: [row] });
+    expect(received).toEqual([row]);
+  });
 });

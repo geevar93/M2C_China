@@ -124,3 +124,57 @@ export interface RecordInboundResult {
   entry: InboundEntry;
   item: InventoryItem;
 }
+
+/**
+ * A durable, queryable record of a post-physical-count correction (N-38,
+ * `POST|GET /inventory/{id}/adjustments`). Distinct from `InboundEntry`:
+ * this reconciles `onHandQty` to what was actually counted — up, down, or
+ * unchanged — rather than adding newly received stock, and it always
+ * carries a `reason` (server-required). `delta` (`countedQty - previousQty`)
+ * can be zero; a zero-delta count is still a valid, recorded adjustment
+ * (N-38), not a no-op.
+ */
+export interface AdjustmentEntry {
+  id: string;
+  countedQty: number;
+  previousQty: number;
+  delta: number;
+  reason: string;
+  /** Bare date string (`"2026-07-29"`) — the physical count date, mirrors `InboundEntry.entryDate`'s shape. */
+  adjustedOn: string;
+  /** Full ISO-8601 timestamp of when the adjustment was recorded, distinct from `adjustedOn` (the counted date, which may be backdated). */
+  adjustedAt: string;
+  adjustedByUserId: string;
+  adjustedByName: string;
+}
+
+/**
+ * Body for `POST /inventory/{id}/adjustments`. `reason` is required
+ * server-side — a blank value returns 400 with field key `reason` (N-38).
+ * `adjustedOn` is optional; the server defaults it to today when omitted.
+ * Only `countedQty` is constrained to be non-negative (400 otherwise) — the
+ * item's on-hand quantity itself may legitimately be negative (oversold
+ * items, D-39/D-42 territory), so adjusting *from* a negative current
+ * quantity is normal and must not be blocked client-side.
+ */
+export interface RecordAdjustmentRequest {
+  countedQty: number;
+  reason: string;
+  adjustedOn?: string;
+}
+
+/**
+ * `POST /inventory/{id}/adjustments` returns both the new adjustment and the
+ * re-computed item (confirmed against `RecordAdjustmentResultDto` once the
+ * backend landed alongside this — matches the `RecordInboundResult`
+ * convention this was modelled on before that).
+ */
+export interface RecordAdjustmentResult {
+  adjustment: AdjustmentEntry;
+  item: InventoryItem;
+}
+
+/** `GET /inventory/{id}/adjustments` wraps its rows in an `items` envelope (`InventoryStockAdjustmentListResultDto`) — unlike `listInbound`, which returns a bare array. Gated on `Inventory.View`, same as the rest of the read surface: viewing history isn't restricted the way recording a new adjustment is (`Inventory.Adjust`, distinct from `Inventory.Edit` — see `InventoryService.recordAdjustment`'s doc comment). */
+export interface AdjustmentListResult {
+  items: AdjustmentEntry[];
+}

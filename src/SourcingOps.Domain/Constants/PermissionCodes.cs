@@ -19,6 +19,14 @@ public static class PermissionCodes
     public const string InventoryView = "Inventory.View";
     public const string InventoryEdit = "Inventory.Edit";
 
+    /// <summary>
+    /// N-38. Gates only <c>POST /inventory/{id}/adjustments</c> — deliberately NOT added to
+    /// <see cref="AdminOnly"/>. The staff who physically count stock are exactly who needs to
+    /// record a correction, so Super-Admin-gating this would block the workflow it exists to
+    /// serve; the seeded Associate role gets it like every other non-Admin.* permission.
+    /// </summary>
+    public const string InventoryAdjust = "Inventory.Adjust";
+
     public const string ShipmentsView = "Shipments.View";
     public const string ShipmentsEdit = "Shipments.Edit";
 
@@ -42,7 +50,7 @@ public static class PermissionCodes
         CustomersView, CustomersEdit,
         VendorsView, VendorsEdit,
         CatalogsView, CatalogsEdit,
-        InventoryView, InventoryEdit,
+        InventoryView, InventoryEdit, InventoryAdjust,
         ShipmentsView, ShipmentsEdit,
         InvoicingView, InvoicingEdit, InvoicingMarkPaid,
         DispatchSend,

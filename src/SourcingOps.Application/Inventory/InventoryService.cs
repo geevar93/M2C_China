@@ -300,6 +300,80 @@ public sealed class InventoryService : IInventoryService
             entries.Select(e => MapInboundEntry(e, e.RecordedBy?.Name ?? "(unknown)")).ToList());
     }
 
+    // ---- Record stock adjustment (N-38) -----------------------------------------------
+
+    public async Task<RecordAdjustmentResultDto?> RecordAdjustmentAsync(Guid id, RecordAdjustmentRequest request, Guid actorUserId, CancellationToken ct = default)
+    {
+        var item = await LoadWithNavigationsAsync(id, ct);
+        if (item is null)
+        {
+            return null;
+        }
+
+        if (request.CountedQty < 0)
+        {
+            throw new AppValidationException("countedQty", "Counted quantity cannot be negative.");
+        }
+
+        var reason = (request.Reason ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new AppValidationException("reason", "Reason is required.");
+        }
+
+        var previousQty = item.OnHandQty;
+
+        var adjustment = new InventoryStockAdjustment
+        {
+            Id = Guid.NewGuid(),
+            InventoryItemId = item.Id,
+            CountedQty = request.CountedQty,
+            PreviousQty = previousQty,
+            // Stored, not recomputed later — see InventoryStockAdjustment's doc comment. May be
+            // zero: "we counted and it was correct" is still a fact worth keeping.
+            Delta = request.CountedQty - previousQty,
+            Reason = reason,
+            AdjustedOn = request.AdjustedOn ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            AdjustedAt = DateTime.UtcNow,
+            AdjustedByUserId = actorUserId
+        };
+
+        item.OnHandQty = request.CountedQty;
+        _db.InventoryStockAdjustments.Add(adjustment);
+
+        // ONE SaveChangesAsync for both the adjustment insert and the on-hand overwrite —
+        // same reasoning as RecordInboundAsync's single-transaction comment above.
+        await _db.SaveChangesAsync(ct);
+
+        var adjustedBy = await _db.Users.FindAsync([actorUserId], ct);
+
+        await _audit.LogAsync(actorUserId, "InventoryStockAdjustmentRecorded", "InventoryItem", item.Id.ToString(),
+            new { adjustment.CountedQty, adjustment.PreviousQty, adjustment.Delta, adjustment.Reason, AdjustedOn = adjustment.AdjustedOn.ToString("yyyy-MM-dd"), NewOnHandQty = item.OnHandQty }, ct);
+
+        return new RecordAdjustmentResultDto(
+            MapStockAdjustment(adjustment, adjustedBy?.Name ?? "(unknown)"),
+            MapItem(item));
+    }
+
+    public async Task<InventoryStockAdjustmentListResultDto?> ListStockAdjustmentsAsync(Guid id, CancellationToken ct = default)
+    {
+        var exists = await _db.InventoryItems.AnyAsync(i => i.Id == id, ct);
+        if (!exists)
+        {
+            return null;
+        }
+
+        var adjustments = await _db.InventoryStockAdjustments
+            .Where(a => a.InventoryItemId == id)
+            .Include(a => a.AdjustedByUser)
+            .OrderByDescending(a => a.AdjustedOn)
+            .ThenByDescending(a => a.AdjustedAt)
+            .ToListAsync(ct);
+
+        return new InventoryStockAdjustmentListResultDto(
+            adjustments.Select(a => MapStockAdjustment(a, a.AdjustedByUser?.Name ?? "(unknown)")).ToList());
+    }
+
     // ---- Shared helpers ---------------------------------------------------------------
 
     private Task<InventoryItem?> LoadWithNavigationsAsync(Guid id, CancellationToken ct) =>
@@ -346,4 +420,8 @@ public sealed class InventoryService : IInventoryService
     private static InventoryInboundEntryDto MapInboundEntry(InventoryInboundEntry e, string recordedByName) => new(
         e.Id, e.InventoryItemId, e.Quantity, e.EntryDate, e.Reference,
         e.RecordedByUserId, recordedByName, AsUtc(e.CreatedAt));
+
+    private static InventoryStockAdjustmentDto MapStockAdjustment(InventoryStockAdjustment a, string adjustedByName) => new(
+        a.Id, a.InventoryItemId, a.CountedQty, a.PreviousQty, a.Delta, a.Reason, a.AdjustedOn,
+        AsUtc(a.AdjustedAt), a.AdjustedByUserId, adjustedByName);
 }

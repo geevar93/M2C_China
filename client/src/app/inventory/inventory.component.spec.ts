@@ -221,6 +221,7 @@ describe('InventoryComponent', () => {
     expect(text).not.toContain('+ Add Item');
     expect(text).not.toContain('+ Record Inbound Stock');
     expect(text).not.toContain('+ Inbound');
+    expect(text).not.toContain('Adjust Stock');
     expect(text).not.toContain('Edit');
   });
 
@@ -234,6 +235,65 @@ describe('InventoryComponent', () => {
     const text: string = fixture.nativeElement.textContent;
     expect(text).toContain('+ Add Item');
     expect(text).toContain('+ Record Inbound Stock');
+  });
+
+  it('gates "Adjust Stock" on its own Inventory.Adjust permission, separate from Inventory.Edit (N-38 — the server enforces this via a distinct policy)', async () => {
+    await configure(['Inventory.Edit']);
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([item()]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Adjust Stock');
+  });
+
+  it('shows "Adjust Stock" with Inventory.Adjust permission even without Inventory.Edit', async () => {
+    await configure(['Inventory.Adjust']);
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([item()]);
+    fixture.detectChanges();
+
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('Adjust Stock');
+    expect(text).not.toContain('+ Add Item');
+  });
+
+  it('opens the adjust dialog for a row with the item\'s current onHandQty, and patches the row from the response instead of refetching the list (N-38)', async () => {
+    await configure(['Inventory.Adjust']);
+    fixture.detectChanges();
+    flushMasterData();
+    flushList([item()]);
+    fixture.detectChanges();
+
+    fixture.componentInstance.openAdjustForRow(fixture.componentInstance.rows()[0]);
+    expect(fixture.componentInstance.adjustTargetItem()).toEqual({
+      id: 'inv-1',
+      name: 'Silver Chain',
+      sku: 'SKU-001',
+      unit: 'pcs',
+      onHandQty: 1840
+    });
+
+    const updated = item({ onHandQty: 1837 });
+    fixture.componentInstance.onAdjusted({
+      adjustment: {
+        id: 'adj-1',
+        countedQty: 1837,
+        previousQty: 1840,
+        delta: -3,
+        reason: 'Physical count',
+        adjustedOn: '2026-07-29',
+        adjustedAt: '2026-07-29T10:00:00Z',
+        adjustedByUserId: 'user-1',
+        adjustedByName: 'Priya Sharma'
+      },
+      item: updated
+    });
+
+    expect(fixture.componentInstance.adjustTargetItem()).toBeNull();
+    expect(fixture.componentInstance.rows()[0].qtyLabel).toBe('1,837');
+    httpMock.expectNone((r) => r.url === '/api/v1/inventory');
   });
 
   it('patches the row from the inbound response instead of refetching the list', async () => {
