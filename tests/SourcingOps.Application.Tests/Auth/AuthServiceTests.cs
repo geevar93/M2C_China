@@ -218,6 +218,32 @@ public class AuthServiceTests
         await act.Should().ThrowAsync<AppValidationException>();
     }
 
+    /// <summary>
+    /// E11-10. Reusing the current password must be rejected BEFORE any mutation. Under the
+    /// forced flow this is the substantive case: without it a user could "change" the temporary
+    /// password to itself, clearing MustChangePassword while the credential that was written to
+    /// an application log or relayed out-of-band stays live. The assertions therefore check that
+    /// nothing moved — the flag is still set and the old password still verifies — rather than
+    /// only that it threw.
+    /// </summary>
+    [Fact]
+    public async Task ChangePasswordAsync_WhenNewPasswordEqualsCurrent_ThrowsAndLeavesTheAccountUntouched()
+    {
+        using var db = TestDbContextFactory.Create();
+        var user = AuthTestData.CreateActiveUserWithRole(db, "Associate", "Correct-Password1", "Customers.View");
+        user.MustChangePassword = true;
+        await db.SaveChangesAsync();
+        var originalHash = user.PasswordHash;
+        var sut = CreateSut(db, out _);
+
+        var act = async () => await sut.ChangePasswordAsync(user.Id, new ChangePasswordRequest("Correct-Password1", "Correct-Password1"));
+
+        await act.Should().ThrowAsync<AppValidationException>();
+        var reread = db.Users.Single(u => u.Id == user.Id);
+        reread.PasswordHash.Should().Be(originalHash);
+        reread.MustChangePassword.Should().BeTrue("a rejected change must not clear the forced-change flag");
+    }
+
     [Fact]
     public async Task ChangePasswordAsync_RevokesExistingRefreshTokens()
     {

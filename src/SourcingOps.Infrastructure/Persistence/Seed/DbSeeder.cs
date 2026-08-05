@@ -15,9 +15,12 @@ namespace SourcingOps.Infrastructure.Persistence.Seed;
 /// duplicates rows and always tops up anything missing (e.g. a permission added in a
 /// later release).
 ///
-/// ADDITION beyond the written story: also seeds one bootstrap Super Admin user with
-/// MustChangePassword=true, whose generated password is logged once on the run that
-/// creates it and never again. Rationale: M1's exit criterion is "a user logs in", but
+/// ADDITION beyond the written story: also seeds one bootstrap Super Admin user. When no
+/// password is configured, a random one is generated, logged once on the run that creates it
+/// and never again, and the account is flagged MustChangePassword=true. When an operator has
+/// explicitly configured Bootstrap:AdminPassword, that password is used as-is and the account
+/// is seeded with MustChangePassword=false — see SeedBootstrapAdminAsync for the reasoning.
+/// Rationale for the seed existing at all: M1's exit criterion is "a user logs in", but
 /// account creation (E11-01) is M2 scope — without this seed there is no way to
 /// authenticate at all between M1 and M2. See the build report for the full rationale.
 /// </summary>
@@ -231,7 +234,7 @@ public sealed class DbSeeder
 
     private async Task SeedBootstrapAdminAsync(Dictionary<string, Role> rolesByName, CancellationToken ct)
     {
-        var email = (_bootstrapOptions.AdminEmail ?? "admin@sourcingops.local").Trim().ToLowerInvariant();
+        var email = (_bootstrapOptions.AdminEmail ?? "owner@sourcingops.local").Trim().ToLowerInvariant();
         var alreadyExists = await _db.Users.AnyAsync(u => u.Email == email, ct);
         if (alreadyExists)
         {
@@ -246,7 +249,14 @@ public sealed class DbSeeder
             Id = Guid.NewGuid(),
             Name = "Super Admin",
             Email = email,
-            MustChangePassword = true,
+            // Forced change applies to the GENERATED password only. A generated password is
+            // random, unknown to any human until they read it out of an application log — and a
+            // secret that has been written to a log file must be rotated, so the forced-change
+            // flag stays exactly where that risk lives. A password an operator EXPLICITLY
+            // CONFIGURED is a deliberately chosen credential; forcing an immediate change makes
+            // the configured value unusable as configured and defeats the entire point of
+            // configuring it. The security property is preserved precisely where it applies.
+            MustChangePassword = isGenerated,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -265,8 +275,11 @@ public sealed class DbSeeder
             "  Email:    {Email}\n" +
             "  Password: {Password}\n" +
             "  Source:   {Source}\n" +
-            "  This account must change its password on first login.\n" +
+            "{MustChangeNotice}" +
             "================================================================",
-            email, password, isGenerated ? "generated" : "Bootstrap:AdminPassword config");
+            email,
+            password,
+            isGenerated ? "generated" : "Bootstrap:AdminPassword config",
+            isGenerated ? "  This account must change its password on first login.\n" : string.Empty);
     }
 }

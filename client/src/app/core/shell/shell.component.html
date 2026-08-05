@@ -53,6 +53,9 @@
             <span class="topbar__user-role">· {{ userRoleLabel() }}</span>
           }
         </div>
+        @if (canChangeOwnPassword()) {
+          <a class="topbar__account-link" routerLink="/account/password">Change password</a>
+        }
         <button type="button" class="topbar__logout" (click)="logout()">Log out</button>
       </div>
     </header>

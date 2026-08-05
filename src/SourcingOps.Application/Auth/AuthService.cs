@@ -141,6 +141,18 @@ public sealed class AuthService : IAuthService
             throw new AppValidationException("newPassword", "New password must be at least 8 characters long.");
         }
 
+        // Defect fix, not an added strength rule (min-8 above is still the codebase's entire
+        // password policy). Without this, a user under a forced change could "change" their
+        // temporary password to itself: MustChangePassword would clear while the temp credential
+        // that was written to a log or relayed out-of-band stays live — a real hole in E1-08. On
+        // the voluntary path it also stops a pure no-op that nonetheless revokes every session.
+        // Checked before any mutation, so a rejected call leaves the hash and refresh tokens
+        // exactly as they were.
+        if (string.Equals(request.NewPassword, request.CurrentPassword, StringComparison.Ordinal))
+        {
+            throw new AppValidationException("newPassword", "New password must be different from your current password.");
+        }
+
         user.PasswordHash = _passwordHasher.Hash(user, request.NewPassword);
         user.MustChangePassword = false;
 

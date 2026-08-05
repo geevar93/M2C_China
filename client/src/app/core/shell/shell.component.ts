@@ -120,6 +120,14 @@ export class ShellComponent {
       .join('');
   });
 
+  /**
+   * The topbar's "Change password" link. Read through a computed so the template
+   * never calls the service directly, matching how `navGroups` gates nav items.
+   * Permissions are fixed for the life of a token, so there is nothing to react
+   * to here — the shell is re-created on login.
+   */
+  readonly canChangeOwnPassword = computed(() => this.auth.hasPermission('Account.ChangeOwnPassword'));
+
   toggleSidebar(): void {
     this.sidebarOpen.update((v) => !v);
   }

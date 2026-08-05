@@ -148,6 +148,17 @@ export const routes: Routes = [
         data: { title: 'Master Data', permission: 'Admin.ManageMasterData' },
         loadComponent: () =>
           import('./admin/master-data/admin-master-data.component').then((m) => m.AdminMasterDataComponent)
+      },
+      // Self-service password change. Sits under the shell (not with the
+      // /force-change-password screen) because it is voluntary — the forced
+      // flow is the one that must render outside the shell. Gated on
+      // Account.ChangeOwnPassword, which is seeded to SuperAdmin only.
+      {
+        path: 'account/password',
+        canActivate: [permissionGuard],
+        data: { title: 'Change password', permission: 'Account.ChangeOwnPassword' },
+        loadComponent: () =>
+          import('./account/change-password/change-password.component').then((m) => m.ChangePasswordComponent)
       }
     ]
   },

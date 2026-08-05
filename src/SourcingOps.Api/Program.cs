@@ -68,12 +68,20 @@ builder.Services
 // first feature controllers to use them. One policy per catalog entry, so adding a
 // permission is a one-line addition to PermissionCodes.All, not new plumbing.
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, ChangeOwnPasswordAuthorizationHandler>();
 builder.Services.AddAuthorization(options =>
 {
     foreach (var code in PermissionCodes.All)
     {
         options.AddPolicy(code, policy => policy.Requirements.Add(new PermissionRequirement(code)));
     }
+
+    // Not one of the per-code policies above: /auth/change-password is satisfied by EITHER
+    // Account.ChangeOwnPassword (voluntary, SuperAdmin-only by seeding) OR a token carrying
+    // must_change_password=true (the forced remediation path every user must keep, or E11-01
+    // accounts could never be activated). See ChangeOwnPasswordAuthorizationHandler.
+    options.AddPolicy(ChangeOwnPasswordRequirement.PolicyName,
+        policy => policy.Requirements.Add(new ChangeOwnPasswordRequirement()));
 });
 
 var frontendOrigin = builder.Configuration["Cors:FrontendOrigin"] ?? "http://localhost:4200";

@@ -24,7 +24,7 @@ public class LoginTests : IClassFixture<RelaxedRateLimitApiFactory>
     }
 
     [Fact]
-    public async Task Login_WithBootstrapAdminCredentials_ReturnsFullContractShapeAndMustChangePasswordTrue()
+    public async Task Login_WithBootstrapAdminCredentials_ReturnsFullContractShapeAndMustChangePasswordFalse()
     {
         var client = _factory.CreateClient();
 
@@ -37,7 +37,11 @@ public class LoginTests : IClassFixture<RelaxedRateLimitApiFactory>
         body.Should().NotBeNull();
         body!.AccessToken.Should().NotBeNullOrWhiteSpace();
         body.RefreshToken.Should().NotBeNullOrWhiteSpace();
-        body.MustChangePassword.Should().BeTrue(); // bootstrap seed always sets this
+        // E11-10: the seed forces a change only for a GENERATED password. ApiFactory configures
+        // Bootstrap:AdminPassword explicitly (as appsettings.json and docker-compose.yml now do),
+        // and a deliberately chosen credential is seeded ready to use — see DbSeederTests'
+        // paired configured/generated cases for the full reasoning.
+        body.MustChangePassword.Should().BeFalse();
         body.User.Email.Should().Be(_factory.BootstrapAdminEmail);
         body.User.Roles.Should().Contain(RoleNames.SuperAdmin);
         body.User.Permissions.Should().BeEquivalentTo(PermissionCodes.All); // SuperAdmin gets everything

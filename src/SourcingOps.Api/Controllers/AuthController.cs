@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using SourcingOps.Api.Authorization;
 using SourcingOps.Api.Filters;
 using SourcingOps.Application.Auth;
 
@@ -55,7 +56,11 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("change-password")]
-    [Authorize]
+    // Two different mechanisms, both required. The POLICY (authorization) decides who may call
+    // this at all: a Super Admin voluntarily, or anyone whose token says they must change their
+    // password. [AllowMustChangePassword] is an MVC action filter that exempts this action from
+    // RequirePasswordChangeFilter's blanket 403 — removing it breaks the forced flow.
+    [Authorize(Policy = ChangeOwnPasswordRequirement.PolicyName)]
     [AllowMustChangePassword]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken ct)
     {

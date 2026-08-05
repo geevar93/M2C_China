@@ -153,4 +153,87 @@ public class ChangePasswordTests : IClassFixture<AdminSeededFixture>
 
         // No restore needed — this test acted on its own disposable account, not a shared one.
     }
+
+    // ---------------------------------------------------------------------------------------
+    // E11-10 — the VOLUNTARY self-service path. Everything above exercises the forced flow, in
+    // which the caller's must_change_password claim is what gets them through the policy. The
+    // three tests below are the ones that actually pin the new behaviour: a Super Admin with
+    // nothing forced on them may still change their own password, and an ordinary activated
+    // user may not. Each provisions its own disposable account for the same reason the class
+    // summary gives — never mutate the shared fixture's credentials.
+    // ---------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task ChangePassword_VoluntarilyBySuperAdminWithNothingForced_Returns200_AndTheNewPasswordWorks()
+    {
+        // A SECOND Super Admin, not the fixture's — its first (forced) change activates it, so
+        // by the time we act it carries must_change_password=false and reaches the endpoint
+        // purely on Account.ChangeOwnPassword.
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var activated = await AdminApiTestHelpers.ProvisionActiveUserAsync(
+            _fixture.Factory, _fixture.AdminClient, [_fixture.SuperAdminRoleId], "Voluntary Admin", suffix, "Activated-Pw1!");
+        activated.MustChangePassword.Should().BeFalse("this account is already activated — nothing is being forced");
+        activated.User.Permissions.Should().Contain("Account.ChangeOwnPassword");
+
+        var client = _fixture.Factory.CreateClient().WithBearer(activated.AccessToken);
+
+        const string newPassword = "Voluntary-Pw2!";
+        var response = await client.PostAsJsonAsync("/api/v1/auth/change-password",
+            new ChangePasswordRequest("Activated-Pw1!", newPassword));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var changed = await response.Content.ReadFromJsonAsync<AuthResult>();
+        changed!.MustChangePassword.Should().BeFalse("a voluntary change must not push the caller into the forced flow");
+
+        client.DefaultRequestHeaders.Authorization = null;
+        var oldPasswordLogin = await client.PostAsJsonAsync("/api/v1/auth/login",
+            new LoginRequest(activated.User.Email, "Activated-Pw1!"));
+        oldPasswordLogin.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var newPasswordLogin = await AdminApiTestHelpers.LoginAsync(client, activated.User.Email, newPassword);
+        newPasswordLogin.MustChangePassword.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ChangePassword_VoluntarilyByActivatedNonAdmin_Returns403()
+    {
+        // The whole point of E11-10's restriction. This Associate is fully activated, so it has
+        // NEITHER lever: no must_change_password claim and no Account.ChangeOwnPassword (that
+        // code is in PermissionCodes.AdminOnly, which the seeder withholds from Associate).
+        // Note this is a 403 from the policy, not a 400 from validation — the request body is
+        // entirely valid and must still be refused.
+        var client = _fixture.Factory.CreateClient().WithBearer(_fixture.AssociateAuth.AccessToken);
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/change-password",
+            new ChangePasswordRequest("Associate-Changed-Pw1!", "Associate-Sneaky-Pw2!"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        // And the refusal was real: the Associate's existing password still works.
+        client.DefaultRequestHeaders.Authorization = null;
+        var stillWorks = await AdminApiTestHelpers.LoginAsync(client, _fixture.AssociateAuth.User.Email, "Associate-Changed-Pw1!");
+        stillWorks.AccessToken.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task ChangePassword_ReusingTheCurrentPassword_Returns400_AndDoesNotClearTheForcedFlag()
+    {
+        var (email, temporaryPassword) = await ProvisionFreshUserAsync();
+        var client = _fixture.Factory.CreateClient();
+        var login = await AdminApiTestHelpers.LoginAsync(client, email, temporaryPassword);
+        login.MustChangePassword.Should().BeTrue();
+        client.WithBearer(login.AccessToken);
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/change-password",
+            new ChangePasswordRequest(temporaryPassword, temporaryPassword));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+
+        // The flag must still be set — otherwise a user could "activate" an account while the
+        // temporary password that was handed out stays live.
+        client.DefaultRequestHeaders.Authorization = null;
+        var reLogin = await AdminApiTestHelpers.LoginAsync(client, email, temporaryPassword);
+        reLogin.MustChangePassword.Should().BeTrue();
+    }
 }

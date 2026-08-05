@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using SourcingOps.Application.Interfaces;
 using SourcingOps.Application.Tests.TestSupport;
 using SourcingOps.Domain.Constants;
 using SourcingOps.Domain.Entities;
@@ -53,7 +54,13 @@ public class DbSeederTests
         "Invoicing.View", "Invoicing.Edit", "Invoicing.MarkPaid",
         "Dispatch.Send",
         "Analytics.View",
-        "Admin.ManageUsers", "Admin.ManageMasterData"
+        "Admin.ManageUsers", "Admin.ManageMasterData",
+        // E11-10. Added deliberately, per this class's "a human must confirm the change" rule:
+        // it gates the VOLUNTARY self-service path through POST /auth/change-password and is in
+        // PermissionCodes.AdminOnly, so it must appear for SuperAdmin and NOT for Associate
+        // (asserted below). The forced-change path does not depend on it — see
+        // ChangeOwnPasswordAuthorizationHandler's second branch.
+        "Account.ChangeOwnPassword"
     ];
 
     private static DbSeeder CreateSut(SourcingOps.Infrastructure.Persistence.AppDbContext db, BootstrapAdminOptions? options = null) =>
@@ -105,6 +112,9 @@ public class DbSeederTests
         });
         associateCodes.Should().NotContain("Admin.ManageUsers");
         associateCodes.Should().NotContain("Admin.ManageMasterData");
+        associateCodes.Should().NotContain("Account.ChangeOwnPassword",
+            "E11-10 restricts the voluntary self-service password change to Super Admins; an Associate reaches "
+            + "/auth/change-password only while its own must_change_password flag is set");
     }
 
     /// <summary>
@@ -161,8 +171,18 @@ public class DbSeederTests
             .BeEquivalentTo("ACTIVE", "ON-HOLD", "INACTIVE");
     }
 
+    /// <summary>
+    /// E11-10 DEVIATION, recorded deliberately. This test previously asserted
+    /// <c>MustChangePassword == true</c> for a CONFIGURED password. It now asserts false, and the
+    /// generated-password case below asserts true. The flag was split because the two cases carry
+    /// different risk: a generated password is unknown until a human reads it out of an
+    /// application log, and a secret written to a log must be rotated — so the forced change stays
+    /// exactly where that exposure is. An explicitly configured password is a chosen credential;
+    /// forcing an immediate change would make the configured value unusable as configured, which
+    /// is the whole point of configuring it. Both branches are pinned so neither can drift.
+    /// </summary>
     [Fact]
-    public async Task SeedAsync_CreatesExactlyOneBootstrapSuperAdmin_WithMustChangePasswordTrue()
+    public async Task SeedAsync_WithConfiguredPassword_CreatesExactlyOneBootstrapSuperAdmin_WithMustChangePasswordFalse()
     {
         using var db = TestDbContextFactory.Create();
         var sut = CreateSut(db, new BootstrapAdminOptions { AdminEmail = "owner@example.com", AdminPassword = "Provided-Pw1" });
@@ -170,11 +190,53 @@ public class DbSeederTests
         await sut.SeedAsync();
 
         var admin = db.Users.Single(u => u.Email == "owner@example.com");
-        admin.MustChangePassword.Should().BeTrue();
+        admin.MustChangePassword.Should().BeFalse(
+            "a password the operator explicitly configured is meant to be usable exactly as configured");
         admin.IsActive.Should().BeTrue();
 
         var role = db.Roles.Single(r => r.Name == RoleNames.SuperAdmin);
         db.UserRoles.Should().ContainSingle(ur => ur.UserId == admin.Id && ur.RoleId == role.Id);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SeedAsync_WithNoConfiguredPassword_GeneratesOne_AndForcesAChangeOnFirstLogin(string? configured)
+    {
+        using var db = TestDbContextFactory.Create();
+        var sut = CreateSut(db, new BootstrapAdminOptions { AdminEmail = "owner@example.com", AdminPassword = configured });
+
+        await sut.SeedAsync();
+
+        var admin = db.Users.Single(u => u.Email == "owner@example.com");
+        admin.MustChangePassword.Should().BeTrue(
+            "a generated password is logged in cleartext once, and a secret that reached a log must be rotated");
+        admin.IsActive.Should().BeTrue();
+        admin.PasswordHash.Should().NotBeNullOrWhiteSpace();
+    }
+
+    /// <summary>
+    /// The shipped defaults are the credential the owner is told to sign in with, so they are
+    /// pinned as literals here rather than read back off <see cref="BootstrapAdminOptions"/>
+    /// (that would be the round trip this class's summary warns about). Note these defaults only
+    /// apply where nothing binds over them — appsettings.json and docker-compose.yml carry the
+    /// same pair explicitly, because Bind overwrites with an empty string.
+    /// </summary>
+    [Fact]
+    public async Task SeedAsync_WithStockOptions_SeedsTheDocumentedOwnerCredential()
+    {
+        using var db = TestDbContextFactory.Create();
+        var options = new BootstrapAdminOptions();
+        options.AdminEmail.Should().Be("owner@sourcingops.local");
+        options.AdminPassword.Should().Be("Welcome@123");
+
+        await CreateSut(db, options).SeedAsync();
+
+        var admin = db.Users.Single(u => u.Email == "owner@sourcingops.local");
+        admin.MustChangePassword.Should().BeFalse();
+        AuthTestData.RealPasswordHasher.Verify(admin, admin.PasswordHash, "Welcome@123")
+            .Should().Be(PasswordVerifyResult.Success);
     }
 
     [Fact]
@@ -247,7 +309,7 @@ public class DbSeederTests
         // twice did not duplicate", and a count derived from the seeder's own input cannot
         // distinguish "17 rows, correct" from "17 rows, wrong set".
         db.Permissions.Select(p => p.Code).Should().BeEquivalentTo(ExpectedPermissionCodes); // no duplicates
-        db.Permissions.Should().HaveCount(18);
+        db.Permissions.Should().HaveCount(19);
         db.Roles.Select(r => r.Name).Should().BeEquivalentTo(RoleNames.All);
         db.Categories.Count().Should().Be(6);
         db.Users.Count(u => u.Email == "owner@example.com").Should().Be(1);

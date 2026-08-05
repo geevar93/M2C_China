@@ -28,8 +28,8 @@ services:
       - Caching__Redis__ConnectionString=${REDIS_CONNECTION_STRING:-redis:6379}
       - Jwt__SigningKey=${JWT_SIGNING_KEY}
       - Storage__RootPath=/data/uploads
-      - Bootstrap__AdminEmail=${BOOTSTRAP_ADMIN_EMAIL:-admin@sourcingops.local}
-      - Bootstrap__AdminPassword=${BOOTSTRAP_ADMIN_PASSWORD:-}
+      - Bootstrap__AdminEmail=${BOOTSTRAP_ADMIN_EMAIL:-owner@sourcingops.local}
+      - Bootstrap__AdminPassword=${BOOTSTRAP_ADMIN_PASSWORD:-Welcome@123}
       - Cors__FrontendOrigin=${FRONTEND_ORIGIN:-http://localhost:4200}
     volumes:
       - uploads:/data/uploads

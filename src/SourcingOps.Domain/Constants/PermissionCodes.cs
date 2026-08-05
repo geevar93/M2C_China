@@ -42,6 +42,24 @@ public static class PermissionCodes
     public const string AdminManageMasterData = "Admin.ManageMasterData";
 
     /// <summary>
+    /// Gates the VOLUNTARY self-service path through <c>POST /auth/change-password</c>. Listed in
+    /// <see cref="AdminOnly"/>, which is what makes it Super-Admin-only: the seeder withholds every
+    /// <see cref="AdminOnly"/> code from the Associate role. This is the deliberate contrast with
+    /// <see cref="InventoryAdjust"/>, which was just as deliberately kept OUT of
+    /// <see cref="AdminOnly"/> so ordinary staff keep the workflow it serves.
+    ///
+    /// <para>
+    /// It is NOT the only way into that endpoint: the <c>Auth.ChangePassword</c> policy also
+    /// succeeds on a token carrying <c>must_change_password=true</c>. Without that second branch,
+    /// every non-admin account created by E11-01 would be permanently unusable — the forced-change
+    /// flag 403s every other endpoint, so removing its access to this one is an unrecoverable
+    /// lockout of exactly the kind the "last active Super Admin" guard exists to prevent
+    /// (TECH_SPEC §4.4).
+    /// </para>
+    /// </summary>
+    public const string AccountChangeOwnPassword = "Account.ChangeOwnPassword";
+
+    /// <summary>
     /// The full catalog, in seed order. Startup seeding and policy registration
     /// both iterate this single list so a new permission never needs new plumbing.
     /// </summary>
@@ -55,9 +73,10 @@ public static class PermissionCodes
         InvoicingView, InvoicingEdit, InvoicingMarkPaid,
         DispatchSend,
         AnalyticsView,
-        AdminManageUsers, AdminManageMasterData
+        AdminManageUsers, AdminManageMasterData,
+        AccountChangeOwnPassword
     ];
 
     /// <summary>Permissions withheld from the seeded Associate role.</summary>
-    public static readonly string[] AdminOnly = [AdminManageUsers, AdminManageMasterData];
+    public static readonly string[] AdminOnly = [AdminManageUsers, AdminManageMasterData, AccountChangeOwnPassword];
 }
