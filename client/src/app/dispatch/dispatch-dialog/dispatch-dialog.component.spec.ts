@@ -5,6 +5,7 @@ import { DispatchDialogComponent } from './dispatch-dialog.component';
 import { MasterDataResponse } from '../../core/models/master-data.models';
 import { CatalogSection } from '../../catalogs/models/catalog.models';
 import { CustomerListItem } from '../../customers/models/customer.models';
+import { DispatchComposeResult } from '../models/dispatch.models';
 
 const MASTER_DATA: MasterDataResponse = {
   categories: [],
@@ -62,6 +63,24 @@ function section(overrides: Partial<CatalogSection> = {}): CatalogSection {
   };
 }
 
+/**
+ * E9-10: every compose response now carries a share link, and the component
+ * treats its absence as a compose failure — so the fixture builds one by
+ * default rather than each test remembering to.
+ */
+function composeResponse(overrides: Partial<DispatchComposeResult> = {}): DispatchComposeResult {
+  return {
+    message: 'Hi Meena, sharing the AW26 catalog: https://ops.example.com/api/v1/shared-documents/tok123',
+    deepLinkUrl: 'https://wa.me/919825041122?text=hi',
+    shareLink: {
+      id: 'link-1',
+      url: 'https://ops.example.com/api/v1/shared-documents/tok123',
+      expiresAtUtc: '2026-07-30T10:00:00Z'
+    },
+    ...overrides
+  };
+}
+
 describe('DispatchDialogComponent', () => {
   let fixture: ComponentFixture<DispatchDialogComponent>;
   let httpMock: HttpTestingController;
@@ -107,10 +126,10 @@ describe('DispatchDialogComponent', () => {
       const composeReq = httpMock.expectOne((r) => r.url === '/api/v1/dispatch-log/compose');
       expect(composeReq.request.params.get('customerId')).toBe('cust-1');
       expect(composeReq.request.params.get('catalogDocumentId')).toBe('doc-1');
-      composeReq.flush({ message: 'Hi Meena, sharing the AW26 catalog.', deepLinkUrl: 'https://wa.me/919825041122?text=hi' });
+      composeReq.flush(composeResponse());
       fixture.detectChanges();
 
-      expect(fixture.componentInstance.message()).toBe('Hi Meena, sharing the AW26 catalog.');
+      expect(fixture.componentInstance.message()).toBe(composeResponse().message);
       expect(fixture.nativeElement.textContent).toContain('Meena Traders');
       expect(fixture.nativeElement.textContent).toContain('yiwu-jewel-craft-aw26-v3.pdf');
     });
@@ -127,7 +146,7 @@ describe('DispatchDialogComponent', () => {
       flushMasterData();
       httpMock.expectOne((r) => r.url === '/api/v1/catalog-sections').flush({ items: [section()], page: 1, pageSize: 100, totalCount: 1 });
       fixture.detectChanges();
-      httpMock.expectOne((r) => r.url === '/api/v1/dispatch-log/compose').flush({ message: 'msg', deepLinkUrl: 'https://wa.me/1?text=x' });
+      httpMock.expectOne((r) => r.url === '/api/v1/dispatch-log/compose').flush(composeResponse({ message: 'msg', deepLinkUrl: 'https://wa.me/1?text=x' }));
       fixture.detectChanges();
 
       expect(fixture.nativeElement.querySelector('[aria-label="Recipient"]')).toBeNull();
@@ -160,7 +179,7 @@ describe('DispatchDialogComponent', () => {
       const composeReq = httpMock.expectOne((r) => r.url === '/api/v1/dispatch-log/compose');
       expect(composeReq.request.params.get('customerId')).toBe('cust-1');
       expect(composeReq.request.params.get('catalogDocumentId')).toBe('doc-1');
-      composeReq.flush({ message: 'Hi Meena, sharing the AW26 catalog.', deepLinkUrl: 'https://wa.me/919825041122?text=hi' });
+      composeReq.flush(composeResponse());
       fixture.detectChanges();
 
       const text: string = fixture.nativeElement.textContent;
@@ -187,45 +206,98 @@ describe('DispatchDialogComponent', () => {
       };
       fixture.detectChanges();
       flushMasterData();
-      httpMock.expectOne((r) => r.url === '/api/v1/dispatch-log/compose').flush({
-        message: 'Hi Meena, sharing the AW26 catalog.',
-        deepLinkUrl: 'https://wa.me/919825041122?text=hi'
-      });
+      httpMock.expectOne((r) => r.url === '/api/v1/dispatch-log/compose').flush(composeResponse());
       fixture.detectChanges();
     }
 
-    it('downloads the PDF through the authenticated endpoint and marks step 1 done', async () => {
-      await configureLocked();
-      spyOn(URL, 'createObjectURL').and.returnValue('blob:mock-url');
-      spyOn(URL, 'revokeObjectURL');
-
-      fixture.componentInstance.downloadStep();
-      const req = httpMock.expectOne((r) => r.url === '/api/v1/catalog-documents/doc-1/download');
-      expect(req.request.responseType).toBe('blob');
-      req.flush(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
-
-      expect(fixture.componentInstance.doneSteps()[1]).toBeTrue();
-    });
-
-    it('opens the server-provided deep link in a new tab and marks step 2 done — never builds the URL itself', () => {
+    it('opens the server-provided deep link in a new tab and marks step 1 done — never builds the URL itself', () => {
       const openSpy = spyOn(window, 'open').and.stub();
       return configureLocked().then(() => {
         fixture.componentInstance.openWhatsAppStep();
         expect(openSpy).toHaveBeenCalledWith('https://wa.me/919825041122?text=hi', '_blank');
-        expect(fixture.componentInstance.doneSteps()[2]).toBeTrue();
+        expect(fixture.componentInstance.doneSteps()[1]).toBeTrue();
       });
     });
 
-    it('marks step 3 done on click with no network call (manual in Phase 1)', async () => {
+    it('marks step 2 done on click with no network call', async () => {
       await configureLocked();
       fixture.componentInstance.markSentStep();
-      expect(fixture.componentInstance.doneSteps()[3]).toBeTrue();
+      expect(fixture.componentInstance.doneSteps()[2]).toBeTrue();
     });
 
     it('does not require any step to be done before Log Dispatch is enabled', async () => {
       await configureLocked();
       expect(fixture.componentInstance.doneCount()).toBe(0);
       expect(fixture.componentInstance.canLogDispatch()).toBeTrue();
+    });
+
+    /**
+     * E9-10: downloading is an optional aside now, not step 1. It must still go
+     * through the AUTHENTICATED endpoint — a staff member with a session should
+     * never be routed through the anonymous share link.
+     */
+    it('downloads for the staff member through the authenticated endpoint, without marking any step', async () => {
+      await configureLocked();
+      spyOn(URL, 'createObjectURL').and.returnValue('blob:mock-url');
+      spyOn(URL, 'revokeObjectURL');
+
+      fixture.componentInstance.downloadForMyself();
+      const req = httpMock.expectOne((r) => r.url === '/api/v1/catalog-documents/doc-1/download');
+      expect(req.request.responseType).toBe('blob');
+      req.flush(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+
+      expect(fixture.componentInstance.doneCount()).toBe(0);
+    });
+  });
+
+  describe('the E9-10 share link', () => {
+    async function configureLocked(): Promise<void> {
+      await configure();
+      fixture.componentInstance.customerLock = {
+        id: 'cust-1',
+        businessName: 'Meena Traders',
+        subline: 'Meena Shah · +91 98250 41122',
+        serviceTypeCode: 'CIF'
+      };
+      fixture.componentInstance.documentLock = {
+        documentId: 'doc-1',
+        title: 'AW26 Catalog',
+        filename: 'yiwu-jewel-craft-aw26-v3.pdf',
+        meta: 'v3 · 8.4 MB · Yiwu Jewel Craft Co.'
+      };
+      fixture.detectChanges();
+      flushMasterData();
+      httpMock.expectOne((r) => r.url === '/api/v1/dispatch-log/compose').flush(composeResponse());
+      fixture.detectChanges();
+    }
+
+    it('keeps the server-composed message verbatim, link included — the client never splices the URL in', async () => {
+      await configureLocked();
+
+      const link = fixture.componentInstance.shareLink();
+      expect(link?.url).toBe('https://ops.example.com/api/v1/shared-documents/tok123');
+      expect(fixture.componentInstance.message()).toBe(composeResponse().message);
+      expect(fixture.componentInstance.message()).toContain(link!.url);
+    });
+
+    it('shows the expiry so staff know how long the customer has', async () => {
+      await configureLocked();
+      expect(fixture.componentInstance.shareLinkExpiryText()).toContain('Link expires');
+      expect(fixture.nativeElement.textContent).toContain('Link expires');
+    });
+
+    it('drops the stale link when compose fails on a new selection, rather than leaving the old one on screen', async () => {
+      await configureLocked();
+      expect(fixture.componentInstance.shareLink()).not.toBeNull();
+
+      fixture.componentInstance.retryCompose();
+      httpMock
+        .expectOne((r) => r.url === '/api/v1/dispatch-log/compose')
+        .flush({ title: 'Bad Request', detail: 'This invoice has no PDF yet.' }, { status: 400, statusText: 'Bad Request' });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shareLink()).toBeNull();
+      expect(fixture.componentInstance.canLogDispatch()).toBeFalse();
     });
   });
 
@@ -246,10 +318,7 @@ describe('DispatchDialogComponent', () => {
       };
       fixture.detectChanges();
       flushMasterData();
-      httpMock.expectOne((r) => r.url === '/api/v1/dispatch-log/compose').flush({
-        message: 'Hi Meena, sharing the AW26 catalog.',
-        deepLinkUrl: 'https://wa.me/919825041122?text=hi'
-      });
+      httpMock.expectOne((r) => r.url === '/api/v1/dispatch-log/compose').flush(composeResponse());
       fixture.detectChanges();
     }
 
@@ -352,7 +421,7 @@ describe('DispatchDialogComponent', () => {
       fixture.componentInstance.retryCompose();
       httpMock
         .expectOne((r) => r.url === '/api/v1/dispatch-log/compose')
-        .flush({ message: 'Hi Meena, sharing the AW26 catalog.', deepLinkUrl: 'https://wa.me/919825041122?text=hi' });
+        .flush(composeResponse());
       fixture.detectChanges();
 
       expect(fixture.componentInstance.composeError()).toBeNull();

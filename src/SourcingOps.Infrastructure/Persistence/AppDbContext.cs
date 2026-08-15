@@ -37,6 +37,7 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<CatalogDocument> CatalogDocuments => Set<CatalogDocument>();
 
     public DbSet<Dispatch> Dispatches => Set<Dispatch>();
+    public DbSet<DocumentShareLink> DocumentShareLinks => Set<DocumentShareLink>();
 
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<InventoryInboundEntry> InventoryInboundEntries => Set<InventoryInboundEntry>();

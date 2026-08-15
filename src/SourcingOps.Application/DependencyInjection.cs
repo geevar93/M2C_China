@@ -35,6 +35,18 @@ public static class DependencyInjection
 
         var dispatchOptions = new DispatchOptions();
         configuration.GetSection("Dispatch").Bind(dispatchOptions);
+
+        // E9-10: a share link has to be reachable from the recipient's phone, so it is built
+        // against the public origin. Dispatch:PublicBaseUrl overrides; otherwise the deployed
+        // frontend origin is exactly that address (Caddy serves the SPA there and proxies
+        // /api/* to the API — TECH_SPEC §7.2), so defaulting to it means a correct deployment
+        // needs no new setting and a misconfigured one fails visibly at compose rather than
+        // silently emitting localhost URLs into customer chats.
+        if (string.IsNullOrWhiteSpace(dispatchOptions.PublicBaseUrl))
+        {
+            dispatchOptions.PublicBaseUrl = configuration["Cors:FrontendOrigin"] ?? "http://localhost:4200";
+        }
+
         services.AddSingleton(dispatchOptions);
 
         // Bound from the same "Storage" config section as CatalogUploadOptions — see
@@ -58,6 +70,7 @@ public static class DependencyInjection
         services.AddScoped<IVendorDocumentService, VendorDocumentService>();
         services.AddScoped<ICatalogService, CatalogService>();
         services.AddScoped<IDispatchService, DispatchService>();
+        services.AddScoped<IDocumentShareLinkService, DocumentShareLinkService>();
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<IShipmentService, ShipmentService>();
         services.AddScoped<IShipmentDocumentService, ShipmentDocumentService>();

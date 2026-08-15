@@ -17,6 +17,22 @@
 export interface DispatchComposeResult {
   message: string;
   deepLinkUrl: string;
+  /** E9-10. Always present on a successful compose — the server fails the call rather than composing without one. */
+  shareLink: DocumentShareLink;
+}
+
+/**
+ * E9-10: the temporary public link to the document, minted by compose and already
+ * substituted into `message`. The dialog reads `expiresAtUtc` to tell the staff
+ * member how long the recipient has, and holds `id` so the link can be revoked.
+ *
+ * `url` is the **only** time the raw token is ever visible — the server stores a
+ * hash and cannot re-issue this value. Nothing in the client should persist it.
+ */
+export interface DocumentShareLink {
+  id: string;
+  url: string;
+  expiresAtUtc: string;
 }
 
 /**

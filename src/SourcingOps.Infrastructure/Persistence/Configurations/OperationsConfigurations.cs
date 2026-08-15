@@ -31,6 +31,34 @@ public class DispatchConfiguration : IEntityTypeConfiguration<Dispatch>
     }
 }
 
+/// <summary>
+/// E9-10. Two indexes, each earning its place:
+/// <list type="bullet">
+///   <item><c>token_hash</c> UNIQUE — every anonymous fetch is a single equality lookup on it,
+///     and uniqueness is a real invariant (two links must never share a token), not just an
+///     access-path optimisation.</item>
+///   <item><c>(target_type, target_id, expires_at)</c> — serves the reuse-an-existing-live-link
+///     probe <c>ComposeAsync</c> runs on every dialog open, which is the only other query shape
+///     this table sees.</item>
+/// </list>
+/// <see cref="DocumentShareLink.TargetId"/> gets no FK on purpose — see its doc comment.
+/// </summary>
+public class DocumentShareLinkConfiguration : IEntityTypeConfiguration<DocumentShareLink>
+{
+    public void Configure(EntityTypeBuilder<DocumentShareLink> b)
+    {
+        b.ToTable("document_share_links");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.TokenHash).IsRequired().HasMaxLength(64);
+        b.Property(x => x.TargetType).IsRequired().HasMaxLength(50);
+
+        b.HasIndex(x => x.TokenHash).IsUnique();
+        b.HasIndex(x => new { x.TargetType, x.TargetId, x.ExpiresAt });
+
+        b.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 public class InventoryItemConfiguration : IEntityTypeConfiguration<InventoryItem>
 {
     public void Configure(EntityTypeBuilder<InventoryItem> b)

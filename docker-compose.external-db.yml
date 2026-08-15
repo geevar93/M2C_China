@@ -1,0 +1,68 @@
+# External-database override (ACTION_PLAN E2-11). Layers ON TOP of docker-compose.yml
+# to run the stack against a managed Postgres — Neon specifically — instead of the
+# bundled `db` container.
+#
+# Usage (production shape, api + caddy, no local Postgres):
+#   docker compose -f docker-compose.yml -f docker-compose.external-db.yml \
+#                  --profile prod up -d
+#
+# Local sanity-check of the same wiring (api only, ports published):
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml \
+#                  -f docker-compose.external-db.yml up -d api
+# Order matters: this file must come LAST so its resets win.
+#
+# WHY AN OVERRIDE FILE RATHER THAN A PROFILE ON `db`:
+# `api` declares `depends_on: db: condition: service_healthy`. A profile can stop `db`
+# from starting, but it cannot remove that dependency edge — compose then refuses to
+# start `api` because its declared dependency is not enabled by any active profile.
+# `depends_on` has no "only if present" form. The override file is the compose-native
+# way to express the removal: `!reset` (Compose Spec, docker compose >= 2.24) deletes
+# the node outright during the merge instead of merging into it. The base file stays
+# a single unmodified definition of the default topology, exactly as constraint C1 /
+# TECH_SPEC §7 intend — nothing about the bundled-Postgres path changes.
+#
+# NO CODE CHANGES ARE INVOLVED. `ConnectionStrings__Default` was already the sole
+# input to `UseNpgsql(...)` (Infrastructure/DependencyInjection.cs) and to the design-
+# time factory the migration step uses, and EF Core + Npgsql talk to any Postgres-
+# compatible endpoint. This is a connection-string swap and nothing more.
+#
+# CONNECTION-STRING FORMAT: Npgsql rejects Neon's `postgresql://...` dashboard URI —
+# it parses ADO.NET keyword=value pairs only. `.env.example`'s
+# DATABASE_CONNECTION_STRING block carries the field-by-field translation, the
+# `SSL Mode=Require` / `Channel Binding=Require` requirement, and why the `-pooler`
+# endpoint wants `No Reset On Close=true`. Read it before filling in `.env`.
+#
+# MIGRATIONS ARE UNCHANGED. TECH_SPEC §7.5 / E2-07's explicit, separate
+# `dotnet ef database update` (or the `efbundle` the deploy script builds) still runs
+# as its own step and is still never automatic on container start. Point it at the
+# same external connection string instead of the local container — that is the whole
+# difference. It actually gets SIMPLER here: deploy/deploy.sh's open caveat about
+# reaching the `db` container's unpublished port during the migration window does not
+# apply to an endpoint that is reachable over the public internet to begin with.
+#
+# BACKUPS DO NOT CARRY OVER — see E2-11's open item. deploy/backup.sh's `pg_dump`
+# half runs `docker compose exec -T db`, and there is no `db` container under this
+# override, so that job breaks the moment it is switched on. Neon has its own
+# point-in-time restore; whether that satisfies OI-5 is a business decision, not one
+# this file makes. The `uploads` half (DR-12) is unaffected and still required.
+
+services:
+  # The whole point: no local Postgres. Removes the service, its image pull, its
+  # 1200 MB memory reservation and its pgdata volume mount in one go.
+  db: !reset null
+
+  api:
+    # Required, not defaulted. An unset value fails `docker compose config` and `up`
+    # with a readable message instead of booting the API with an empty connection
+    # string, which surfaces much later as an opaque startup failure.
+    environment:
+      - ConnectionStrings__Default=${DATABASE_CONNECTION_STRING:?set DATABASE_CONNECTION_STRING in .env — see .env.example for the Neon keyword=value format (Npgsql does NOT accept the postgresql:// URI Neon shows you)}
+    # There is no longer a db container to wait on. Nothing replaces this: Npgsql's
+    # own connect retry plus `restart: unless-stopped` cover a database that is
+    # briefly unreachable, which is the normal state of a scale-to-zero endpoint.
+    depends_on: !reset null
+
+volumes:
+  # Declared in the base file for the `db` service alone. With that service gone the
+  # volume would still be created on every `up` and never written to.
+  pgdata: !reset null

@@ -365,6 +365,196 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
         body.Should().ContainSingle(d => d.CustomerId == customer.Id && d.StaffUserId == _fixture.AssociateAuth.User.Id);
     }
 
+    // ---- E9-10: the temporary public share link ------------------------------------------
+
+    /// <summary>
+    /// Pulls the token back out of the composed URL. The URL is absolute against the configured
+    /// public origin (<c>Cors:FrontendOrigin</c> in this factory), which the in-memory test
+    /// server cannot be asked to fetch — but the path it points at is this same app's route, so
+    /// requesting it relatively exercises exactly the endpoint a real phone would hit.
+    /// </summary>
+    private static string TokenFrom(DocumentShareLinkDto link) => link.Url.Split('/').Last();
+
+    [Fact]
+    public async Task Compose_ReturnsAShareLink_WhoseUrlIsAlsoEmbeddedInTheMessage()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+
+        var response = await _fixture.AssociateClient.GetAsync(
+            $"/api/v1/dispatch-log/compose?customerId={customer.Id}&catalogDocumentId={document.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = (await response.Content.ReadFromJsonAsync<DispatchComposeDto>())!;
+        body.ShareLink.Should().NotBeNull();
+        body.ShareLink.Url.Should().Contain("/api/v1/shared-documents/");
+        body.ShareLink.ExpiresAtUtc.Should().BeAfter(DateTime.UtcNow.AddHours(47));
+        body.Message.Should().Contain(body.ShareLink.Url);
+    }
+
+    /// <summary>
+    /// The whole point of E9-10, proven over real HTTP: a caller with **no** Authorization header
+    /// gets the PDF. Every other document route in this API answers such a caller with 401
+    /// (E6-04 asserts exactly that for catalog documents), so this test is the one place that
+    /// deliberate exception is demonstrated rather than described.
+    /// </summary>
+    [Fact]
+    public async Task SharedDocument_AnonymousCallerWithALiveToken_Gets200Pdf()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+        var compose = await _fixture.AssociateClient.GetFromJsonAsync<DispatchComposeDto>(
+            $"/api/v1/dispatch-log/compose?customerId={customer.Id}&catalogDocumentId={document.Id}");
+
+        using var anonymous = _fixture.Factory.CreateClient(); // no bearer token, deliberately
+        var response = await anonymous.GetAsync($"/api/v1/shared-documents/{TokenFrom(compose!.ShareLink)}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/pdf");
+        response.Content.Headers.ContentDisposition?.DispositionType.Should().Be("inline");
+        (await response.Content.ReadAsStringAsync()).Should().StartWith("%PDF");
+    }
+
+    [Fact]
+    public async Task SharedDocument_SameTokenTwice_BothSucceed()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+        var compose = await _fixture.AssociateClient.GetFromJsonAsync<DispatchComposeDto>(
+            $"/api/v1/dispatch-log/compose?customerId={customer.Id}&catalogDocumentId={document.Id}");
+        var token = TokenFrom(compose!.ShareLink);
+
+        using var anonymous = _fixture.Factory.CreateClient();
+        (await anonymous.GetAsync($"/api/v1/shared-documents/{token}")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await anonymous.GetAsync($"/api/v1/shared-documents/{token}")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    /// <summary>
+    /// A wrong token must be 404 — never 401. A 401 would tell the recipient to log in (they
+    /// have no account and never will in Phase 1, FSD A1) and would tell a prober that
+    /// credentials are the thing standing between them and the document.
+    /// </summary>
+    [Theory]
+    [InlineData("not-a-real-token")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    public async Task SharedDocument_UnknownToken_Gets404_Never401(string token)
+    {
+        using var anonymous = _fixture.Factory.CreateClient();
+
+        var response = await anonymous.GetAsync($"/api/v1/shared-documents/{token}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        response.Headers.WwwAuthenticate.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SharedDocument_RevokedToken_Gets404()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+        var compose = await _fixture.AssociateClient.GetFromJsonAsync<DispatchComposeDto>(
+            $"/api/v1/dispatch-log/compose?customerId={customer.Id}&catalogDocumentId={document.Id}");
+        var token = TokenFrom(compose!.ShareLink);
+
+        using var anonymous = _fixture.Factory.CreateClient();
+        (await anonymous.GetAsync($"/api/v1/shared-documents/{token}")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var revoke = await _fixture.AssociateClient.PostAsync(
+            $"/api/v1/dispatch-log/share-links/{compose.ShareLink.Id}/revoke", null);
+        revoke.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var afterRevoke = await anonymous.GetAsync($"/api/v1/shared-documents/{token}");
+        afterRevoke.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task RevokeShareLink_UnknownId_Returns404()
+    {
+        var response = await _fixture.AssociateClient.PostAsync(
+            $"/api/v1/dispatch-log/share-links/{Guid.NewGuid()}/revoke", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task RevokeShareLink_Twice_IsIdempotent()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+        var compose = await _fixture.AssociateClient.GetFromJsonAsync<DispatchComposeDto>(
+            $"/api/v1/dispatch-log/compose?customerId={customer.Id}&catalogDocumentId={document.Id}");
+
+        var first = await _fixture.AssociateClient.PostAsync($"/api/v1/dispatch-log/share-links/{compose!.ShareLink.Id}/revoke", null);
+        var second = await _fixture.AssociateClient.PostAsync($"/api/v1/dispatch-log/share-links/{compose.ShareLink.Id}/revoke", null);
+
+        first.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        second.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Compose_NeitherTargetSupplied_Returns400ProblemDetails()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+
+        var response = await _fixture.AssociateClient.GetAsync($"/api/v1/dispatch-log/compose?customerId={customer.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+    }
+
+    [Fact]
+    public async Task Compose_BothTargetsSupplied_Returns400ProblemDetails()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var document = await CreateCatalogDocumentAsync(md);
+        var invoice = await CreateInvoiceAsync(customer.Id);
+
+        var response = await _fixture.AssociateClient.GetAsync(
+            $"/api/v1/dispatch-log/compose?customerId={customer.Id}&catalogDocumentId={document.Id}&invoiceId={invoice.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    /// <summary>
+    /// E9-10 closes the compose-side half of E8-06: the dispatch log has accepted an invoice
+    /// target since M6, but compose could not prepare one, which is why the invoice screen's
+    /// WhatsApp button is still inert. A Draft invoice has no PDF, so it must fail here — at the
+    /// staff member's screen, where it can be fixed by issuing the invoice — rather than as a
+    /// dead link in the customer's chat.
+    /// </summary>
+    [Fact]
+    public async Task Compose_DraftInvoice_Returns400_BecauseNoPdfExistsYet()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+        var invoice = await CreateInvoiceAsync(customer.Id); // created Draft, never issued
+
+        var response = await _fixture.AssociateClient.GetAsync(
+            $"/api/v1/dispatch-log/compose?customerId={customer.Id}&invoiceId={invoice.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Compose_UnknownInvoice_Returns404()
+    {
+        var md = await GetMasterDataAsync();
+        var customer = await CreateCustomerAsync(md);
+
+        var response = await _fixture.AssociateClient.GetAsync(
+            $"/api/v1/dispatch-log/compose?customerId={customer.Id}&invoiceId={Guid.NewGuid()}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
     // ---- DoD: every permission-gated endpoint needs a 403-for-missing-permission test -----
 
     private async Task<HttpClient> GetNoPermissionClientAsync()
@@ -401,6 +591,21 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
         var client = await GetNoPermissionClientAsync();
 
         var response = await client.GetAsync($"/api/v1/catalog-documents/{Guid.NewGuid()}/dispatches");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    /// <summary>
+    /// E9-10: minting a share link is gated even though consuming one is not. Handing out an
+    /// unauthenticated URL to a business document is a send-class action, so it takes the same
+    /// permission as sending.
+    /// </summary>
+    [Fact]
+    public async Task NoPermissionCaller_Gets403_OnRevokeShareLink()
+    {
+        var client = await GetNoPermissionClientAsync();
+
+        var response = await client.PostAsync($"/api/v1/dispatch-log/share-links/{Guid.NewGuid()}/revoke", null);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

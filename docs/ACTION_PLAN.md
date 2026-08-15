@@ -106,6 +106,7 @@ Deliberately early: from M1 onward every subsequent story is demoable in a prod-
 | E2-08 | Nightly backups of Postgres **and** the uploads volume | A scheduled job writes a `pg_dump` and a snapshot of the `uploads` volume off-box on the same schedule; both are verified present. Retention window is set once OI-5 is answered. | TECH_SPEC §7.4, OI-5 |
 | E2-09 | Secrets and environment configuration | JWT signing key, DB password and storage root come from environment/secret store; `.env` files are git-ignored; no secret appears in the repository or in image layers. | TECH_SPEC §8 |
 | E2-10 | Resource limits and post-deploy smoke check | Container memory limits from TECH_SPEC §7.2 are applied and the box's usage is inside the §7.3 budget; the deploy job fails if the health endpoint does not return healthy. | TECH_SPEC §7.2, §7.3 |
+| E2-11 | Run against an external managed Postgres (Neon) | The `api` container can be pointed at a managed Postgres **by configuration alone, with no code change**: a documented override starts `api` (+ `caddy`) with **no `db` container and no `pgdata` volume**, `ConnectionStrings__Default` is the only wiring, and the explicit `dotnet ef database update` migration step (E2-07) is unchanged. `.env.example` carries a placeholder-only Neon connection string in the format Npgsql actually accepts. | TECH_SPEC §7, §11, C1 |
 
 ### E3 — Master Data & RBAC Scaffold
 
@@ -214,12 +215,13 @@ No prototype exists for this module — UI stories are gated on E0-05/E0-06.
 | E9-01 | `wa.me` deep-link builder | An Infrastructure component builds a click-to-chat URL from a stored international phone number plus pre-filled text, correctly URL-encoded. No Business API dependency. | FR-WA-02 [M]; FSD A2; TECH_SPEC §4.1 |
 | E9-02 | Dispatch log endpoint | `POST /dispatch-log` records customer, catalog document (or invoice), staff user, message and timestamp, gated on `Dispatch.Send`. | FR-WA-04 [M]; TECH_SPEC §4.7 |
 | E9-03 | "Send via WhatsApp" on the customer record | The customer detail screen exposes the dispatch action, pre-addressed to that customer's stored number. | FR-WA-01 [M] |
-| E9-04 | Port the 3-step dispatch dialog | The prototype's **Download PDF → Open WhatsApp → Attach & send in chat** dialog is ported 1:1, with **Log Dispatch as a separate, ungated action** rather than a third step; step 1 uses the authenticated download so the file is ready to attach in WhatsApp with minimal steps. **Corrected 2026-07-29** — this row previously read "open chat → download PDF → mark sent", which contradicts the prototype it instructs porting and was already overridden during implementation. See §14.4 for the full rationale, including why Log Dispatch is deliberately not gated on completing the three steps. | FR-WA-02 [M], FR-WA-03 [M]; TECH_SPEC §5.2, ACTION_PLAN §14.4 |
+| E9-04 | Port the 3-step dispatch dialog | The prototype's **Download PDF → Open WhatsApp → Attach & send in chat** dialog is ported 1:1, with **Log Dispatch as a separate, ungated action** rather than a third step; step 1 uses the authenticated download so the file is ready to attach in WhatsApp with minimal steps. **Corrected 2026-07-29** — this row previously read "open chat → download PDF → mark sent", which contradicts the prototype it instructs porting and was already overridden during implementation. See §14.4 for the full rationale, including why Log Dispatch is deliberately not gated on completing the three steps. **Superseded in part by E9-10 (2026-08-05):** step 1 existed only because a deep link cannot attach a file. The share link removes that constraint, so the dialog is now **two** steps (Open WhatsApp → Send in chat) with download demoted to an optional aside. The prototype is still the port source for everything else; this is the one place it describes a constraint that no longer exists. See §23.4. | FR-WA-02 [M], FR-WA-03 [M]; TECH_SPEC §5.2, ACTION_PLAN §14.4, §23 |
 | E9-05 | Launch dispatch from a catalog section | From a catalog section a staff member can pick a customer and enter the same dispatch flow in one go. | FR-WA-06 [S] |
 | E9-06 | Configurable message template | A template with customer-name and catalog-name placeholders is stored as configuration and pre-fills the dispatch message; the text remains editable before sending. | FR-WA-05 [S], FR-ADM-05 [S] |
 | E9-07 | "Sent to" history on a catalog document | A catalog document shows which customers received it and when, derived from the dispatch log. | FR-CAT-08 [S] |
 | E9-08 | Confirm and apply dispatch permission scope | `Dispatch.Send` is granted per the business's answer to **FSD Q4** (any staff vs specific roles); the seeded role mapping matches that answer. | FR-WA-01 [M]; FSD Q4; TECH_SPEC §4.3 |
 | E9-09 | Keep the Phase 2 API upgrade seam | Dispatch logic sits behind an interface so a Business-API sender can replace the deep-link builder later without changing the dispatch log or the calling screens. | FR-WA-07 [S] |
+| E9-10 | Temporary expiring public link to the dispatched document | Compose mints a single-document, unguessable, expiring public link (default 48h) and substitutes it into the pre-filled `wa.me` text, so the recipient opens the PDF from the chat instead of the staff member downloading and attaching it by hand. A new `document_share_links` table records token **hash**, target type+id, creator, created/expires/revoked and access count. One anonymous endpoint serves the file while the token is live; unknown, expired and revoked all return the same 404. Link *generation* is gated on `Dispatch.Send`; link *consumption* is intentionally anonymous. Creation, access and revocation are audit-logged. **A deliberate, narrow exception to TECH_SPEC §8 / E6-04** — recorded as such in §23, not as a relaxation of the rule. Supersedes E9-04's step 1. | FR-WA-02 [M], FR-WA-03 [M]; TECH_SPEC §4.6, §8; ACTION_PLAN §23 |
 
 ### E10 — Analytics & Dashboards (UC-08)
 
@@ -251,6 +253,7 @@ Backend stories can start once E3 lands; UI stories are gated on E0-04/E0-06.
 | E11-07 | Build the User management screen | Implements the E0-04 user design including the show-temp-password-once interaction. **Gated on E0-06.** | FR-ADM-01 [M], OI-4 |
 | E11-08 | Build the Master data configuration screen | Implements the E0-04 master-data design: add/rename/retire/reorder categories, service types and lead/shipment/invoice statuses, all Super-Admin-only. **Gated on E0-06.** | FR-ADM-02 [M], UC-09, OI-4 |
 | E11-09 | WhatsApp template configuration screen | The dispatch message template(s) and default sender behaviour are editable in the admin area. | FR-ADM-05 [S] |
+| E11-10 | Change my own password (Super Admin) | A signed-in Super Admin can voluntarily change their own password by re-entering the current one plus a new one. Distinct from E1-08 (forced, flag-driven) and E11-02 (an admin resetting *someone else's*, which issues a temp password). Gated on a new `Account.ChangeOwnPassword` permission in `PermissionCodes.AdminOnly`; an activated non-admin gets **403**, not 400. Reusing the current password is rejected. Existing refresh tokens are revoked and the caller's own session is rotated in place, so the change never logs the caller out. | TECH_SPEC §4.3, §4.4; DR-10 |
 
 ### E12 — Hardening, NFR & Launch Readiness
 
@@ -480,6 +483,7 @@ Verified on this machine: `dotnet build` (0 warnings, 0 errors), `dotnet test` (
 | E2-08 | **Draft** | Written, never executed. Covers both `pg_dump` and the `uploads` volume per DR-12. No off-box target exists here. |
 | E2-09 | **Done** | `.env.example` is placeholders only; `.env` confirmed git-ignored. No secret in the repo or in an image layer. |
 | E2-10 | **Partial** | Limits confirmed applied via `docker inspect` (api 400 MiB, db 1200 MiB); live idle usage ~131 MB across all three containers, inside the §7.3 budget. **Cannot verify against the real 4 vCPU/8 GB box, and idle usage with no representative data is weak evidence** — recheck under E12-02 volumes. |
+| E2-11 | **Done** (config path proven; not against Neon itself) | See §22. Config-only, no code changed. `docker-compose.external-db.yml` verified: `db` absent, `api.depends_on` absent, `pgdata` absent, and the api container **booted and reported `"database":"Healthy"` against a Postgres entirely outside its compose project**. `dotnet ef database update` resolved the same external endpoint purely from `ConnectionStrings__Default`. Default local path re-verified unchanged (`api` + `db`, Healthy). **Never exercised against a real Neon project (N-44)** — no account exists. |
 
 ### E3-E12
 
@@ -1721,3 +1725,218 @@ All re-run by the coordinator, not taken from agent reports.
 3. **M8 — Admin UI, hardening and launch.** Now estimable (H-2 answered). H-3 is parked by owner decision, so the deployment half stays deferred until reopened.
 
 
+
+---
+
+## 22. E2-11 — External managed Postgres (Neon), config-only
+
+**Not a milestone.** The business now plans to host production's database on Neon rather than the bundled `db` container. This pass makes that possible **by configuration alone** and documents the one thing that would otherwise cost an afternoon. It does **not** unpark H-3 and does not provision anything.
+
+### 22.1 What was built
+
+| File | Change |
+| --- | --- |
+| `docker-compose.external-db.yml` | **New.** Override that drops the bundled Postgres: `db: !reset null`, `api.depends_on: !reset null`, `volumes.pgdata: !reset null`, and `ConnectionStrings__Default=${DATABASE_CONNECTION_STRING:?…}` — **required, not defaulted**, so an unset value fails `docker compose config` with a readable message instead of booting the API with an empty connection string. |
+| `.env.example` | New "Database (EXTERNAL / Neon)" section: commented-out `DATABASE_CONNECTION_STRING`, the URI→Npgsql translation field by field, and the SSL / pooler / `No Reset On Close` reasoning. The existing `DB_PASSWORD` section is retitled "(bundled container)" and marked ignored under the external path. |
+| `src/SourcingOps.Api/appsettings.json` | Comment block above `ConnectionStrings` recording the URI trap and the Neon keyword form. Comments are legal here — the config provider skips them, as `appsettings.Development.json` has relied on since N-23. The value itself is unchanged. |
+| `deploy/deploy.sh`, `deploy/backup.sh` | Header notes so neither draft silently rots: how to run the deploy against an external DB, and that `backup.sh` **breaks** under it. |
+
+**No C# changed.** `ConnectionStrings__Default` was already the sole input to `UseNpgsql(...)` in `Infrastructure/DependencyInjection.cs` and to `AppDbContextFactory` (the design-time factory the migration step uses), and there are no hard-coded SSL settings anywhere to conflict with Neon's requirements. This is a connection-string swap, not a provider swap — C1 and TECH_SPEC §11 hold.
+
+### 22.2 Verified on this machine — 2026-08-05
+
+| What | Result |
+| --- | --- |
+| `dotnet build SourcingOps.sln` | **Clean — 0 warnings, 0 errors** |
+| `dotnet test SourcingOps.sln` | **730 passed** — 429 unit + 301 integration. Unchanged from §21. |
+| `docker compose config` (default path) | **`db` + `api`** — unchanged; the base file was not touched |
+| External override, `--profile prod` | **Valid.** `db` absent, `api.depends_on` absent, `pgdata` absent from `volumes:`. Only `api` + `caddy`. |
+| External override, variable unset | **exit 1** with the intended message — fail-fast confirmed |
+| **Default stack, live** | `docker compose up -d --build` → `api` + `db`, `{"status":"Healthy","checks":{"api":"Healthy","database":"Healthy"}}` |
+| **External stack, live** | **`api` container ONLY** (no `db`, no `pgdata` volume) connected to a Postgres outside its compose project entirely — `{"status":"Healthy",…,"database":"Healthy"}`. Same topology as Neon. |
+| **E2-07's migration command, external endpoint** | `dotnet ef database update` resolved the endpoint purely from `ConnectionStrings__Default`: *"No migrations were applied. The database is already up to date."* **The deploy step needs no change.** |
+
+Verification ran in a detached worktree at `HEAD` plus only this pass's files, because the live tree currently holds another agent's in-flight Dispatching/share-links work that does not compile. That break is unrelated to this pass and was neither caused nor touched here.
+
+### 22.3 Decisions worth not re-litigating
+
+| # | Decision |
+| --- | --- |
+| **D-90** | **Npgsql rejects Neon's `postgresql://` URI, and we document the translation rather than code around it.** Neon's dashboard hands you `postgresql://user:pass@host/db?sslmode=require`; Npgsql parses ADO.NET `keyword=value` pairs only, so pasting it in fails at startup. A URI parser at composition time was rejected: it is new runtime logic whose only job is to catch a copy-paste, which a comment at the exact point of paste catches for free and without a code path to maintain, test and get wrong. The equivalent is spelled out in `.env.example` field by field. |
+| **D-91** | **An override file with `!reset`, NOT a profile on `db`.** `api` declares `depends_on: db: condition: service_healthy`. A profile stops `db` starting but **cannot remove that edge** — compose then refuses to start `api` because a declared dependency is not enabled by any active profile, and `depends_on` has no "only if present" form. `!reset` (Compose Spec, compose ≥ 2.24; installed v5.1.2) deletes the node during the merge. This also keeps the base file a single unmodified statement of the default topology, per C1 / TECH_SPEC §7, instead of teaching it about a second one. |
+| **D-92** | **`SSL Mode=Require` and deliberately NO `Trust Server Certificate`.** Neon refuses plaintext. Npgsql 8+ *validates* the certificate under `Require` (a behaviour change from 7), and Neon's cert chains to a public CA — so validation passes unaided. Adding the trust flag is the reflex fix for TLS errors and here would silently disable a check that is already working. |
+| **D-93** | **The `-pooler` endpoint is the recommended default, and it drags `No Reset On Close=true` with it.** Neon fronts `-pooler` with PgBouncer in transaction mode, which suits this app's short-request pattern and survives scale-to-zero. But Npgsql issues `DISCARD ALL` when returning a connection to its pool and PgBouncer's transaction mode rejects that — so the two settings are a pair, and the direct endpoint wants neither. Documented as a pair so one cannot be copied without the other. |
+| **D-94** | **`DATABASE_CONNECTION_STRING` is required under the override, not defaulted.** A `:-` default would let a typo boot the API with an empty or wrong connection string, surfacing later as an opaque startup failure. `:?` fails at `docker compose config` time with a message naming the file to read. |
+
+### 22.4 Open items after this pass
+
+| # | Item |
+| --- | --- |
+| **N-43** | **Backups regress the moment Neon is switched on.** `deploy/backup.sh` step 1 is `docker compose exec -T db pg_dump`, and there is no `db` container under the override — so the nightly job (E2-08) fails, or worse, is assumed to be running. Either run `pg_dump` from the host against the endpoint (it is publicly reachable, unlike the container's unpublished port) or rely on Neon's point-in-time restore. **That is a business/cost decision tied to OI-5, not an engineering one**, so it is recorded rather than guessed. The uploads half (DR-12) is unaffected and still required either way — it is the state that lives nowhere near Postgres. |
+| **N-44** | **Never exercised against a real Neon project.** The compose wiring, the no-`db` topology, the connection-string format and the migration step are all verified — but against a *local* Postgres standing in for the external one. What is unproven is Neon-specific: TLS handshake, SCRAM auth, `Channel Binding=Require`, PgBouncer behaviour under the pooler, and first-request latency on a cold scale-to-zero endpoint. Same class of evidence gap as E2-05, and it closes the same way — with a real account. |
+| **N-45** | **No EF Core connection-retry policy.** Against a container on the same host, a dropped connection is nearly always fatal-or-fine. Against a scale-to-zero serverless endpoint, a cold start is a *normal* transient failure. `EnableRetryOnFailure()` is the standard answer and is a one-line change in `DependencyInjection.cs` — deliberately **not** made here, because it changes runtime behaviour for the existing bundled-Postgres deployments too and this pass was scoped to config. Revisit with N-44, when there is a real endpoint to measure rather than a guess to tune. |
+| **H-17** | **Owner must create the Neon project.** Needs an account, a region choice (latency to the VPS — pick the same region as the Hostinger box), a plan choice, and the real connection string placed in the VPS `.env`. Blocked on **H-3** being unparked; nothing here unparks it. Tracked in `docs/HUMAN_TASKS.md`. |
+| **N-46** | **A real credential default has appeared in tracked files.** `docker-compose.yml` and `appsettings.json` now ship `Bootstrap__AdminPassword=Welcome@123` (and `owner@sourcingops.local`) as committed defaults, from concurrent work outside this pass. **This contradicts E2-09**, the whole point of which is that no secret appears in the repository. It matters more, not less, once a shared external database is in play: a known default admin password on an internet-reachable stack is a different risk from one on a laptop. Flagged, deliberately not reverted here — it is someone else's in-flight change. |
+| **N-16/H-9, N-18, N-33, N-35, N-36, N-40, N-41, N-42, H-16, E10-08** | **Unchanged.** |
+
+### 22.5 Next
+
+1. **Unchanged from §21.5** — this pass does not reorder it. Node install (H-16) → N-42 → the Angular 19 → 20 upgrade; then E10-08.
+2. **N-46 is the one item worth handling out of band** — a committed default admin password is cheap to fix and waits on nothing.
+3. **E2-11's remainder (N-43, N-44, N-45, H-17) is deployment-track work and stays deferred with the rest of it.** H-3 is still parked by owner decision. The point of this pass was that when H-3 reopens, the Neon question is already answered and costs a `.env` line rather than a design discussion.
+
+
+---
+
+## 23. E9-10 — Expiring public share links for WhatsApp dispatch
+
+**Not a milestone.** One new story under E9, built end to end. It changes what a WhatsApp dispatch actually delivers: the pre-filled message now carries a temporary link to the document itself, so the recipient opens the PDF from the chat instead of the staff member downloading it and attaching it by hand.
+
+**FSD A2 is untouched.** This is still click-to-chat, still no Business API. WhatsApp receives text and only text — the text just happens to contain a URL now.
+
+### 23.1 What was built
+
+| Layer | Change |
+| --- | --- |
+| Domain | `DocumentShareLink` entity (`document_share_links`) + `DocumentShareTargetTypes` constants (`CatalogDocument`, `Invoice`). |
+| Migration | `20260805081013_AddDocumentShareLinks`. One table, three indexes (unique `token_hash`; `(target_type, target_id, expires_at)`; the FK index on `created_by_user_id`). `Down` is a single `DropTable` — reviewed by hand and reversible. |
+| Application | `IDocumentShareLinkService` / `DocumentShareLinkService` — mint, resolve, revoke. `IShareTokenFactory` declared here, implemented in Infrastructure. `DispatchOptions` gains `ShareLinkLifetimeHours`, `PublicBaseUrl` and the `{DocumentLink}` / `{LinkExpiryHours}` placeholders. |
+| Infrastructure | `Sha256ShareTokenFactory` — 32 CSPRNG bytes, Base64Url, SHA-256 for storage. |
+| API | **New** `SharedDocumentsController` — `GET /api/v1/shared-documents/{token}`, `[AllowAnonymous]`, rate-limited. `DispatchController.Compose` widened (`invoiceId`, actor from token) and `POST /dispatch-log/share-links/{id}/revoke` added. |
+| Frontend | Dispatch dialog: three steps become two, expiry line under the message preview, download demoted to an optional secondary action. `DispatchComposeResult.shareLink` on the wire contract. |
+
+`ComposeAsync` also gained the invoice target it never had. The dispatch **log** has accepted an invoice since M6/E8-06 while **compose** could not prepare one — which is why `invoice-detail`'s WhatsApp button is still an inert, disabled stub. That gap is now closed on the API side; the button itself is still unwired (see N-51).
+
+### 23.2 Verified on this machine — 2026-08-05
+
+| Check | Result |
+| --- | --- |
+| `dotnet build SourcingOps.sln` | **Clean — 0 warnings, 0 errors** |
+| `dotnet test SourcingOps.sln` | **783 passed, 0 failed** — 466 unit + 317 integration. Up from 730 at §22. **~47 of the ~53 new tests are this pass's**; the remainder arrived from concurrent work in the same tree (see the note below). |
+| `NODE_OPTIONS= npx ng test` | **391 passed, 0 failed** |
+| `NODE_OPTIONS= npx ng build` | Succeeds, **zero budget warnings**. Initial total **306.40 kB** vs 306.20 kB at §22 — **+0.20 kB**, no new dependency. The dialog stays lazy-chunked. |
+| Migration applies from scratch | Yes — every `SourcingOps.Api.Tests` class runs real migrations against a fresh Testcontainers Postgres, so `document_share_links` is created from zero on every fixture, not merely asserted about. |
+
+**Evidentiary standard, stated plainly.** This story is closed on **build + unit + integration evidence**, not on a live `docker compose` stack and not in a browser. The integration half is real Postgres and the real auth/authorization/rate-limiter pipeline through `WebApplicationFactory`, including an anonymous client with no bearer token fetching a real PDF — but the HTTP is in-memory transport, so what remains unproven is Caddy actually routing `/api/v1/shared-documents/*` on the deployed box and a real phone opening the link. Both are named in §23.5.
+
+**Concurrency note.** This pass ran against a working tree that another agent was editing at the same time (§22's own verification note records the mirror image of this from the other side). Test totals moved under both of us mid-pass; the numbers above are from a single final run of the whole solution after all edits. Four `DbSeederTests` failures observed mid-pass belonged to the other track's `Account.ChangeOwnPassword` work and were fixed there, not here — nothing in this pass touches permissions or seeding.
+
+### 23.3 The security decisions, and why each went the way it did
+
+TECH_SPEC §8 and E6-04 say documents are served **only** through a permission-checked endpoint, never a public path. This story is a deliberate exception to that. An exception is only defensible if its bounds are written down, so:
+
+| # | Decision |
+| --- | --- |
+| **D-101** | **The token is a 256-bit capability, never an identifier.** 32 bytes from `RandomNumberGenerator`, Base64Url, 43 characters. Knowing a document's Guid tells an attacker nothing about its share URL. A sequential or derivable id would have made every document enumerable, which is the whole failure mode this design exists to avoid. |
+| **D-102** | **Stored hashed (SHA-256), never in plaintext** — the same precedent `refresh_tokens` has followed since E1-07. A leaked backup or a stray query result yields no working link. Deliberately a **bare** hash, not PBKDF2: the input is 256 bits of uniform randomness, so there is no dictionary for a work factor to slow, and a salt would make lookup-by-token impossible without scanning every row. |
+| **D-103** | **48-hour default, configurable.** 24h can lapse before a Friday-evening send is read on Monday, across the timezone gap this business actually operates in; a week leaves an unauthenticated URL live in a chat log long after the conversation moved on. The default template quotes the number to the recipient, and `{LinkExpiryHours}` keeps that text true if the setting changes. |
+| **D-104** | **Repeat use inside the window — deliberately NOT single-use.** Recipients re-open chats, retry failed downloads, and forward to a colleague in the same buying team. Decisively: several WhatsApp clients prefetch link previews, which would burn a single-use token **before the human ever tapped it** — the feature would fail precisely when it looked like it had worked. Every access is counted and audited instead. |
+| **D-105** | **Uniform 404 for unknown, expired, revoked, dangling and file-missing. No 410.** A distinct "Gone" would confirm to a stranger that a guessed token was once real — a free oracle. And **never a 401**: the recipient has no account and never will (FSD A1), so an auth challenge would be both useless to them and informative to a prober. A test asserts the absence of a `WWW-Authenticate` header, not just the status code. |
+| **D-106** | **Minting is gated on `Dispatch.Send`; consumption is anonymous by design.** Issuing an unauthenticated URL to a business document is a send-class action, not a read — which is why a **GET** (`/dispatch-log/compose`) legitimately has a write side effect here. Revocation takes the same permission: whoever can hand out a public link can take it back. |
+| **D-107** | **Mint per compose — no "mint or reuse".** Reuse would mean returning an existing link's URL again, which D-102 makes impossible. The only way to reuse a row is to rotate its token, and that **silently kills a link the customer may already have been sent**. An extra 150-byte row is strictly cheaper than that failure, and the extra rows double as a record of when each document was prepared for sharing. |
+| **D-108** | **A Draft invoice fails compose with a 400 rather than minting a link.** E8-03 renders the PDF on issue, so a Draft has no file. Failing at the staff member's screen — where the fix is "issue the invoice" — beats a link that 404s in the customer's chat. |
+| **D-109** | **`target_id` is a discriminator + id, not an FK.** The target is polymorphic across tables with no shared base. One nullable FK column per shareable type (the shape `dispatches` uses for its two) would need a migration for every future document type; this needs a resolver case and a constant. A dangling id resolves to the same 404 as an unknown token, so the missing FK constraint costs nothing an attacker can see. |
+| **D-110** | **Every anonymous access writes its own audit row, not just a counter.** The counter answers "how many"; the FSD's Auditability NFR wants "when". `userId` is null — `IAuditLogger` already models actor-unknown (failed logins use it), and attributing the read to the staff member who shared the link would be a lie. |
+| **D-111** | **No cleanup job for expired rows.** TECH_SPEC §4.8 explicitly rules out a background worker in Phase 1, and expired rows are the record of what was shared publicly and when — the thing an audit would want kept. A few thousand tiny rows a year. Revisit only if that stops being true. |
+| **D-112** | **`Cache-Control: private, no-store` and `Content-Disposition: inline`.** `inline` because a phone opening the PDF in a viewer is the point; a forced download is barely better than the manual attach step this replaces. `no-store` because this URL is fetched by phone browsers and link-preview crawlers, and shared caches holding the bytes would outlive the expiry window the whole safety argument rests on. |
+| **D-113** | **Share URLs are built against `Cors:FrontendOrigin` unless `Dispatch:PublicBaseUrl` is set.** The link must be reachable from the recipient's phone, which is the public frontend origin — Caddy serves the SPA there and proxies `/api/*` to the API (TECH_SPEC §7.2). A correct deployment therefore needs no new setting. |
+
+### 23.4 A ported prototype step that no longer describes reality
+
+**E9-04's step 1 is gone, and that is not a porting error.** The prototype's "Download PDF → Open WhatsApp → Attach & send in chat" existed because a `wa.me` deep link cannot attach a file. That constraint is what E9-10 removes. The dialog is now **Open WhatsApp → Send in chat**, with download kept as a clearly-secondary "for myself" action.
+
+Three things were deliberately preserved rather than tidied away:
+
+- **Download still goes through the authenticated endpoint**, never the share link. A staff member holding a session should not be routed through the weaker anonymous path.
+- **Log Dispatch is still ungated on step completion** — §14.4's reasoning is unchanged and still correct.
+- **The client still never builds a URL.** Both the `wa.me` link and the share link come from the server, preserving E9-09's Business-API seam.
+
+§4's E9-04 row now carries this supersession inline, so the next reader does not have to reconstruct it. That row had already been wrong once (§14.4) and left uncorrected for four passes — the correction is written into the row this time, not only into a close-out section.
+
+### 23.5 Open items after this pass
+
+| # | Item |
+| --- | --- |
+| **N-49** | **The anonymous route has never been exercised through Caddy.** `Caddyfile` proxies `/api/*` wholesale, so `/api/v1/shared-documents/*` should just work — but "should" is doing real work in that sentence, and this is the one route whose entire value is being reachable by someone outside the network. Verify with the first real deploy, alongside E2-05. |
+| **N-50** | **No revoke UI.** `POST /dispatch-log/share-links/{id}/revoke` is built, permission-gated, idempotent and tested; nothing in the SPA calls it. The API is the mechanism a future "sent links" management view would use, and an admin can call it directly today. Deliberately not bolted onto the dispatch dialog, where a revoke button beside a link you are about to send would invite exactly the wrong click. |
+| **N-51** | **`invoice-detail`'s WhatsApp button is still inert.** Compose now supports invoices (§23.1), so the remaining work is frontend-only: pass an invoice lock into the shared dialog. This is the last piece of E8-06 and is now a small story rather than a blocked one. |
+| **N-52** | **Link reachability is now a customer-visible property of the box being up.** A customer who taps the link while the VPS is down sees a browser error attributed to the sender, not to the platform. No mitigation is proposed here — it is the same availability posture TECH_SPEC §9 already accepts (business-hours-only, no HA) — but it is newly *customer-facing*, which it was not before. Worth the owner knowing. |
+| **N-16/H-9** | **Still open, and this pass changed the surface it refers to.** The dispatch dialog has still never been driven in a browser — now eight passes — and its step flow just changed. The dialog's Karma suite covers the new behaviour, but per DR-5 that is not the same as a visual sign-off. |
+| **N-46** | **Unchanged and not this pass's to fix** — the committed default admin password. It matters slightly more now: a publicly reachable box plus a known default admin credential is a worse combination than either alone. |
+| **N-18, N-33, N-35, N-36, N-40…N-45, H-16, H-17, E10-08** | **Unchanged.** |
+
+### 23.6 Next
+
+1. **N-51** — wire the invoice dispatch button. It is the cheapest remaining item and closes E8-06 properly.
+2. **N-49 with the first real deploy.** Nothing else in this story needs the deployment track unparked.
+3. **Unchanged otherwise from §22.5** — Node install (H-16) → N-42 → the Angular upgrade; then E10-08.
+---
+
+## 24. Owner credential + E11-10 — "change my own password"
+
+**Not a milestone.** Two related pieces of account work: the seeded owner account becomes a credential the owner is actually told, and a Super Admin gains a first-class way to change it from inside the app. The second exists because of the first — a known shipped default is only defensible if changing it is one click away.
+
+### 24.1 What was built
+
+| Area | Change |
+| --- | --- |
+| `Persistence/Seed/BootstrapAdminOptions.cs` | Defaults are now `owner@sourcingops.local` / `Welcome@123`. Class doc records **why the duplication in `appsettings.json`/compose is required, not redundant**: `GetSection("Bootstrap").Bind(...)` overwrites a property whenever config carries the key *including with an empty string*, so a `""` entry wins over the default here and silently routes to the random-password branch. |
+| `Persistence/Seed/DbSeeder.cs` | `MustChangePassword = isGenerated` — the forced-change flag now tracks the *generated* case only (see D-108). Startup banner drops the "must change" line when it does not apply. |
+| `appsettings.json`, `docker-compose.yml`, `.env.example` | Same pair carried explicitly in all three, for the Bind reason above. `.env.example` documents both branches and that the seeder never re-applies either to an existing account (E1-03 idempotency). |
+| `Domain/Constants/PermissionCodes.cs` | New `Account.ChangeOwnPassword`, added to `All` **and** to `AdminOnly` — the latter is what makes it Super-Admin-only, since the seeder withholds every `AdminOnly` code from Associate. |
+| `Api/Authorization/ChangeOwnPasswordRequirement.cs`, `…Handler.cs` | **New.** Backs the `Auth.ChangePassword` policy. Registered outside the `PermissionCodes.All` loop because it is an **OR of two conditions**, not a single permission check (D-110). |
+| `Api/Controllers/AuthController.cs` | `POST /api/v1/auth/change-password` moves from bare `[Authorize]` to `[Authorize(Policy = "Auth.ChangePassword")]`. `[AllowMustChangePassword]` stays — it is a different mechanism (the MVC filter exemption), and removing it breaks E1-08. |
+| `Application/Auth/AuthService.cs` | Rejects a new password equal to the current one, **before any mutation**. |
+| `client/src/app/account/change-password/` | **New** in-shell screen at `/account/password`, `permissionGuard`-gated on `Account.ChangeOwnPassword`. Shared atoms/tokens only — no new button, card or form styling (§7, E0-01). |
+| `client/…/core/shell/` | "Change password" appears in the topbar beside "Log out", behind the same permission. Styled by extending the existing `.topbar__logout` rule rather than adding a near-identical second block. |
+
+**No new endpoint and no new migration.** E11-10 reuses the existing `POST /auth/change-password` — the request shape (current + new password), the hashing, the audit entry and the N-7 refresh-token revocation were already correct for a voluntary change. What was missing was authorisation and a way in. Building a second endpoint would have duplicated `AuthService.ChangePasswordAsync` for no behavioural difference.
+
+### 24.2 Verified on this machine — 2026-08-05
+
+| What | Result |
+| --- | --- |
+| `dotnet build SourcingOps.sln` | **Clean — 0 warnings, 0 errors** |
+| `dotnet test SourcingOps.sln` | **783 passed, 0 failed** — 466 unit + 317 integration |
+| Frontend suite (`ng test --watch=false --browsers=ChromeHeadless`) | **391 passed, 0 failed** |
+| Production build (`ng build`) | **Succeeded, zero budget warnings** |
+
+Counts are the full solution as it stood, which includes two other agents' concurrent work in the same tree; the 5 pre-existing failures this pass started with are listed below and are all closed.
+
+**Failures found and fixed (not worked around):**
+
+| Test | Cause | Resolution |
+| --- | --- | --- |
+| `DbSeederTests.SeedAsync_CreatesFullPermissionCatalog` | New permission code | Literal added to `ExpectedPermissionCodes` — deliberately, per that file's N-12 rule that a permission-catalogue change must make a human confirm it |
+| `DbSeederTests.SeedAsync_GrantsSuperAdminEveryPermission_…` | Same | Same, plus a new `NotContain` assertion pinning that Associate does **not** get it |
+| `DbSeederTests.SeedAsync_RunTwice_…` | Permission count 18 → 19 | Updated |
+| `DbSeederTests.SeedAsync_…WithMustChangePasswordTrue` | D-95 | Split into a configured case (**false**) and a `[Theory]` generated case (null/`""`/whitespace → **true**), so neither branch can drift |
+| `LoginTests.Login_WithBootstrapAdminCredentials_…MustChangePasswordTrue` | D-95 | Renamed and inverted; `ApiFactory` configures a password explicitly, so the seeded admin is ready to use |
+
+**Tests added:** the three E11-10 authorisation paths as integration tests — voluntary change by an activated Super Admin (**200**, and the new password logs in), an activated Associate (**403** from the policy, and their password still works), reuse of the current password (**400**, forced flag not cleared) — plus `AuthServiceTests` unit coverage for the same-password rejection proving hash and flag are untouched, and a seeder test pinning the shipped `owner@sourcingops.local` / `Welcome@123` pair as literals.
+
+### 24.3 Decisions worth not re-litigating
+
+| # | Decision |
+| --- | --- |
+| **D-114** | **`MustChangePassword` now tracks the GENERATED password only, not every seeded admin.** A generated password is unknown to any human until they read it out of an application log — and a secret written to a log must be rotated, so the forced change stays exactly where that exposure is. A password an operator **explicitly configured** is a deliberately chosen credential; forcing an immediate change makes the configured value unusable as configured, which defeats the entire point of configuring it. This is a **deviation** from the D-1 behaviour ("seeded with a generated password logged once, must change on first login"). D-1's security property is preserved precisely where it applies; what changed is that the configured branch, which D-1 mentioned but did not distinguish, is now treated as the deliberate act it is. |
+| **D-115** | **`Account.ChangeOwnPassword` is in `AdminOnly` — the deliberate opposite of D-86.** `Inventory.Adjust` was kept OUT of `AdminOnly` because the staff who count stock are exactly who needs it. Here the owner asked for the reverse and it is the right default: an ordinary Associate's password is administered *for* them through E11-02, and self-service rotation for every account is a larger surface than this two-role deployment needs. Widening it later is a one-line move out of `AdminOnly`. |
+| **D-116** | **The policy is an OR of two conditions, and the forced branch is not optional.** `Auth.ChangePassword` succeeds on `must_change_password=true` **or** on `Account.ChangeOwnPassword`. E11-01 creates every account with the flag set, and `RequirePasswordChangeFilter` 403s every endpoint except this one — so gating this endpoint on the permission alone would make every non-admin account **permanently unusable**, the same class of unrecoverable lockout the "last active Super Admin" guard exists to prevent (TECH_SPEC §4.4). Registered separately from the `PermissionCodes.All` policy loop for this reason; it is not a plain permission check and must not be folded back into that loop. |
+| **D-117** | **A voluntary change ROTATES the caller's session; it does not log them out.** The endpoint already revoked refresh tokens (N-7 / DR-10) and reissued a token pair to the caller in the same call, and `ChangePassword_ReturnedTokenIsUsableImmediately` proves the revoke-then-reissue ordering is safe through the real middleware. Forcing a re-login would have been a *new* behaviour, worse UX, and would have put the E1-08 forced flow and this one on different code paths for no security gain — every *other* session is still revoked either way. |
+| **D-118** | **Reusing the current password is rejected — a defect fix, not a new strength rule.** Min-8 remains the codebase's entire password policy and this pass did not extend it. Without the check, a user under a forced change could "change" the temporary password to itself: `MustChangePassword` clears while the temp credential that reached a log or an out-of-band message stays live. That is a real hole in E1-08, independent of E11-10. |
+| **D-119** | **No new endpoint, no "account settings" module.** One screen, one route, one permission. The existing `POST /auth/change-password` already did the work; a second `/account/change-password` endpoint would have duplicated `AuthService.ChangePasswordAsync` to no behavioural end. |
+
+### 24.4 Open items after this pass
+
+| # | Item |
+| --- | --- |
+| **N-46** | **Raised in §22.4 and now OWNED here, since this is the pass that introduced it. A real credential default ships in tracked files** — `docker-compose.yml`, `appsettings.json` and `.env.example` all carry `owner@sourcingops.local` / `Welcome@123`. This is in tension with **E2-09** ("no secret appears in the repository"), and the owner asked for it explicitly, so it is recorded rather than quietly reverted. What makes it defensible today: it applies **only to the run that creates the account** (E1-03 idempotency — editing it later does nothing), every deployment path can override it from `.env`, and E11-10 now makes changing it a one-click in-app action. What makes it **not** defensible at go-live: an internet-reachable stack with a publicly-known admin password is a full compromise, and §22 correctly notes this gets worse once a shared external database is in play. **Treat as a launch blocker, not a defect** — see H-18. |
+| **H-18** | **Owner must set a real `BOOTSTRAP_ADMIN_PASSWORD` in the production `.env` before first boot, or change the password in-app immediately after.** Cannot be done by an agent: it requires choosing a secret. Tracked in `docs/HUMAN_TASKS.md`. Belongs to the same deployment track as H-3/H-17 and is deferred with it, but unlike those it is **not** optional — it gates go-live rather than a feature. |
+| **N-53** | **The 403 path is proven for Associate, but no role exists with "some admin rights, not this one."** Same limitation already recorded as N-40 for `Inventory.Adjust` and for the `Invoicing.Edit`/`MarkPaid` split: the seeded roles are two coarse blocs, so `Account.ChangeOwnPassword` cannot be exercised independently of the rest of `AdminOnly`. The separation is real in code; the finer-grained assertion waits on a business answer about roles. |
+| **N-54** | **The screen has never been driven in a browser.** Per standing policy this pass verified through unit, integration and build only. The specific things that convention does not cover here: the topbar link's placement on a narrow viewport, and whether the success banner is noticed given the form clears beneath it. |
+| **N-16/H-9, N-18, N-33, N-35, N-36, N-40, N-41, N-42, N-43, N-44, N-45, H-16, H-17, E10-08** | **Unchanged.** |
+
+### 24.5 Next
+
+1. **Unchanged from §21.5 / §22.5** — Node install (H-16) → N-42 → Angular 19 → 20; then E10-08.
+2. **H-18 joins the launch checklist** and should be read together with N-46. It is cheap, it waits on nothing technical, and it is the one item here that must not reach production unresolved.

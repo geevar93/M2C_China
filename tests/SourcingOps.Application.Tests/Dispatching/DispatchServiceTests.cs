@@ -21,6 +21,14 @@ public class DispatchServiceTests
 {
     private static readonly Guid Actor = Guid.NewGuid();
 
+    /// <summary>
+    /// E9-10: the share-link service is wired in for real (against the same in-memory context and
+    /// a mocked <see cref="IFileStorage"/>) rather than mocked. Compose's whole contract now is
+    /// "the message contains a working link", and a mocked minter would assert only that this
+    /// class calls something — the exact shape of test that let the dispatch dialog go seven
+    /// review passes unverified (N-16). <c>DocumentShareLinkServiceTests</c> covers the minter's
+    /// own behaviour in isolation.
+    /// </summary>
     private static DispatchService CreateSut(
         AppDbContext db, out Mock<IAuditLogger> auditMock, out Mock<IDispatchMessageSender> senderMock, DispatchOptions? options = null)
     {
@@ -28,7 +36,21 @@ public class DispatchServiceTests
         senderMock = new Mock<IDispatchMessageSender>();
         senderMock.Setup(s => s.Prepare(It.IsAny<string>(), It.IsAny<string>()))
             .Returns((string phone, string message) => new DispatchSendPreparation($"https://wa.me/{phone.TrimStart('+')}?text=stub"));
-        return new DispatchService(db, auditMock.Object, senderMock.Object, options ?? new DispatchOptions());
+
+        var resolved = options ?? new DispatchOptions();
+        if (string.IsNullOrEmpty(resolved.PublicBaseUrl))
+        {
+            resolved.PublicBaseUrl = "https://ops.example.com";
+        }
+
+        var storage = new Mock<IFileStorage>();
+        storage.Setup(s => s.OpenReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MemoryStream("%PDF-1.4"u8.ToArray()));
+
+        var shareLinks = new DocumentShareLinkService(
+            db, storage.Object, new TestShareTokenFactory(), auditMock.Object, resolved);
+
+        return new DispatchService(db, auditMock.Object, senderMock.Object, shareLinks, resolved);
     }
 
     private sealed record Fixture(Customer Customer, CatalogDocument Document, CatalogSection Section, User Staff);
@@ -106,7 +128,7 @@ public class DispatchServiceTests
         var f = SeedData(db);
         var sut = CreateSut(db, out _, out var sender);
 
-        var result = await sut.ComposeAsync(f.Customer.Id, f.Document.Id);
+        var result = await sut.ComposeAsync(f.Customer.Id, f.Document.Id, null, Actor);
 
         result.Should().NotBeNull();
         result!.Message.Should().Contain("Kundan Traders").And.Contain("Spring 2026 Collection");
@@ -115,16 +137,40 @@ public class DispatchServiceTests
     }
 
     [Fact]
-    public async Task ComposeAsync_CustomTemplate_SubstitutesBothPlaceholders()
+    public async Task ComposeAsync_CustomTemplate_SubstitutesEveryPlaceholder()
     {
         using var db = TestDbContextFactory.Create();
         var f = SeedData(db);
-        var options = new DispatchOptions { MessageTemplate = "Dear {CustomerName}, see {CatalogName} attached." };
+        var options = new DispatchOptions
+        {
+            MessageTemplate = "Dear {CustomerName}, see {CatalogName}: {DocumentLink} (expires in {LinkExpiryHours}h).",
+            ShareLinkLifetimeHours = 12
+        };
         var sut = CreateSut(db, out _, out _, options);
 
-        var result = await sut.ComposeAsync(f.Customer.Id, f.Document.Id);
+        var result = await sut.ComposeAsync(f.Customer.Id, f.Document.Id, null, Actor);
 
-        result!.Message.Should().Be("Dear Kundan Traders, see Spring 2026 Collection attached.");
+        result!.Message.Should().Be(
+            $"Dear Kundan Traders, see Spring 2026 Collection: {result.ShareLink.Url} (expires in 12h).");
+    }
+
+    /// <summary>
+    /// E9-10: an operator who edits the template in config and drops {DocumentLink} must not
+    /// silently ship link-less dispatches — since E9-10 the link IS the delivery mechanism.
+    /// See <see cref="DispatchOptions.Render"/> on why appending beats passing through.
+    /// </summary>
+    [Fact]
+    public async Task ComposeAsync_TemplateMissingTheLinkPlaceholder_StillAppendsTheLink()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var options = new DispatchOptions { MessageTemplate = "Hi {CustomerName}, sharing {CatalogName}." };
+        var sut = CreateSut(db, out _, out _, options);
+
+        var result = await sut.ComposeAsync(f.Customer.Id, f.Document.Id, null, Actor);
+
+        result!.Message.Should().StartWith("Hi Kundan Traders, sharing Spring 2026 Collection.");
+        result.Message.Should().Contain(result.ShareLink.Url);
     }
 
     [Fact]
@@ -134,7 +180,7 @@ public class DispatchServiceTests
         var f = SeedData(db);
         var sut = CreateSut(db, out _, out _);
 
-        var result = await sut.ComposeAsync(Guid.NewGuid(), f.Document.Id);
+        var result = await sut.ComposeAsync(Guid.NewGuid(), f.Document.Id, null, Actor);
 
         result.Should().BeNull();
     }
@@ -146,7 +192,146 @@ public class DispatchServiceTests
         var f = SeedData(db);
         var sut = CreateSut(db, out _, out _);
 
-        var result = await sut.ComposeAsync(f.Customer.Id, Guid.NewGuid());
+        var result = await sut.ComposeAsync(f.Customer.Id, Guid.NewGuid(), null, Actor);
+
+        result.Should().BeNull();
+    }
+
+    // ---- Compose: the E9-10 share link -------------------------------------------------
+
+    [Fact]
+    public async Task ComposeAsync_MintsAShareLink_AndPutsItsUrlInTheMessage()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var sut = CreateSut(db, out _, out _);
+
+        var result = await sut.ComposeAsync(f.Customer.Id, f.Document.Id, null, Actor);
+
+        result!.ShareLink.Should().NotBeNull();
+        result.ShareLink.Url.Should().StartWith("https://ops.example.com/api/v1/shared-documents/");
+        result.ShareLink.ExpiresAtUtc.Should().BeCloseTo(DateTime.UtcNow.AddHours(48), TimeSpan.FromMinutes(1));
+        result.Message.Should().Contain(result.ShareLink.Url);
+
+        var stored = await db.DocumentShareLinks.SingleAsync();
+        stored.TargetType.Should().Be("CatalogDocument");
+        stored.TargetId.Should().Be(f.Document.Id);
+        stored.CreatedByUserId.Should().Be(Actor);
+        stored.RevokedAt.Should().BeNull();
+        stored.AccessCount.Should().Be(0);
+    }
+
+    /// <summary>
+    /// E9-10's central security property, asserted at the layer that produces the value: the raw
+    /// token must never be what is persisted, so a database or backup read yields no working
+    /// link. Written against the URL's own token substring rather than a stub constant, so it
+    /// keeps holding if the token format changes.
+    /// </summary>
+    [Fact]
+    public async Task ComposeAsync_StoresOnlyTheTokenHash_NeverTheTokenItself()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var sut = CreateSut(db, out _, out _);
+
+        var result = await sut.ComposeAsync(f.Customer.Id, f.Document.Id, null, Actor);
+
+        var rawToken = result!.ShareLink.Url.Split('/').Last();
+        var stored = await db.DocumentShareLinks.SingleAsync();
+        stored.TokenHash.Should().NotBe(rawToken);
+        stored.TokenHash.Should().Contain(rawToken, "the stub factory's hash is derived from the token — a real hash would not contain it, but this proves the stored value is not the bare token");
+    }
+
+    [Fact]
+    public async Task ComposeAsync_TwoComposesOfTheSameDocument_MintTwoIndependentLinks()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var sut = CreateSut(db, out _, out _);
+
+        var first = await sut.ComposeAsync(f.Customer.Id, f.Document.Id, null, Actor);
+        var second = await sut.ComposeAsync(f.Customer.Id, f.Document.Id, null, Actor);
+
+        // Deliberately NOT reuse — see DocumentShareLinkService's doc comment. The point of the
+        // assertion is that the first link is not silently invalidated by the second compose,
+        // which is what token rotation on a reused row would have done.
+        second!.ShareLink.Id.Should().NotBe(first!.ShareLink.Id);
+        second.ShareLink.Url.Should().NotBe(first.ShareLink.Url);
+        (await db.DocumentShareLinks.CountAsync()).Should().Be(2);
+        (await db.DocumentShareLinks.CountAsync(l => l.RevokedAt == null)).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ComposeAsync_NeitherTargetSupplied_ThrowsValidationException()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var sut = CreateSut(db, out _, out _);
+
+        var act = async () => await sut.ComposeAsync(f.Customer.Id, null, null, Actor);
+
+        await act.Should().ThrowAsync<AppValidationException>();
+    }
+
+    [Fact]
+    public async Task ComposeAsync_BothTargetsSupplied_ThrowsValidationException()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var invoice = SeedInvoice(db, f.Customer);
+        var sut = CreateSut(db, out _, out _);
+
+        var act = async () => await sut.ComposeAsync(f.Customer.Id, f.Document.Id, invoice.Id, Actor);
+
+        await act.Should().ThrowAsync<AppValidationException>();
+    }
+
+    [Fact]
+    public async Task ComposeAsync_IssuedInvoice_MintsAnInvoiceShareLink_AndNamesItInTheMessage()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var invoice = SeedInvoice(db, f.Customer);
+        invoice.PdfFilePath = $"invoices/{invoice.Id}.pdf";
+        db.SaveChanges();
+        var sut = CreateSut(db, out _, out _);
+
+        var result = await sut.ComposeAsync(f.Customer.Id, null, invoice.Id, Actor);
+
+        result!.Message.Should().Contain("Invoice INV-2608-001");
+        result.Message.Should().Contain(result.ShareLink.Url);
+        var stored = await db.DocumentShareLinks.SingleAsync();
+        stored.TargetType.Should().Be("Invoice");
+        stored.TargetId.Should().Be(invoice.Id);
+    }
+
+    /// <summary>
+    /// A Draft invoice has no rendered PDF (E8-03 renders on issue), so there is nothing to link
+    /// to. This fails at compose — where the staff member can go and issue the invoice — rather
+    /// than minting a link that 404s in the customer's chat.
+    /// </summary>
+    [Fact]
+    public async Task ComposeAsync_DraftInvoiceWithNoPdf_ThrowsValidationException_RatherThanMintingADeadLink()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var invoice = SeedInvoice(db, f.Customer); // PdfFilePath left null
+        var sut = CreateSut(db, out _, out _);
+
+        var act = async () => await sut.ComposeAsync(f.Customer.Id, null, invoice.Id, Actor);
+
+        await act.Should().ThrowAsync<AppValidationException>();
+        (await db.DocumentShareLinks.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ComposeAsync_UnknownInvoice_ReturnsNull()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var sut = CreateSut(db, out _, out _);
+
+        var result = await sut.ComposeAsync(f.Customer.Id, null, Guid.NewGuid(), Actor);
 
         result.Should().BeNull();
     }

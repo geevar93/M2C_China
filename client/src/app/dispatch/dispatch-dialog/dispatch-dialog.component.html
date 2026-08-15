@@ -3,7 +3,9 @@
     <div class="wa-header">
       <div>
         <div class="section-title">Send Catalog via WhatsApp</div>
-        <div class="muted wa-header-sub">Click-to-chat cannot attach a file. Download the PDF, then open the chat and attach it.</div>
+        <div class="muted wa-header-sub">
+          The message includes a temporary link to the PDF, so the customer can open it straight from the chat — no attaching needed.
+        </div>
       </div>
       <div class="dialog-close" (click)="cancel()">✕</div>
     </div>
@@ -97,36 +99,39 @@
           <div class="wa-preview-label">PREVIEW</div>
           <div class="wa-bubble">{{ message() }}</div>
         </div>
+        @if (shareLink()) {
+          <div class="muted wa-link-note">🔗 {{ shareLinkExpiryText() }} · anyone with the link can open the PDF until then</div>
+        }
       }
     </div>
 
-    <div class="wa-steps-grid">
-      <div class="step-tile" [class.step-tile--done]="doneSteps()[1]" (click)="downloadStep()">
-        <div class="step-tile-head">
-          <span class="step-dot" [class.step-dot--done]="doneSteps()[1]">{{ doneSteps()[1] ? '✓' : '1' }}</span>
-          <span class="step-label">Download PDF</span>
-        </div>
-        <div class="step-desc">{{ downloading() ? 'Downloading…' : 'Saves to this device so it can be attached.' }}</div>
-      </div>
+    <div class="wa-steps-grid wa-steps-grid--two">
       <div
         class="step-tile"
-        [class.step-tile--done]="doneSteps()[2]"
+        [class.step-tile--done]="doneSteps()[1]"
         [class.step-tile--disabled]="!canOpenWhatsApp()"
         (click)="openWhatsAppStep()"
       >
         <div class="step-tile-head">
-          <span class="step-dot" [class.step-dot--done]="doneSteps()[2]">{{ doneSteps()[2] ? '✓' : '2' }}</span>
+          <span class="step-dot" [class.step-dot--done]="doneSteps()[1]">{{ doneSteps()[1] ? '✓' : '1' }}</span>
           <span class="step-label">Open WhatsApp ↗</span>
         </div>
-        <div class="step-desc">wa.me deep link, pre-addressed and pre-filled.</div>
+        <div class="step-desc">wa.me deep link, pre-addressed with the message and the PDF link already filled in.</div>
       </div>
-      <div class="step-tile" [class.step-tile--done]="doneSteps()[3]" (click)="markSentStep()">
+      <div class="step-tile" [class.step-tile--done]="doneSteps()[2]" (click)="markSentStep()">
         <div class="step-tile-head">
-          <span class="step-dot" [class.step-dot--done]="doneSteps()[3]">{{ doneSteps()[3] ? '✓' : '3' }}</span>
-          <span class="step-label">Attach &amp; send in chat</span>
+          <span class="step-dot" [class.step-dot--done]="doneSteps()[2]">{{ doneSteps()[2] ? '✓' : '2' }}</span>
+          <span class="step-label">Send in chat</span>
         </div>
-        <div class="step-desc">Manual in Phase 1. Automated with the Business API.</div>
+        <div class="step-desc">Nothing to attach — the customer taps the link to open the PDF.</div>
       </div>
+    </div>
+
+    <div class="wa-secondary-actions">
+      <button type="button" class="btn btn-secondary btn-sm" [disabled]="downloading() || !canCompose()" (click)="downloadForMyself()">
+        {{ downloading() ? 'Downloading…' : '⬇ Download the PDF for myself' }}
+      </button>
+      <span class="muted wa-secondary-note">Optional — the customer does not need this.</span>
     </div>
 
     @if (downloadError()) {

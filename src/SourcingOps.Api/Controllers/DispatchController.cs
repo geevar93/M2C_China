@@ -20,18 +20,45 @@ namespace SourcingOps.Api.Controllers;
 public sealed class DispatchController : ControllerBase
 {
     private readonly IDispatchService _service;
+    private readonly IDocumentShareLinkService _shareLinks;
 
-    public DispatchController(IDispatchService service)
+    public DispatchController(IDispatchService service, IDocumentShareLinkService shareLinks)
     {
         _service = service;
+        _shareLinks = shareLinks;
     }
 
+    /// <summary>
+    /// E9-10: also mints the temporary public share link embedded in the returned message, which
+    /// is why this read endpoint writes a row and why it is gated on
+    /// <see cref="PermissionCodes.DispatchSend"/> rather than a view permission — issuing an
+    /// unauthenticated URL to a business document is a send-class action, not a read.
+    /// <paramref name="invoiceId"/> is the E9-10 widening; exactly one of the two is required.
+    /// </summary>
     [HttpGet("compose")]
     [Authorize(Policy = PermissionCodes.DispatchSend)]
-    public async Task<IActionResult> Compose([FromQuery] Guid customerId, [FromQuery] Guid catalogDocumentId, CancellationToken ct)
+    public async Task<IActionResult> Compose(
+        [FromQuery] Guid customerId,
+        [FromQuery] Guid? catalogDocumentId,
+        [FromQuery] Guid? invoiceId,
+        CancellationToken ct)
     {
-        var result = await _service.ComposeAsync(customerId, catalogDocumentId, ct);
+        var result = await _service.ComposeAsync(customerId, catalogDocumentId, invoiceId, User.GetRequiredUserId(), ct);
         return result is null ? NotFound() : Ok(result);
+    }
+
+    /// <summary>
+    /// E9-10: kill a share link before it expires — the "I sent that to the wrong customer"
+    /// escape hatch. Gated on the same permission as minting: whoever can hand out a public link
+    /// can take it back. Idempotent, so a double-tap or a link that expired in the meantime is a
+    /// 204 rather than an error the caller has to interpret.
+    /// </summary>
+    [HttpPost("share-links/{id:guid}/revoke")]
+    [Authorize(Policy = PermissionCodes.DispatchSend)]
+    public async Task<IActionResult> RevokeShareLink(Guid id, CancellationToken ct)
+    {
+        var result = await _shareLinks.RevokeAsync(id, User.GetRequiredUserId(), ct);
+        return result == ShareLinkRevokeResult.NotFound ? NotFound() : NoContent();
     }
 
     [HttpPost]

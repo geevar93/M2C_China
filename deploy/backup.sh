@@ -10,6 +10,15 @@
 # Intended installation: host crontab, e.g.
 #   0 2 * * * /path/to/repo/deploy/backup.sh >> /var/log/sourcingops-backup.log 2>&1
 #
+# E2-11 — THIS SCRIPT ASSUMES THE BUNDLED `db` CONTAINER AND BREAKS WITHOUT IT. Step
+# 1 below is `docker compose exec -T db pg_dump`, and there is no `db` service under
+# `docker-compose.external-db.yml`. If the deploy moves to Neon, step 1 must either run
+# `pg_dump` against the external endpoint from the host (it is reachable over the
+# public internet, unlike the container's unpublished port) or be replaced by Neon's
+# own point-in-time restore — a business/cost decision tied to OI-5, not one this
+# script makes. Step 2 (the uploads volume, DR-12) is unaffected and still required
+# either way: it is the state that lives nowhere near Postgres.
+#
 # Retention window and off-box destination are Open Items (TECH_SPEC OI-5) pending
 # business input — BACKUP_DEST below defaults to a local directory as a placeholder;
 # point it at an S3-compatible bucket / Hostinger snapshot target / rsync destination

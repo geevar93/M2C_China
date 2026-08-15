@@ -18,6 +18,18 @@
 # linux-musl-x64 -o efbundle` step and publish `efbundle` as a release artifact
 # alongside the image tag), shipped to the VPS, and run here as the explicit,
 # never-automatic migration step.
+#
+# E2-11 — EXTERNAL DATABASE (Neon). This script targets the bundled `db` container. To
+# deploy against a managed Postgres instead, add `-f docker-compose.yml -f
+# docker-compose.external-db.yml` to every `docker compose` invocation below, drop the
+# "start db / wait for healthy" block (there is no container to wait on), and pass
+# "$DATABASE_CONNECTION_STRING" to `./efbundle --connection` in place of the
+# locally-constructed one. The migration step itself is UNCHANGED in shape: still an
+# explicit, separate command, still never automatic on container start (TECH_SPEC
+# §7.5, E2-07). It also resolves the caveat flagged at that step below — an external
+# endpoint is reachable without temporarily publishing the db container's port.
+# Left as a documented variant rather than branched logic: this script is still a
+# never-executed draft and no real deploy target has been chosen (H-3 is parked).
 
 set -euo pipefail
 cd "$(dirname "$0")/.."

@@ -10,7 +10,7 @@ import { CatalogSection } from '../../catalogs/models/catalog.models';
 import { CustomersService } from '../../customers/services/customers.service';
 import { CustomerListItem } from '../../customers/models/customer.models';
 import { DispatchService } from '../services/dispatch.service';
-import { CreateDispatchLogRequest, DispatchLogDto } from '../models/dispatch.models';
+import { CreateDispatchLogRequest, DispatchLogDto, DocumentShareLink } from '../models/dispatch.models';
 
 /** Set when opened from a fixed customer (E9-03) — the recipient side is locked, a catalog document is picked. */
 export interface DispatchCustomerLock {
@@ -44,7 +44,7 @@ interface CustomerOption {
   serviceTypeId: string;
 }
 
-type StepId = 1 | 2 | 3;
+type StepId = 1 | 2;
 
 /**
  * Shared WhatsApp dispatch dialog (ACTION_PLAN E9-03/E9-04/E9-05) — one
@@ -72,14 +72,25 @@ type StepId = 1 | 2 | 3;
  * in chat" with a separate "Log Dispatch" action. This component ports the
  * prototype, not the story text.
  *
- * STEP-GATING DECISION (flagged): the three step tiles are advisory progress
+ * STEP-GATING DECISION (flagged): the step tiles are advisory progress
  * markers, not a wizard — completing them is never required to enable "Log
  * Dispatch". The prototype's own footer status text ("Dispatch not logged
- * yet. Complete the three steps." vs "N of 3 steps done") describes the
- * steps as informational, and nothing in the prototype's `logDispatch`
- * handler checks `waSteps` before logging. `canLogDispatch()` below only
- * requires a valid customer/document pair, a non-empty message, and no
- * in-flight/broken compose call — never `doneCount() === 3`.
+ * yet." vs "N of N steps done") describes the steps as informational, and
+ * nothing in the prototype's `logDispatch` handler checks `waSteps` before
+ * logging. `canLogDispatch()` below only requires a valid customer/document
+ * pair, a non-empty message, and no in-flight/broken compose call.
+ *
+ * E9-10 — THREE STEPS BECAME TWO. The prototype's step 1 existed only because
+ * a `wa.me` deep link cannot attach a file, so staff had to download the PDF
+ * and attach it by hand inside WhatsApp. Compose now returns a temporary
+ * public link to the document and the server has already substituted it into
+ * the message, so the recipient opens the PDF straight from the chat. What is
+ * left is: open WhatsApp (link pre-filled), then send. The download is kept
+ * as a secondary action rather than deleted — staff genuinely want the file
+ * on their own device sometimes, and it is the fallback if a recipient cannot
+ * open links — but it is no longer a step, because nothing downstream depends
+ * on it. This is a deliberate, recorded divergence from the ported prototype:
+ * the prototype describes a constraint that no longer exists.
  */
 @Component({
   selector: 'app-dispatch-dialog',
@@ -117,7 +128,10 @@ export class DispatchDialogComponent implements OnInit {
   private readonly deepLinkUrl = signal<string | null>(null);
   readonly message = signal('');
 
-  readonly doneSteps = signal<Record<StepId, boolean>>({ 1: false, 2: false, 3: false });
+  /** E9-10: the minted public link for the current selection. Null until compose succeeds. */
+  readonly shareLink = signal<DocumentShareLink | null>(null);
+
+  readonly doneSteps = signal<Record<StepId, boolean>>({ 1: false, 2: false });
   readonly downloading = signal(false);
   readonly downloadError = signal<string | null>(null);
 
@@ -177,8 +191,27 @@ export class DispatchDialogComponent implements OnInit {
   readonly statusText = computed(() => {
     const n = this.doneCount();
     return n === 0
-      ? 'Dispatch not logged yet. Complete the three steps.'
-      : `${n} of 3 steps done · logs against ${this.recipientBusinessName()}`;
+      ? 'Dispatch not logged yet. Open WhatsApp, send, then log it.'
+      : `${n} of 2 steps done · logs against ${this.recipientBusinessName()}`;
+  });
+
+  /**
+   * E9-10: how long the recipient has, shown next to the message so the staff
+   * member can say so in the chat if they want. Formatted from the server's
+   * timestamp — the client never computes the expiry itself, because the
+   * server's clock is the one the link is actually checked against.
+   */
+  readonly shareLinkExpiryText = computed(() => {
+    const link = this.shareLink();
+    if (!link) return '';
+    const expires = new Date(link.expiresAtUtc);
+    return `Link expires ${expires.toLocaleString(undefined, {
+      weekday: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+      day: 'numeric',
+      month: 'short'
+    })}`;
   });
 
   readonly canLogDispatch = computed(
@@ -217,7 +250,13 @@ export class DispatchDialogComponent implements OnInit {
     if (this.canCompose()) this.composeNow();
   }
 
-  downloadStep(): void {
+  /**
+   * E9-10: no longer a step. Downloads the PDF through the **authenticated**
+   * endpoint for the staff member's own device — deliberately not through the
+   * public share link, which exists for the recipient and would be a strictly
+   * weaker path for a caller who already holds a session.
+   */
+  downloadForMyself(): void {
     if (this.downloading()) return;
     const docId = this.effectiveDocumentId();
     if (!docId) return;
@@ -228,7 +267,6 @@ export class DispatchDialogComponent implements OnInit {
       next: (blob) => {
         this.downloading.set(false);
         saveBlobAs(blob, filename);
-        this.markStepDone(1);
       },
       error: (err: unknown) => {
         this.downloading.set(false);
@@ -241,11 +279,11 @@ export class DispatchDialogComponent implements OnInit {
     const url = this.deepLinkUrl();
     if (!url) return;
     window.open(url, '_blank');
-    this.markStepDone(2);
+    this.markStepDone(1);
   }
 
   markSentStep(): void {
-    this.markStepDone(3);
+    this.markStepDone(2);
   }
 
   cancel(): void {
@@ -314,12 +352,13 @@ export class DispatchDialogComponent implements OnInit {
   }
 
   private afterSelectionChanged(): void {
-    this.doneSteps.set({ 1: false, 2: false, 3: false });
+    this.doneSteps.set({ 1: false, 2: false });
     this.saveError.set(null);
     if (this.canCompose()) {
       this.composeNow();
     } else {
       this.deepLinkUrl.set(null);
+      this.shareLink.set(null);
       this.message.set('');
     }
   }
@@ -331,11 +370,13 @@ export class DispatchDialogComponent implements OnInit {
       next: (res) => {
         this.composeLoading.set(false);
         this.deepLinkUrl.set(res.deepLinkUrl);
+        this.shareLink.set(res.shareLink ?? null);
         this.message.set(res.message);
       },
       error: (err: unknown) => {
         this.composeLoading.set(false);
         this.deepLinkUrl.set(null);
+        this.shareLink.set(null);
         this.composeError.set(extractErrorMessage(err, 'Could not prepare this dispatch. Please try again.'));
       }
     });

@@ -167,6 +167,34 @@
   margin-bottom: var(--space-9);
 }
 
+// E9-10: the share link removed the "Download PDF" step, so the grid is two-up.
+// A separate modifier rather than editing the base rule, because the base is the
+// ported prototype's three-column layout and other readers will look for it there.
+.wa-steps-grid--two {
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: var(--space-6);
+}
+
+// E9-10: the expiry line under the message preview.
+.wa-link-note {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-sm);
+}
+
+// E9-10: download is now an optional aside, not a step — styled deliberately
+// quieter than the step tiles so it does not read as part of the flow.
+.wa-secondary-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-9);
+  flex-wrap: wrap;
+}
+
+.wa-secondary-note {
+  font-size: var(--font-size-sm);
+}
+
 .step-tile {
   border: 1px solid var(--color-border);
   background: var(--color-surface);

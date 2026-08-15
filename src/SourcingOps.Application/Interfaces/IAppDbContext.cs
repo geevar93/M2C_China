@@ -37,6 +37,7 @@ public interface IAppDbContext
     DbSet<CatalogDocument> CatalogDocuments { get; }
 
     DbSet<Dispatch> Dispatches { get; }
+    DbSet<DocumentShareLink> DocumentShareLinks { get; }
 
     DbSet<InventoryItem> InventoryItems { get; }
     DbSet<InventoryInboundEntry> InventoryInboundEntries { get; }

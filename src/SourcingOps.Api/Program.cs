@@ -116,6 +116,23 @@ builder.Services.AddRateLimiter(options =>
                 PermitLimit = loginPermitLimit,
                 QueueLimit = 0
             }));
+
+    // E9-10: the one anonymous document endpoint. Deliberately far more generous than login —
+    // a legitimate recipient may tap the same link several times and a phone browser can issue
+    // range requests — while still bounding what a scanner costs the box. Same per-IP fixed
+    // window, same built-in middleware, no new dependency (C1).
+    var sharedDocPermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:SharedDocumentPermitLimit") ?? 60;
+    var sharedDocWindowSeconds = builder.Configuration.GetValue<int?>("RateLimiting:SharedDocumentWindowSeconds") ?? 60;
+
+    options.AddPolicy(RateLimiterPolicies.SharedDocument, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? IPAddress.None.ToString(),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromSeconds(sharedDocWindowSeconds),
+                PermitLimit = sharedDocPermitLimit,
+                QueueLimit = 0
+            }));
 });
 
 var app = builder.Build();

@@ -5,8 +5,12 @@ namespace SourcingOps.Application.Dispatching;
 /// (still editable, per E9-06's explicit "text remains editable before sending") and the `wa.me`
 /// deep link built from the customer's stored phone (E9-01). Returned by
 /// <c>GET /api/v1/dispatch-log/compose</c>.
+///
+/// E9-10 added <see cref="ShareLink"/>. Note that <see cref="Message"/> already contains the
+/// share URL — the separate field exists so the dialog can show the expiry and offer a revoke
+/// handle without parsing the message text, not because the caller needs to splice it in.
 /// </summary>
-public sealed record DispatchComposeDto(string Message, string DeepLinkUrl);
+public sealed record DispatchComposeDto(string Message, string DeepLinkUrl, DocumentShareLinkDto ShareLink);
 
 /// <summary>
 /// E9-02: <c>POST /api/v1/dispatch-log</c> body. Deliberately has no staff/actor field — the

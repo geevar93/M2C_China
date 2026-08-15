@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditLogger, EfAuditLogger>();
         services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
         services.AddSingleton<IDispatchMessageSender, WhatsAppDeepLinkSender>();
+        services.AddSingleton<IShareTokenFactory, Sha256ShareTokenFactory>();
         services.AddSingleton<IInvoicePdfRenderer, QuestPdfInvoiceRenderer>();
 
         services.AddScoped<DbSeeder>();

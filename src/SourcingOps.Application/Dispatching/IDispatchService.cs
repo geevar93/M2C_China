@@ -4,11 +4,16 @@ namespace SourcingOps.Application.Dispatching;
 public interface IDispatchService
 {
     /// <summary>
-    /// E9-01/E9-06: renders the configured template and builds the `wa.me` deep link for this
-    /// customer/document pair. Null return means the customer id or the catalog document id was
-    /// not found.
+    /// E9-01/E9-06/E9-10: mints a temporary public share link for the document, renders the
+    /// configured template around it, and builds the `wa.me` deep link for this customer.
+    /// Exactly one of <paramref name="catalogDocumentId"/>/<paramref name="invoiceId"/> must be
+    /// supplied — both or neither throws <see cref="Common.AppValidationException"/>, mirroring
+    /// <see cref="CreateAsync"/>. Null return means the customer or the document was not found;
+    /// a target that exists but has no stored file (a Draft invoice) throws instead, since that
+    /// is a fixable state rather than a missing record.
     /// </summary>
-    Task<DispatchComposeDto?> ComposeAsync(Guid customerId, Guid catalogDocumentId, CancellationToken ct = default);
+    Task<DispatchComposeDto?> ComposeAsync(
+        Guid customerId, Guid? catalogDocumentId, Guid? invoiceId, Guid actorUserId, CancellationToken ct = default);
 
     /// <summary>
     /// E9-02: records a dispatch. <paramref name="actorUserId"/> — sourced from the caller's
