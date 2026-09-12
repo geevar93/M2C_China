@@ -222,31 +222,40 @@ random-generated fallback path forces that).
 
 ---
 
-## 6. Build and ship the EF Core migrations bundle
+## 6. Run the migrator
 
-The `api` runtime image has no SDK layer, so migrations can't run inside it. Build the
-bundle off the VPS (locally or in CI) and copy it over:
+`SourcingOps.Migrator` (`src/SourcingOps.Migrator/`) is a small standalone console
+project — same idea as `KlaraHome.Migrator` — that applies pending EF Core migrations
+and exits 0/1. It builds into its own image (`src/SourcingOps.Migrator/Dockerfile`,
+no SDK layer, no HTTP surface) and runs via the `migrate` compose profile, so it never
+starts alongside a plain `docker compose up` and never races the `api` container.
 
-```bash
-dotnet ef migrations bundle \
-  --project src/SourcingOps.Infrastructure \
-  --startup-project src/SourcingOps.Api \
-  --self-contained -r linux-musl-x64 -o efbundle
-
-scp efbundle deploy@srv1949089:/opt/sites/<this-app-dir>/
-```
-
-On the VPS, apply migrations by running the bundle from a throwaway container attached
-to `klarahome-data` (the Postgres container's port isn't published to the host, so this
-avoids needing to publish it):
+Pull the full repo checkout onto the VPS (this is the one piece of source-on-VPS
+building this deploy still does — the resulting image is small and short-lived, unlike
+rebuilding the whole `api` image there):
 
 ```bash
-chmod +x efbundle
-docker run --rm --network klarahome-data \
-  -v "$PWD/efbundle:/efbundle:ro" \
-  mcr.microsoft.com/dotnet/runtime-deps:8.0-alpine \
-  /efbundle --connection "Host=klarahome-postgres;Port=5432;Database=sourcingops;Username=app;Password=<strong-password-from-step-1>"
+cd /opt/sites/<this-app-dir>
+git pull   # or clone, on first deploy
 ```
+
+Then build and run it, attached to `klarahome-data` so it can reach
+`klarahome-postgres` directly (no port needs publishing):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.shared-infra.yml \
+  --profile migrate build migrator
+
+docker compose -f docker-compose.yml -f docker-compose.shared-infra.yml \
+  --profile migrate run --rm migrator
+echo "migrator exit: $?"   # 0 = proceed to step 7, non-zero = stop and investigate
+```
+
+It reads `DATABASE_CONNECTION_STRING` from `.env` (set in step 5) the same way `api`
+does — no separate credential to manage. Re-running it when there's nothing pending is
+a harmless no-op (`GetPendingMigrationsAsync` comes back empty and it exits 0
+immediately), so it's safe to run on every deploy rather than only when you know a
+migration shipped.
 
 ---
 

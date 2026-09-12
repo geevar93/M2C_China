@@ -1,0 +1,38 @@
+services:
+  api:
+    environment:
+      - ConnectionStrings__Default=${DATABASE_CONNECTION_STRING:?set in .env}
+      - Caching__Provider=Redis
+      - Caching__Redis__ConnectionString=${REDIS_CONNECTION_STRING:?set in .env}
+      - Storage__Provider=S3
+      - Storage__S3__ServiceUrl=${STORAGE_S3_SERVICE_URL:-http://klarahome-minio:9000}
+    depends_on: !reset null
+    networks:
+      - default
+      - klarahome-data
+      - web
+
+  migrator:
+    environment:
+      - ConnectionStrings__Default=${DATABASE_CONNECTION_STRING:?set in .env}
+    depends_on: !reset null
+    networks:
+      - default
+      - klarahome-data
+
+  db: !reset null
+  redis: !reset null
+  minio: !reset null
+  caddy: !reset null
+
+networks:
+  klarahome-data:
+    external: true
+  web:
+    external: true
+
+volumes:
+  pgdata: !reset null
+  caddy-data: !reset null
+  caddy-config: !reset null
+  miniodata: !reset null

@@ -128,31 +128,20 @@ jobs:
       # the `client-dist` artifact, so a second build-push-action step here has something
       # real to package; wiring it up is a deployment-track task, not part of N-42.
 
-      - name: Setup .NET (for migrations bundle)
-        uses: actions/setup-dotnet@v4
+      # See deploy/deploy.sh for why this exists: the runtime `api` image has no SDK, so
+      # migrations run from this separate, equally SDK-less migrator image instead — an
+      # explicit deploy step (E2-07), never auto-applied by the api container. Mirrors
+      # KlaraHome.Migrator's separate-image pattern rather than the previous
+      # `dotnet ef migrations bundle` artifact, so a VPS deploy pulls/builds one more
+      # image and runs it via `docker compose --profile migrate run --rm migrator`
+      # instead of scp'ing a bundle file over.
+      - name: Build and push migrator image
+        uses: docker/build-push-action@v5
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Install dotnet-ef
-        run: dotnet tool install --global dotnet-ef
-
-      # See deploy/deploy.sh for why this exists: the runtime image has no SDK, so
-      # migrations run from this pre-built self-contained bundle instead, as an explicit
-      # deploy step (E2-07) — never auto-applied by the api container in production.
-      - name: Build EF Core migrations bundle
-        run: |
-          export PATH="$PATH:$HOME/.dotnet/tools"
-          dotnet ef migrations bundle \
-            --project src/SourcingOps.Infrastructure \
-            --startup-project src/SourcingOps.Api \
-            --self-contained -r linux-musl-x64 \
-            -o efbundle
-
-      - name: Upload migrations bundle artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: efbundle
-          path: efbundle
+          context: .
+          file: src/SourcingOps.Migrator/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-migrator:${{ github.sha }},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-migrator:latest
 
   # DRAFT, disabled by default — E2-05 (provisioning the real VPS) is explicitly out of
   # scope for this pass, so there is no SSH host/key to deploy to yet. Uncomment the
@@ -162,12 +151,7 @@ jobs:
     runs-on: ubuntu-latest
     if: false # flip on once E2-05 has provisioned a real target
     steps:
-      - name: Download migrations bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: efbundle
-
       - name: Deploy over SSH
         run: |
-          echo "Copy docker-compose.yml, Caddyfile, efbundle and deploy/deploy.sh to the VPS, then run deploy.sh there."
+          echo "On the VPS: git pull (or docker compose pull for the api/migrator images), then run deploy/deploy.sh there."
           echo "Not implemented — no deploy target exists yet (see E2-05)."

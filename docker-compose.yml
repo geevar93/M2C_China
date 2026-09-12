@@ -48,6 +48,23 @@ services:
     mem_limit: 400m
     restart: unless-stopped
 
+  # Standalone migrator (mirrors KlaraHome.Migrator): applies pending EF Core
+  # migrations as an explicit, one-shot deploy step. Gated behind the "migrate"
+  # profile so a plain `docker compose up` never starts or races it against `api` —
+  # run it explicitly with `docker compose --profile migrate run --rm migrator`,
+  # check its exit code, then bring `api` up/rolling-update. See
+  # docs/DEPLOY_SHARED_INFRA.md for the shared-infra invocation.
+  migrator:
+    build:
+      context: .
+      dockerfile: src/SourcingOps.Migrator/Dockerfile
+    profiles: ["migrate"]
+    environment:
+      - ConnectionStrings__Default=Host=db;Port=5432;Database=sourcingops;Username=app;Password=${DB_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+
   db:
     image: postgres:16-alpine
     environment:
