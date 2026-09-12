@@ -123,10 +123,17 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-      # Angular static bundle image build is owned by the frontend track — this job only
-      # builds/pushes the API image. `client-build-and-test` now produces the bundle as
-      # the `client-dist` artifact, so a second build-push-action step here has something
-      # real to package; wiring it up is a deployment-track task, not part of N-42.
+      # client/Dockerfile builds the Angular app and serves it via nginx — same image
+      # runs unchanged in every environment (client/src/app/core/services/api.service.ts
+      # calls a relative `/api/v1` path, so there's no per-environment API URL to bake
+      # in). Superseded the `client-dist` artifact + manual host-copy step this comment
+      # used to reference — see docs/DEPLOY_SHARED_INFRA.md.
+      - name: Build and push client image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-client:${{ github.sha }},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-client:latest
 
       # See deploy/deploy.sh for why this exists: the runtime `api` image has no SDK, so
       # migrations run from this separate, equally SDK-less migrator image instead — an

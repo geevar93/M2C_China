@@ -121,6 +121,15 @@ services:
     mem_limit: 400m
     restart: unless-stopped
 
+  # Built and served entirely via docker compose (see client/Dockerfile) — no manual
+  # `npm run build` / host copy step. Not published to the host: only `caddy`, on the
+  # same compose network, talks to it (by its service name, `client:8080`).
+  client:
+    build:
+      context: ./client
+    profiles: ["prod"]
+    restart: unless-stopped
+
   caddy:
     image: caddy:2-alpine
     profiles: ["prod"]
@@ -138,11 +147,11 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./client/dist/browser:/srv/www:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
       - api
+      - client
     restart: unless-stopped
 
 volumes:

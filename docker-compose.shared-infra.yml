@@ -12,6 +12,18 @@ services:
       - klarahome-data
       - web
 
+  # Same client image, no manual build/copy step — just needs to be reachable from the
+  # existing shared `caddy` container, so it joins `web` instead of publishing a port.
+  # Still carries the base file's `profiles: ["prod"]` (compose merges `profiles`
+  # across -f files as a set union — a `profiles: []` override here does NOT clear it,
+  # verified against docker compose 29.4.0's `config` output), so bring-up still needs
+  # `--profile prod` even though the bundled `caddy` that flag was originally for is
+  # reset away below.
+  client:
+    networks:
+      - default
+      - web
+
   migrator:
     environment:
       - ConnectionStrings__Default=${DATABASE_CONNECTION_STRING:?set in .env}

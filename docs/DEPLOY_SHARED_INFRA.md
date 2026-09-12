@@ -12,8 +12,11 @@ This is a variant of the standard `docker-compose.yml --profile prod` deploy. It
   MinIO container (`klarahome-minio`). No new MinIO container, no new volume.
 - The app is fronted by the **existing** Caddy container (network `web`) via a new
   site block added to its Caddyfile. No new Caddy container.
-- Only the `api` container is new for this app, and it joins the shared `klarahome-data`
-  network (to reach Postgres/Redis/MinIO) and the `web` network (to be reached by Caddy).
+- The `api` and `client` containers are the only new containers for this app. `api`
+  joins the shared `klarahome-data` network (to reach Postgres/Redis/MinIO) and `web`
+  (to be reached by Caddy); `client` only needs `web` — it serves the built Angular app
+  itself (via nginx, baked into its own image, no manual build/copy step) and never
+  talks to Postgres/Redis/MinIO directly.
 
 Confirmed environment values (from VPS inspection via `docker ps` / `docker inspect`):
 
@@ -259,17 +262,26 @@ migration shipped.
 
 ---
 
-## 7. Bring up the `api` container
+## 7. Bring up the `api` and `client` containers
+
+Both are built and served entirely via compose — no manual `npm run build` or copying
+files onto the host (`client/Dockerfile` builds the Angular app with Node, then serves
+the static output through an nginx container; see the comment at the top of that file
+for why no build-time API URL needs baking in):
 
 ```bash
 cd /opt/sites/<this-app-dir>
-docker compose -f docker-compose.yml -f docker-compose.shared-infra.yml up -d --build api
+docker compose -f docker-compose.yml -f docker-compose.shared-infra.yml --profile prod up -d --build api client
 ```
 
-Do **not** pass `--profile prod` — that profile only gates the bundled `caddy`
-service, which this deploy doesn't use.
+`--profile prod` is required here even though this deploy doesn't use the bundled
+`caddy` that profile originally gated: `client` still carries it too, and compose
+merges `profiles` across `-f` files as a *set union*, not a replace — an override
+can't clear a profile a base file already put on a service, only add more. The
+`caddy: !reset null` above still drops that bundled container entirely regardless of
+the flag.
 
-Check it started and seeded correctly:
+Check `api` started and seeded correctly:
 
 ```bash
 docker compose logs -f api
@@ -285,34 +297,16 @@ step 3 and proceed).
 
 ---
 
-## 8. Build the Angular frontend and stage the static files for Caddy
+## 8. Add a site block to the existing Caddyfile
 
-```bash
-cd client
-npm ci
-npm run build
-```
-
-Find where the existing Caddy container serves static sites from on the host:
+Find the Caddyfile the running `caddy` container mounts:
 
 ```bash
 docker inspect caddy --format '{{json .Mounts}}'
 ```
 
-Copy the build output into a new subfolder there, e.g.:
-
-```bash
-mkdir -p /opt/sites/<caddy-static-root>/sourcingops
-cp -r dist/browser/* /opt/sites/<caddy-static-root>/sourcingops/
-```
-
----
-
-## 9. Add a site block to the existing Caddyfile
-
-Find the Caddyfile the running container mounts (from the same `docker inspect caddy`
-output above), then append a new site block — do not replace the existing file's
-contents, since it's serving other sites too:
+Append a new site block — do not replace the existing file's contents, since it's
+serving other sites too:
 
 ```
 your-sourcingops-domain.com {
@@ -323,19 +317,17 @@ your-sourcingops-domain.com {
     }
 
     handle {
-        root * /srv/www/sourcingops
-        try_files {path} /index.html
-        file_server
+        reverse_proxy client:8080
     }
 }
 ```
 
-Adjust `root *` to whatever path the Caddy container sees internally for the folder
-you copied files into in step 8 (check the container's volume mount mapping).
-
-`reverse_proxy api:8080` works because the `api` container (named `api` by compose,
-in project directory `<this-app-dir>` — check the actual container name with
-`docker ps` if compose prefixed it) is now on the same `web` network as `caddy`.
+Both `reverse_proxy` targets work because the `api` and `client` containers (named by
+compose in project directory `<this-app-dir>` — check actual container names with
+`docker ps` if compose prefixed them differently, e.g. `<this-app-dir>-client-1`; add
+that instead of the bare service name if so) are now on the same `web` network as
+`caddy`. `client` needs no separate static-file volume or `root *` path — nginx inside
+that container serves the build output it already has baked in from the image.
 
 Reload Caddy without downtime:
 
@@ -345,7 +337,7 @@ docker exec caddy caddy reload --config /etc/caddy/Caddyfile
 
 ---
 
-## 10. Smoke test
+## 9. Smoke test
 
 ```bash
 curl -fsS https://your-sourcingops-domain.com/api/v1/health
@@ -358,7 +350,7 @@ credentials actually work end-to-end, not just that the bucket exists.
 
 ---
 
-## 11. Backups
+## 10. Backups
 
 `deploy/backup.sh` assumes `db`/`minio` services inside this compose project and will
 not work as-is (there is no `db` or `minio` container here — they're `klarahome-postgres`
