@@ -12,8 +12,10 @@ namespace SourcingOps.Api.Tests.TestSupport;
 /// </summary>
 public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
+    // The image moved from .WithImage() into the constructor when Testcontainers went to 4.15
+    // (bumped to match Testcontainers.Minio, which the H-19 S3 tests need); the parameterless
+    // builder is obsolete. Same image as before — postgres:16-alpine, matching docker-compose.yml.
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
         .WithDatabase("sourcingops_test")
         .WithUsername("app")
         .WithPassword("test-password")

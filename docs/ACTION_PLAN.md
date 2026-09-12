@@ -1940,3 +1940,78 @@ Counts are the full solution as it stood, which includes two other agents' concu
 
 1. **Unchanged from §21.5 / §22.5** — Node install (H-16) → N-42 → Angular 19 → 20; then E10-08.
 2. **H-18 joins the launch checklist** and should be read together with N-46. It is cheap, it waits on nothing technical, and it is the one item here that must not reach production unresolved.
+
+---
+
+## 25. N-42, the Angular 20 upgrade, and H-19's object storage
+
+**Not a milestone.** The three build items the owner's 2026-09-12 answers unblocked, worked in the order §21.5 / §22.5 / §24.5 all specified and never varied from: **CI must be able to catch a frontend regression before the frontend is upgraded**, then the upgrade, then H-19's storage and copy work.
+
+### 25.1 N-42 — CI now builds and tests the client
+
+`.github/workflows/ci.yml` set up .NET only: no Node, no `npm ci`, no `ng build`. A frontend regression could not be caught by CI at all, which is precisely the wrong state in which to attempt a framework major.
+
+A `client-build-and-test` job now runs `npm ci`, a **production** `ng build` (so `angular.json`'s budgets are enforced in CI — over the error threshold fails the build) and the Karma suite under `ChromeHeadless --watch=false`, uploading `client/dist/browser` as an artifact. It runs **independently of** `build-and-test` rather than after it — neither consumes the other's output, and a broken client should not be hidden behind a broken API. `build-and-push-images` now waits on both.
+
+Every command in the job was run and verified locally before being written into the workflow. The workflow itself remains a never-executed draft for the same reason as the rest of it: there is no runner (E2-06).
+
+### 25.2 The Angular 19 → 20 upgrade (H-5 / N-1)
+
+Staged as the H-5 caution required — `ng update @angular/core@20 @angular/cli@20`, **never** `npm audit fix --force`, which proposes Angular 22.
+
+| | |
+| --- | --- |
+| Angular | 19.2.0 → **20.3.31** |
+| CLI / build-angular | 19.2.27 → **20.3.37** |
+| TypeScript | 5.7.2 → **5.9.3** |
+| Source changes | **None.** Every code migration reported "no changes made" |
+| `angular.json` | Gained the `schematics` block Angular 20 adds to preserve v19 file-naming for *newly generated* files. Existing filenames untouched |
+| Optional migrations | **Declined.** `control-flow-migration` rewrites every template — a codebase-wide change unrelated to a version bump. `use-application-builder` is already satisfied (the project has used the `:application` builder since M1) |
+
+**Verified on this machine, 2026-09-12:** production build **warning-free**, **391 Karma specs green** — the same 391 as before, so nothing was lost or silently skipped. Backend unaffected: 485 unit + 323 integration.
+
+**The advisories, which were the entire point.** `npm audit`: **31 findings (1 critical, 21 high, 7 moderate, 2 low) → 12 (0 critical, 4 high, 8 moderate)**. Decisively, **no `@angular/*` package appears in the result at all** — the one genuinely user-facing item (the `@angular/compiler` two-way-binding sanitisation XSS) is cleared, as is the critical `tar`. What remains is entirely build tooling that never reaches a browser: `webpack-dev-server`, `express`/`qs`, `sockjs`/`uuid`, `nanoid`, `js-yaml`, `brace-expansion`. Several have no fix at any Angular 20 version, so they are a floor rather than a backlog.
+
+### 25.3 H-19 — S3-compatible storage for shared documents, and the message copy
+
+| Area | Change |
+| --- | --- |
+| `Infrastructure/Storage/S3FileStorage.cs` | **New.** `IFileStorage` over the S3 API. Written against the AWS SDK, not a MinIO client — the same class serves managed S3 unchanged. Relative paths become object keys verbatim, so a provider switch needs no data migration beyond copying files. `OpenReadAsync` hands back the live response stream rather than buffering a PDF per request, and translates a 404 into `FileNotFoundException` so `DocumentShareLinkService`'s uniform-404 handling is identical across backends |
+| `Infrastructure/Storage/FileStorageOptions.cs` | `Provider` (`LocalDisk` \| `S3`) plus an `S3` sub-section. **Default stays `LocalDisk`** |
+| `Infrastructure/Storage/FileStorageRegistration.cs` | **New.** Provider selection and the S3 client wiring, kept out of `DependencyInjection` so a page of MinIO detail does not sit in the middle of general registration. Also the startup bucket bootstrap |
+| `Api/Program.cs` | Calls `EnsureFileStorageBucketAsync()` before seeding — a no-op unless the S3 provider is active |
+| `docker-compose.yml` | `minio` service behind a **`minio` profile**, exactly like `redis`, so it does not join a default `docker compose up`. `Storage__*` passed to `api` unconditionally so switching providers is one variable, not a file edit |
+| `Application/Dispatching/DispatchOptions.cs` | Message copy now leads with "This is a temporary link" and asks the recipient to **download and save** the file, not merely open it. The fallback path (template edited to drop `{DocumentLink}`) carries the same warning |
+
+**Evidence — this was proven against real MinIO, not only mocks.** 6 Testcontainers tests drive `S3FileStorage` against an actual MinIO container (round trip, overwrite, missing object, idempotent delete, idempotent bucket bootstrap, a 5 MB payload); 17 unit tests cover key mapping, exception translation and provider selection. The full stack was then run on `Storage:Provider=S3` and driven end to end: catalogue PDF uploaded through the API → **object confirmed in the MinIO bucket, local-disk volume confirmed empty** → dispatch composed with the new copy → share URL fetched **with no auth header**, returning the exact bytes as `application/pdf`; an invalid token returned 404.
+
+### 25.4 Decisions worth not re-litigating
+
+| # | Decision |
+| --- | --- |
+| **D-120** | **`LocalDisk` stays the default and the S3 path is opt-in.** The owner asked for MinIO, not for MinIO to become mandatory. Making S3 the default would put an object store between every developer checkout, every `dotnet run` and every test run and the ability to work at all, in order to serve a deployment concern. One config variable switches it. |
+| **D-121** | **Payload signing is disabled only over HTTPS — and this is a fixed bug, not a precaution.** `DisablePayloadSigning = true` began as a streaming optimisation. The AWS SDK permits it **only over HTTPS**, since the payload hash is the sole integrity check once TLS is absent; MinIO on a compose network is plain HTTP, so **every upload threw** *"When DisablePayloadSigning is true, the request must be sent over HTTPS."* **A mocked S3 client accepts that request without complaint** — no unit test at any level of diligence would have caught it. Now derived from the endpoint scheme, and pinned by a `[Theory]` at the unit level *and* by the container test that found it. **The general lesson is the one N-44 keeps making about Neon: a config-shaped integration is exactly where mocks agree with you and the real server does not.** |
+| **D-122** | **The MinIO image comes from `quay.io`, pinned to a release.** `docker pull minio/minio` fails outright — *"pull access denied ... repository does not exist"* — verified on this machine while Docker Hub was otherwise working (`postgres:16-alpine` pulled fine in the same session). MinIO no longer publishes to Docker Hub. `:latest` is avoided for the usual reason: a redeploy must not silently move the object store under a live dataset. **The Testcontainers Minio module defaults to the dead Docker Hub path**, so the test overrides the image to the same pinned release the deployment runs. |
+| **D-123** | **`GetPath` throws `NotSupportedException` on the S3 backend rather than returning a URL.** The interface's contract is "an absolute filesystem path"; an object in a bucket has none, and returning a URL would hand callers something with entirely different semantics under the same name. No production code path calls it — only `LocalDiskFileStorage`'s own tests do — so failing loudly costs nothing and inventing a value could cost a great deal. |
+| **D-124** | **Dot segments are rejected in S3 keys even though they cannot traverse anything.** S3 has no directories, so `../` is a literal key character, not an escape. The check is a **consistency** control, not a containment one: it keeps keys byte-identical to the ones `LocalDiskFileStorage` resolves, so a document written under one provider is findable under the other. |
+| **D-125** | **`minio` is profiled and is NOT an `api.depends_on`.** Naming a profiled service as a dependency drags it into every run whether or not its profile is active — the exact reason `redis` is wired the same way. The api creates its bucket at startup and tolerates MinIO coming up alongside it. |
+| **D-127** | **Invoices share the catalogue's share-link mechanism exactly — SETTLED 2026-09-12, do not re-propose.** The owner confirmed 48 hours and asked for invoices on a "private link with expiry", noting customers have no logins. Because invoices and catalogues already travel one path, the word *private* was **read back rather than assumed** (the H-6 rule): it could have meant "confirm what exists" or "invoices need more." Three options were offered — same-as-catalogues, a knowledge check (last 4 phone digits / invoice number) before serving an invoice, or reverting invoices to download-and-attach — and **same-as-catalogues was chosen**. So "private" here means **unguessable and impermanent, not authenticated**: with no customer accounts there is no credential to check and the token *is* the authorisation. **The knowledge-check gate was explicitly declined and must not reappear as a small hardening.** The accepted residual is on the record: a forwarded message opens the invoice — names, amounts, GSTIN — until the window closes. |
+| **D-128** | **`X-Robots-Tag: noindex` was offered on the share endpoint and DECLINED.** `Cache-Control: private, no-store` remains the only cache directive, which is deliberate rather than an oversight. Recorded because "add noindex" is exactly the kind of one-line change a later pass would add unasked, believing it uncontroversial. |
+| **D-126** | **The copy asks for a download, not an open.** The template already stated the expiry; the owner's ask was that the recipient be told the link is temporary **and** prompted to download promptly. A viewed PDF is gone when the link expires and a saved one is not, so "download and save" is the action, and "temporary link" leads rather than trails. |
+
+### 25.5 Open items after this pass
+
+| # | Item |
+| --- | --- |
+| **N-55** | **The initial bundle is now within 2 kB of its budget.** Angular 20 took it from 306.40 kB to **318.02 kB** against the 320 kB warning threshold the owner authorised under H-8. Nothing is wrong today and the build is warning-free — but the next feature touching an eagerly-loaded module trips it, and the owner should expect that conversation sooner than the last one suggested. The 500 kB error threshold is not close. |
+| **N-56** | **MinIO is unproven on the VPS, for the same reason everything else is (H-3).** Verified under local `docker compose` and Testcontainers only. Specific untested items: whether 400 MB is the right `mem_limit` under real load, and that ports 9000/9001 must **not** be published on a public box — they are published locally for convenience and the compose file says so, but nothing enforces it. |
+| **N-57** | **No migration path for documents already on local disk.** Switching an existing deployment to `Storage:Provider=S3` leaves prior uploads unreachable — keys line up exactly (D-124), so copying the volume's contents into the bucket is the whole job, but there is no script and nothing warns the operator. Irrelevant while the system is empty (H-2); it stops being irrelevant the moment it is not. |
+| **N-58** | **`Testcontainers.PostgreSql` was bumped 4.1.0 → 4.15.0**, forced by `Testcontainers.Minio` — the shared core library moved and the old package threw `MissingMethodException` across all 317 integration tests until the versions matched. Resolved, and the suite is green and warning-free; recorded because **the two Testcontainers packages must now be upgraded together**, and a future single-package bump will fail the same way. |
+| **N-50** | **Unchanged** — still no revoke UI for share links. |
+| **N-16/H-9, N-18, N-33, N-35, N-36, N-40, N-41, N-43, N-44, N-45, N-46, N-53, N-54, H-17, H-18, E10-08** | **Unchanged.** N-42 and H-16 are now closed. |
+
+### 25.6 Next
+
+1. **E10-08** (CSV/Excel export) — now the last unbuilt feature story, and the head of the queue for the first time since M7.
+2. **M8 — Admin UI, hardening and launch.** Unchanged: estimable since H-2, with the deployment half deferred while H-3 stays parked.
+3. **Owner decisions outstanding, none blocking:** H-1's nine billing values (invoicing only); H-18 before the production stack first boots. **H-19 is fully closed** — 48 hours confirmed and invoices settled onto the catalogue mechanism (D-127/D-128), with no code change.

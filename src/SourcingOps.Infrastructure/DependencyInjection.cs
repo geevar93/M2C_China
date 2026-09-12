@@ -50,7 +50,7 @@ public static class DependencyInjection
         services.AddSingleton<IJwtTokenGenerator>(sp =>
             new JwtTokenGenerator(sp.GetRequiredService<JwtOptions>(), sp.GetRequiredService<AuthOptions>()));
         services.AddScoped<IAuditLogger, EfAuditLogger>();
-        services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
+        services.AddFileStorage(storageOptions);
         services.AddSingleton<IDispatchMessageSender, WhatsAppDeepLinkSender>();
         services.AddSingleton<IShareTokenFactory, Sha256ShareTokenFactory>();
         services.AddSingleton<IInvoicePdfRenderer, QuestPdfInvoiceRenderer>();

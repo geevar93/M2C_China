@@ -19,10 +19,18 @@ public sealed class DispatchOptions
     /// Config key: <c>Dispatch:MessageTemplate</c>. The four placeholders below are substituted
     /// verbatim; any other text is passed through unchanged.
     /// </summary>
+    /// <remarks>
+    /// H-19: the owner asked that the copy say plainly that the link is temporary and that the
+    /// recipient should download the file promptly, rather than only stating an expiry the reader
+    /// may skim past. "Temporary link" leads, the hours follow as the specific, and the action
+    /// asked for is <em>download</em>, not merely <em>open</em> — a viewed PDF is gone when the
+    /// link expires; a downloaded one is not.
+    /// </remarks>
     public string MessageTemplate { get; set; } =
         "Hi {CustomerName}, sharing our catalog \"{CatalogName}\" with you: {DocumentLink}\n\n" +
-        "The link opens the PDF directly on your phone and stops working after {LinkExpiryHours} hours. " +
-        "Please let us know if you have any questions!";
+        "This is a temporary link — it opens the PDF directly on your phone and stops working after " +
+        "{LinkExpiryHours} hours, so please download and save the file soon. " +
+        "Let us know if you have any questions!";
 
     public const string CustomerNamePlaceholder = "{CustomerName}";
     public const string CatalogNamePlaceholder = "{CatalogName}";
@@ -83,7 +91,9 @@ public sealed class DispatchOptions
 
         if (!MessageTemplate.Contains(DocumentLinkPlaceholder, StringComparison.Ordinal) && !string.IsNullOrEmpty(documentLink))
         {
-            body += $"\n\n{documentLink}\n(This link stops working after {ShareLinkLifetimeHours} hours.)";
+            // Carries the same temporary-link warning as the default template (H-19) — an
+            // operator who edited the placeholder out should not also lose the warning.
+            body += $"\n\n{documentLink}\n(Temporary link — it stops working after {ShareLinkLifetimeHours} hours, so please download the file soon.)";
         }
 
         return body;

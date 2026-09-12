@@ -27,7 +27,16 @@ services:
       - Caching__Provider=${CACHING_PROVIDER:-InMemory}
       - Caching__Redis__ConnectionString=${REDIS_CONNECTION_STRING:-redis:6379}
       - Jwt__SigningKey=${JWT_SIGNING_KEY}
+      # H-19: "LocalDisk" (default) keeps the mounted-volume behaviour; "S3" switches every
+      # document read/write to the minio service below, which is what serves the temporary
+      # WhatsApp share links. RootPath is inert under S3 and vice versa — both are passed
+      # unconditionally so switching providers is one variable, not an edit to this file.
+      - Storage__Provider=${STORAGE_PROVIDER:-LocalDisk}
       - Storage__RootPath=/data/uploads
+      - Storage__S3__ServiceUrl=${STORAGE_S3_SERVICE_URL:-http://minio:9000}
+      - Storage__S3__BucketName=${STORAGE_S3_BUCKET:-sourcingops}
+      - Storage__S3__AccessKey=${MINIO_ROOT_USER:-}
+      - Storage__S3__SecretKey=${MINIO_ROOT_PASSWORD:-}
       - Bootstrap__AdminEmail=${BOOTSTRAP_ADMIN_EMAIL:-owner@sourcingops.local}
       - Bootstrap__AdminPassword=${BOOTSTRAP_ADMIN_PASSWORD:-Welcome@123}
       - Cors__FrontendOrigin=${FRONTEND_ORIGIN:-http://localhost:4200}
@@ -60,6 +69,41 @@ services:
     profiles: ["redis"]
     restart: unless-stopped
 
+  # H-19: S3-compatible object storage for shared documents. Profiled exactly like `redis`
+  # above and for the same reason — it is opt-in, and the default LocalDisk provider must not
+  # drag an extra container into every `docker compose up`. Start it with
+  # `docker compose --profile minio up` and set STORAGE_PROVIDER=S3.
+  #
+  # No `api.depends_on` entry, deliberately, following the redis precedent: naming a profiled
+  # service as a dependency drags it into every run whether or not its profile is active. The
+  # api creates the bucket at startup and tolerates minio coming up alongside it.
+  minio:
+    # quay.io, not Docker Hub: `docker pull minio/minio` fails with "pull access denied /
+    # repository does not exist" — MinIO publishes to quay.io and the Docker Hub path is dead.
+    # Verified by attempting both on this machine. Pinned to a release rather than :latest so a
+    # redeploy cannot silently move the object store under a live dataset.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    profiles: ["minio"]
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    ports:
+      # 9000 is the S3 API, 9001 the browser console. Both are published for local use; on the
+      # VPS neither should be — Caddy fronts the API, and nothing outside the compose network
+      # has any business talking to the object store directly.
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    mem_limit: 400m
+    restart: unless-stopped
+
   caddy:
     image: caddy:2-alpine
     profiles: ["prod"]
@@ -87,5 +131,6 @@ services:
 volumes:
   pgdata:
   uploads:
+  miniodata:
   caddy-data:
   caddy-config:

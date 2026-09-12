@@ -136,6 +136,44 @@ public class DispatchServiceTests
         sender.Verify(s => s.Prepare(f.Customer.Phone, result.Message), Times.Once);
     }
 
+    /// <summary>
+    /// H-19: the owner asked that the message tell the recipient the link is temporary and that
+    /// they should download the file promptly. Asserting on the shipped copy rather than only on
+    /// the placeholder machinery, because the requirement here is the wording itself — a future
+    /// tidy-up of the default template that drops the download prompt would be a regression
+    /// against a stated business decision, and nothing else would catch it.
+    /// </summary>
+    [Fact]
+    public async Task ComposeAsync_DefaultTemplate_WarnsTheLinkIsTemporaryAndUrgesDownload()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var sut = CreateSut(db, out _, out _);
+
+        var result = await sut.ComposeAsync(f.Customer.Id, f.Document.Id, null, Actor);
+
+        result!.Message.Should()
+            .Contain("temporary link").And
+            .Contain("download").And
+            .Contain("48 hours");
+    }
+
+    /// <summary>Same requirement on the fallback path — dropping {DocumentLink} must not drop the warning.</summary>
+    [Fact]
+    public async Task ComposeAsync_TemplateMissingTheLinkPlaceholder_AppendsTheTemporaryLinkWarningToo()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedData(db);
+        var options = new DispatchOptions { MessageTemplate = "Hi {CustomerName}, sharing {CatalogName}." };
+        var sut = CreateSut(db, out _, out _, options);
+
+        var result = await sut.ComposeAsync(f.Customer.Id, f.Document.Id, null, Actor);
+
+        result!.Message.Should()
+            .Contain("Temporary link").And
+            .Contain("download");
+    }
+
     [Fact]
     public async Task ComposeAsync_CustomTemplate_SubstitutesEveryPlaceholder()
     {

@@ -16,6 +16,7 @@ using SourcingOps.Infrastructure;
 using SourcingOps.Infrastructure.Auth;
 using SourcingOps.Infrastructure.Persistence;
 using SourcingOps.Infrastructure.Persistence.Seed;
+using SourcingOps.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -167,6 +168,10 @@ if (app.Environment.IsDevelopment())
         await db.Database.MigrateAsync();
     }
 }
+
+// H-19: a fresh MinIO container starts with no buckets, so the first upload would fail with a
+// NoSuchBucket that looks like a credentials problem. No-op unless Storage:Provider is S3.
+await app.Services.EnsureFileStorageBucketAsync();
 
 // Idempotent seeding (E1-03) runs every startup, dev and prod alike — by the time
 // this runs in prod, migrations have already been applied by the explicit deploy step.
