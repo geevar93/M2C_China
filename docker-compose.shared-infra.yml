@@ -1,5 +1,6 @@
 services:
   api:
+    container_name: m2c-api
     environment:
       - ConnectionStrings__Default=${DATABASE_CONNECTION_STRING:?set in .env}
       - Caching__Provider=Redis
@@ -13,7 +14,6 @@ services:
       - web
     volumes:
       - dpkeys:/home/app/.aspnet/DataProtection-Keys
-    container_name: m2c-api
 
   # Same client image, no manual build/copy step — just needs to be reachable from the
   # existing shared `caddy` container, so it joins `web` instead of publishing a port.
@@ -23,6 +23,7 @@ services:
   # `--profile prod` even though the bundled `caddy` that flag was originally for is
   # reset away below.
   client:
+    container_name: m2c-client
     networks:
       - default
       - web
@@ -34,7 +35,6 @@ services:
     networks:
       - default
       - klarahome-data
-    container_name: m2c-client
 
   db: !reset null
   redis: !reset null
