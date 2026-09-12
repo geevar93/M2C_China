@@ -11,6 +11,8 @@ services:
       - default
       - klarahome-data
       - web
+    volumes:
+      - dpkeys:/home/app/.aspnet/DataProtection-Keys
 
   # Same client image, no manual build/copy step — just needs to be reachable from the
   # existing shared `caddy` container, so it joins `web` instead of publishing a port.
