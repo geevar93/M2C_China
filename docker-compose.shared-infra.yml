@@ -50,3 +50,4 @@ volumes:
   caddy-data: !reset null
   caddy-config: !reset null
   miniodata: !reset null
+  dpkeys:
