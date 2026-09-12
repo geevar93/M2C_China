@@ -32,7 +32,6 @@ RUN dotnet publish src/SourcingOps.Migrator/SourcingOps.Migrator.csproj \
 FROM mcr.microsoft.com/dotnet/runtime:10.0-alpine AS runtime
 WORKDIR /app
 
-RUN adduser -D -u 64198 app
 USER app
 
 COPY --from=build --chown=app:app /app/publish .
