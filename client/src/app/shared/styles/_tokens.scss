@@ -1,45 +1,49 @@
-// Design tokens ported 1:1 from the approved prototype (Source/Sourcing Ops Platform.dc.html).
-// This file MUST agree with docs/DESIGN_TOKENS.md — update both together.
-// Do not hand-invent a parallel palette; every value here traces back to that reference.
+// Design tokens — the single source of truth for colour, type, spacing, radius
+// and shadow. This file MUST agree with docs/DESIGN_TOKENS.md — update both
+// together. Do not hand-invent a parallel palette; every screen consumes these.
+//
+// The palette traces back to the approved prototype (Source/Sourcing Ops
+// Platform.dc.html); the UI-refresh pass tuned the neutrals, radii, shadows and
+// type stack for a cleaner, more modern read without changing the brand hues.
 
 :root {
   // Brand / structure
-  --color-navy: #1a2332;
+  --color-navy: #151d2b;
+  --color-navy-raised: #1f2937;
   --color-accent: #2d5be3;
   --color-accent-hover: #2449b5;
-  --color-page-bg: #f8f9fb;
+  --color-accent-ring: rgba(45, 91, 227, .18);
+  --color-page-bg: #f4f6fa;
   --color-surface: #ffffff;
-  --color-track: #f1f3f6;
+  --color-surface-hover: #f8f9fc;
+  --color-track: #eef1f5;
 
   // Text / borders
   --color-text: #1a2332;
   --color-text-muted: #6b7280;
   --color-text-strong-muted: #374151;
-  --color-border: #e5e7eb;
-  --color-border-strong: #e5e7eb;
+  --color-text-placeholder: #9ca3af;
+  --color-border: #e4e7ec;
+  --color-border-strong: #d0d5dd;
 
   // Semantic accents
-  --color-warning: #f57f17;
-  --color-warning-bg: #fff3e0;
-  --color-warning-border: #ffcc80;
-  --color-danger: #e53935;
-  --color-danger-bg: #ffebee;
+  --color-warning: #d97706;
+  --color-warning-bg: #fff7e6;
+  --color-warning-border: #fcd48a;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fef2f2;
   // A far subtler danger wash than --color-danger-bg, for tinting a whole table
-  // ROW rather than a chip. The prototype uses both and they are not
-  // interchangeable: #ffebee behind a full-width row reads as an error state,
-  // where the approved inventory screen only whispers that stock went negative.
+  // ROW rather than a chip — the inventory screen only whispers that stock went
+  // negative; a full-width #fef2f2 row would read as an error state.
   --color-danger-bg-subtle: #fff8f8;
-  --color-success: #2e7d32;
-  --color-success-bg: #e8f5e9;
-  --color-info: #1565c0;
-  --color-info-bg: #e3f2fd;
-  --color-neutral-chip-bg: #e5e7eb;
-  // The prototype's literal "selected/active" tint, used behind an active pill
-  // tab and any selected card. Promoted to a token by the M5 screen pass, which
-  // added a fourth consumer; three pre-existing raw `#f5f8ff` usages (intake,
-  // dispatch dialog) still spell it literally and should converge here when
-  // those files are next touched.
-  --color-accent-soft-bg: #f5f8ff;
+  --color-success: #15803d;
+  --color-success-bg: #ecfdf3;
+  --color-info: #1d4ed8;
+  --color-info-bg: #e8f0fe;
+  --color-neutral-chip-bg: #eceff3;
+  // The "selected/active" tint used behind an active pill tab, a selected
+  // service-type card, a chosen chip, or a completed dispatch step.
+  --color-accent-soft-bg: #eef3ff;
 
   // WhatsApp preview bubble
   --color-wa-bubble: #dbeafe;
@@ -57,23 +61,43 @@
   --space-10: 24px;
 
   // Layout constants
-  --sidebar-width-expanded: 220px;
+  --sidebar-width-expanded: 232px;
   --sidebar-width-collapsed: 64px;
   --topbar-height: 56px;
+  --content-padding: 24px;
+
+  // Responsive breakpoints are compile-time SCSS values (see $bp-* below) —
+  // custom properties cannot be used inside @media queries.
 
   // Typography
-  --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-size-base: 14px;
-  --line-height-base: 1.4;
+  --font-size-sm: 12px;
+  --line-height-base: 1.45;
 
   // Radius
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-pill: 12px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --radius-circle: 50%;
 
   // Shadows
-  --shadow-card: 0 1px 4px rgba(0, 0, 0, .08);
-  --shadow-dialog: 0 8px 32px rgba(0, 0, 0, .2);
-  --overlay-scrim: rgba(0, 0, 0, .4);
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .06);
+  --shadow-raised: 0 4px 12px rgba(16, 24, 40, .08), 0 1px 3px rgba(16, 24, 40, .06);
+  --shadow-dialog: 0 24px 48px rgba(16, 24, 40, .22), 0 4px 12px rgba(16, 24, 40, .08);
+  --overlay-scrim: rgba(17, 24, 39, .5);
+}
+
+// Breakpoints (max-width, inclusive). Shared by every component stylesheet via
+// `@use 'shared/styles/tokens' as t;` → `@media (max-width: t.$bp-phone)`.
+$bp-phone: 640px;
+$bp-tablet: 900px;
+$bp-desktop: 1200px;
+
+@media (max-width: $bp-phone) {
+  :root {
+    --content-padding: 16px;
+  }
 }

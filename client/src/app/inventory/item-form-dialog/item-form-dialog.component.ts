@@ -7,6 +7,7 @@ import { VendorListItem } from '../../vendors/models/vendor.models';
 import { InventoryService } from '../services/inventory.service';
 import { CreateInventoryItemRequest, InventoryItem, UpdateInventoryItemRequest } from '../models/inventory.models';
 import { formatQty } from '../utils/format.util';
+import { GST_RATES } from '../../shared/models/indian-states';
 
 /**
  * Shared inventory item create/edit dialog (ACTION_PLAN E7-01). There is no
@@ -63,6 +64,16 @@ export class ItemFormDialogComponent implements OnInit {
   readonly unit = signal('');
   readonly reorderThreshold = signal('');
   readonly unitCost = signal('');
+  readonly sellingPrice = signal('');
+  readonly hsnCode = signal('');
+  readonly gstRate = signal('');
+
+  readonly gstRates = GST_RATES;
+
+  /** Template helper: `String()` is not callable from an Angular template. */
+  isSelectedRate(rate: number): boolean {
+    return String(rate) === this.gstRate();
+  }
   /** Opening balance — create mode only (D-42). */
   readonly onHandQty = signal('');
 
@@ -86,6 +97,9 @@ export class ItemFormDialogComponent implements OnInit {
     this.unit.set(it.unit);
     this.reorderThreshold.set(String(it.reorderThreshold));
     this.unitCost.set(it.unitCost != null ? String(it.unitCost) : '');
+    this.sellingPrice.set(it.sellingPrice != null ? String(it.sellingPrice) : '');
+    this.hsnCode.set(it.hsnCode ?? '');
+    this.gstRate.set(it.gstRate != null ? String(it.gstRate) : '');
   }
 
   cancel(): void {
@@ -116,6 +130,22 @@ export class ItemFormDialogComponent implements OnInit {
       return;
     }
 
+    const sellingPriceText = this.sellingPrice().trim();
+    const sellingPrice = sellingPriceText ? Number(sellingPriceText) : null;
+    if (sellingPriceText && (Number.isNaN(sellingPrice) || sellingPrice! < 0)) {
+      this.error.set('Selling price must be a non-negative number.');
+      return;
+    }
+
+    const gstRateText = this.gstRate().trim();
+    const gstRate = gstRateText ? Number(gstRateText) : null;
+    if (gstRateText && (Number.isNaN(gstRate) || gstRate! < 0 || gstRate! > 100)) {
+      this.error.set('GST rate must be between 0 and 100.');
+      return;
+    }
+
+    const hsnCode = this.hsnCode().trim() || null;
+
     this.saving.set(true);
     this.error.set(null);
 
@@ -129,7 +159,10 @@ export class ItemFormDialogComponent implements OnInit {
         vendorId: this.vendorId() || null,
         unit,
         reorderThreshold,
-        unitCost
+        unitCost,
+        sellingPrice,
+        hsnCode,
+        gstRate
       };
       this.inventoryService.update(existing.id, request).subscribe({
         next: (result) => {
@@ -161,7 +194,10 @@ export class ItemFormDialogComponent implements OnInit {
       unit,
       onHandQty,
       reorderThreshold,
-      unitCost
+      unitCost,
+      sellingPrice,
+      hsnCode,
+      gstRate
     };
     this.inventoryService.create(createRequest).subscribe({
       next: (result) => {

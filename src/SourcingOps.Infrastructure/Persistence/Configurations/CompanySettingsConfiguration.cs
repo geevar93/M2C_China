@@ -25,6 +25,7 @@ public class CompanySettingsConfiguration : IEntityTypeConfiguration<CompanySett
 
         b.Property(x => x.LegalEntityName).HasMaxLength(300);
         b.Property(x => x.Gstin).HasMaxLength(20);
+        b.Property(x => x.StateCode).HasMaxLength(2);
         b.Property(x => x.RegisteredAddress).HasMaxLength(1000);
         b.Property(x => x.BankAccountName).HasMaxLength(300);
         b.Property(x => x.BankAccountNumber).HasMaxLength(50);

@@ -1,8 +1,11 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
 import { AuthService } from '../services/auth.service';
+import { MasterDataService } from '../services/master-data.service';
+import { RefreshService } from '../services/refresh.service';
+import { CommandPaletteComponent } from '../command-palette/command-palette.component';
 
 interface NavItem {
   id: string;
@@ -18,17 +21,21 @@ interface NavGroup {
 }
 
 /**
- * Ported 1:1 from the prototype's sidebar + topbar (Source/Sourcing Ops
- * Platform.dc.html, lines ~22-58) — same DOM structure, same computed style
- * values from docs/DESIGN_TOKENS.md. The prototype's `mobile` reference
- * screen is a design reference only (TECH_SPEC §5.2) and is not ported as a
- * nav entry / route. The command palette (⌘K) and the topbar refresh action
- * are visually ported but intentionally inert pending ACTION_PLAN E12-05.
+ * App shell: sidebar + topbar around the routed screen.
+ *
+ * Desktop keeps the sidebar in the flow (collapsible to an icon rail); at
+ * tablet width and below it becomes an off-canvas drawer opened from the
+ * topbar hamburger and closed by the scrim, the close glyph or any navigation.
+ *
+ * The topbar refresh action broadcasts through RefreshService to the screen
+ * on display (each screen registers the reload behind its Retry button) and
+ * reloads shared master data. The command palette (⌘K / Ctrl+K, or the topbar
+ * search trigger) is CommandPaletteComponent (ACTION_PLAN E12-05).
  */
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, CommandPaletteComponent],
   templateUrl: './shell.component.html',
   styleUrl: './shell.component.scss'
 })
@@ -36,8 +43,14 @@ export class ShellComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly activatedRoute = inject(ActivatedRoute);
+  private readonly refreshService = inject(RefreshService);
+  private readonly masterData = inject(MasterDataService);
 
   readonly sidebarOpen = signal(true);
+  readonly mobileNavOpen = signal(false);
+  readonly userMenuOpen = signal(false);
+  readonly paletteOpen = signal(false);
+  readonly refreshing = this.refreshService.busy;
 
   readonly pageTitle = toSignal(
     this.router.events.pipe(
@@ -94,6 +107,13 @@ export class ShellComponent {
           label: 'Master Data',
           route: '/admin/master-data',
           permission: 'Admin.ManageMasterData'
+        },
+        {
+          id: 'admin-company-settings',
+          icon: '🏢',
+          label: 'Company Settings',
+          route: '/admin/company-settings',
+          permission: 'Admin.ManageMasterData'
         }
       ]
     }
@@ -121,18 +141,64 @@ export class ShellComponent {
   });
 
   /**
-   * The topbar's "Change password" link. Read through a computed so the template
-   * never calls the service directly, matching how `navGroups` gates nav items.
-   * Permissions are fixed for the life of a token, so there is nothing to react
-   * to here — the shell is re-created on login.
+   * The user menu's "Change password" entry. Read through a computed so the
+   * template never calls the service directly, matching how `navGroups` gates
+   * nav items. Permissions are fixed for the life of a token, so there is
+   * nothing to react to here — the shell is re-created on login.
    */
   readonly canChangeOwnPassword = computed(() => this.auth.hasPermission('Account.ChangeOwnPassword'));
+
+  /** ⌘K / Ctrl+K opens the palette from anywhere in the shell. */
+  @HostListener('document:keydown', ['$event'])
+  onDocumentKeydown(event: KeyboardEvent): void {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      this.openPalette();
+    }
+  }
+
+  openPalette(): void {
+    this.closeUserMenu();
+    this.closeMobileNav();
+    this.paletteOpen.set(true);
+  }
+
+  closePalette(): void {
+    this.paletteOpen.set(false);
+  }
 
   toggleSidebar(): void {
     this.sidebarOpen.update((v) => !v);
   }
 
+  openMobileNav(): void {
+    this.mobileNavOpen.set(true);
+  }
+
+  closeMobileNav(): void {
+    this.mobileNavOpen.set(false);
+  }
+
+  toggleUserMenu(): void {
+    this.userMenuOpen.update((v) => !v);
+  }
+
+  closeUserMenu(): void {
+    this.userMenuOpen.set(false);
+  }
+
+  /**
+   * Reloads the current screen's data through RefreshService (each data screen
+   * registers the reload behind its Retry control) and refreshes the shared
+   * master-data lookups so admin edits show up in the current screen's pickers.
+   */
+  refresh(): void {
+    this.masterData.reload().subscribe({ error: () => {} });
+    this.refreshService.requestRefresh();
+  }
+
   logout(): void {
+    this.closeUserMenu();
     this.auth.logout();
   }
 }

@@ -1,0 +1,176 @@
+<div>
+  <div class="page-header">
+    <h1 class="page-title">Company Settings</h1>
+    @if (!loading() && !error()) {
+      <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        {{ saving() ? 'Saving…' : 'Save' }}
+      </button>
+    }
+  </div>
+
+  @if (loading()) {
+    <div class="state-panel">
+      <div class="spinner"></div>
+      <span>Loading company settings…</span>
+    </div>
+  } @else if (error()) {
+    <div class="state-panel">
+      <span>{{ error() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="retry()">Retry</button>
+    </div>
+  } @else {
+    <!-- Names the outstanding fields rather than just flagging a problem: this is the
+         exact gate invoice-detail refuses to issue against, so the banner has to say
+         which values are still missing. -->
+    @if (!invoiceReady()) {
+      <div class="banner-warning cs-banner" role="alert">
+        <strong>Invoicing is blocked until this is filled in.</strong>
+        Still missing: {{ missingFieldLabels().join(' and ') }}. No invoice can be issued without them.
+      </div>
+    }
+
+    @if (saveError()) {
+      <div class="banner-warning cs-banner" role="alert">{{ saveError() }}</div>
+    }
+
+    @if (saved()) {
+      <div class="cs-saved" role="status">Company settings saved.</div>
+    }
+
+    <!-- Native (submit), not (ngSubmit): this component doesn't pull in FormsModule,
+         and an (ngSubmit) binding without it silently never fires. -->
+    <form class="cs-form" (submit)="$event.preventDefault(); save()" novalidate>
+      <div class="card cs-card">
+        <h2 class="cs-section">Legal entity</h2>
+        <p class="cs-section-hint">Printed as the "From" block on every invoice.</p>
+
+        <div class="field">
+          <label for="cs-legal-name">Legal entity name <span class="cs-required">*</span></label>
+          <input
+            id="cs-legal-name"
+            class="field-input"
+            [value]="legalEntityName()"
+            (input)="legalEntityName.set($any($event.target).value)"
+          />
+          <div class="field-hint">The registered company name, exactly as it should appear on a tax invoice.</div>
+        </div>
+
+        <div class="field">
+          <label for="cs-address">Registered address <span class="cs-required">*</span></label>
+          <textarea
+            id="cs-address"
+            class="field-input cs-textarea"
+            rows="3"
+            [value]="registeredAddress()"
+            (input)="registeredAddress.set($any($event.target).value)"
+          ></textarea>
+        </div>
+
+        <div class="cs-row">
+          <div class="field">
+            <label for="cs-gstin">GSTIN</label>
+            <input id="cs-gstin" class="field-input" [value]="gstin()" (input)="onGstinInput($any($event.target).value)" />
+            <div class="field-hint">Optional — omitted from the invoice header when blank.</div>
+          </div>
+
+          <div class="field">
+            <label for="cs-state">GST state <span class="cs-required">*</span></label>
+            <select id="cs-state" class="field-input" [value]="stateCode()" (change)="stateCode.set($any($event.target).value)">
+              <option value="">Choose…</option>
+              @for (state of states; track state.code) {
+                <option [value]="state.code" [selected]="state.code === stateCode()">{{ state.code }} — {{ state.name }}</option>
+              }
+            </select>
+            <div class="field-hint">
+              Your own state. Compared with the customer's to decide CGST + SGST (same state) or IGST (different states).
+              Filled in from the GSTIN automatically.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card cs-card">
+        <h2 class="cs-section">Bank details</h2>
+        <p class="cs-section-hint">Optional. Shown on the invoice so a customer can remit against it.</p>
+
+        <div class="field">
+          <label for="cs-bank-name">Account name</label>
+          <input
+            id="cs-bank-name"
+            class="field-input"
+            [value]="bankAccountName()"
+            (input)="bankAccountName.set($any($event.target).value)"
+          />
+        </div>
+
+        <div class="field">
+          <label for="cs-bank-number">Account number</label>
+          <input
+            id="cs-bank-number"
+            class="field-input"
+            [value]="bankAccountNumber()"
+            (input)="bankAccountNumber.set($any($event.target).value)"
+          />
+        </div>
+
+        <div class="cs-row">
+          <div class="field">
+            <label for="cs-bank-ifsc">IFSC</label>
+            <input id="cs-bank-ifsc" class="field-input" [value]="bankIfsc()" (input)="bankIfsc.set($any($event.target).value)" />
+          </div>
+
+          <div class="field">
+            <label for="cs-bank-branch">Branch</label>
+            <input
+              id="cs-bank-branch"
+              class="field-input"
+              [value]="bankBranch()"
+              (input)="bankBranch.set($any($event.target).value)"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="card cs-card">
+        <h2 class="cs-section">Invoice defaults</h2>
+        <p class="cs-section-hint">Optional. Applied to invoices issued from here on — existing invoices are unchanged.</p>
+
+        <div class="field">
+          <label for="cs-prefix">Invoice number prefix</label>
+          <input
+            id="cs-prefix"
+            class="field-input"
+            [value]="invoiceNumberPrefix()"
+            (input)="invoiceNumberPrefix.set($any($event.target).value)"
+          />
+          <div class="field-hint">e.g. <code>INV</code> — prepended to the generated invoice number.</div>
+        </div>
+
+        <div class="field">
+          <label for="cs-declaration">Declaration text</label>
+          <textarea
+            id="cs-declaration"
+            class="field-input cs-textarea"
+            rows="3"
+            [value]="declarationText()"
+            (input)="declarationText.set($any($event.target).value)"
+          ></textarea>
+          <div class="field-hint">Footer note on the invoice, e.g. "Goods once sold will not be taken back."</div>
+        </div>
+      </div>
+
+      <div class="cs-actions">
+        @if (updatedAt()) {
+          <span class="cs-meta">
+            Last updated {{ updatedAt() | date: 'd MMM y, h:mm a' }}@if (updatedByName()) { <span> by {{ updatedByName() }}</span> }
+          </span>
+        } @else {
+          <span class="cs-meta">Never saved.</span>
+        }
+        <button type="submit" class="btn btn-primary" [disabled]="saving()">
+          {{ saving() ? 'Saving…' : 'Save' }}
+        </button>
+      </div>
+    </form>
+  }
+</div>

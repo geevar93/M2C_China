@@ -10,6 +10,7 @@ import { CustomersService } from '../customers/services/customers.service';
 import { InvoicesService } from './services/invoices.service';
 import { InvoiceListItem, InvoiceStatusCount } from './models/invoice.models';
 import { formatInr, formatInvoiceDate } from './utils/format.util';
+import { RefreshService } from '../core/services/refresh.service';
 
 interface InvoiceRow {
   id: string;
@@ -152,7 +153,12 @@ export class InvoicesComponent {
 
   private readonly search$ = new Subject<string>();
 
+  private readonly refreshService = inject(RefreshService);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => { this.retry(); this.loadCustomers(); });
+
     this.search$.pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed()).subscribe((value) => {
       this.search.set(value);
       this.page.set(1);

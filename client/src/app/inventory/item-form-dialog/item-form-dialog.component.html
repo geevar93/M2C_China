@@ -1,11 +1,11 @@
 <div class="dialog-backdrop">
   <div class="dialog-panel">
-    <div class="ifd-header">
+    <div class="dialog-header">
       <div>
-        <div class="section-title">{{ dialogTitle() }}</div>
+        <div class="dialog-title">{{ dialogTitle() }}</div>
         <div class="muted">Changes are time-stamped in the audit trail.</div>
       </div>
-      <div class="dialog-close" (click)="cancel()">✕</div>
+      <button type="button" class="dialog-close" (click)="cancel()" aria-label="Close">✕</button>
     </div>
 
     @if (error()) {
@@ -61,6 +61,36 @@
       <div class="field">
         <label for="if-cost">Unit Cost <span class="muted">(optional)</span></label>
         <input id="if-cost" class="field-input" inputmode="decimal" [value]="unitCost()" (input)="unitCost.set($any($event.target).value)" />
+        <div class="field-hint">What the item cost to acquire. Never billed to a customer.</div>
+      </div>
+      <div class="field">
+        <label for="if-selling">Selling Price <span class="muted">(optional)</span></label>
+        <input
+          id="if-selling"
+          class="field-input"
+          inputmode="decimal"
+          [value]="sellingPrice()"
+          (input)="sellingPrice.set($any($event.target).value)"
+        />
+        <div class="field-hint">
+          Price per unit EXCLUDING GST. Prefills the unit price on an invoice line, so setting it here is what
+          removes the manual entry there.
+        </div>
+      </div>
+      <div class="field">
+        <label for="if-hsn">HSN / SAC <span class="muted">(optional)</span></label>
+        <input id="if-hsn" class="field-input" [value]="hsnCode()" (input)="hsnCode.set($any($event.target).value)" />
+        <div class="field-hint">Required on an invoice line before that invoice can be issued.</div>
+      </div>
+      <div class="field">
+        <label for="if-gst">GST Rate <span class="muted">(optional)</span></label>
+        <select id="if-gst" class="field-input" [value]="gstRate()" (change)="gstRate.set($any($event.target).value)">
+          <option value="">Not set</option>
+          @for (rate of gstRates; track rate) {
+            <option [value]="rate" [selected]="isSelectedRate(rate)">{{ rate }}%</option>
+          }
+        </select>
+        <div class="field-hint">Snapshotted onto an invoice line, so a later rate change never rewrites an issued invoice.</div>
       </div>
     </div>
 

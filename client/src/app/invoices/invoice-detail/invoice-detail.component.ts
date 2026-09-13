@@ -11,15 +11,19 @@ import { ShipmentsService } from '../../shipments/services/shipments.service';
 import { StatusStyleService, StatusColor } from '../../shared/services/status-style.service';
 import { formatTimelineDate } from '../../shared/utils/date-format.util';
 import { saveBlobAs } from '../../shared/utils/file-download.util';
+import { InventoryService } from '../../inventory/services/inventory.service';
+import { GST_RATES } from '../../shared/models/indian-states';
 import {
   CompanySettings,
   CreateInvoiceRequest,
   InvoiceDetail,
   InvoiceStatusCode,
+  UpsertInvoiceLineRequest,
   canIssueInvoices
 } from '../models/invoice.models';
 import { InvoicesService } from '../services/invoices.service';
 import { formatInr, formatInvoiceDate } from '../utils/format.util';
+import { RefreshService } from '../../core/services/refresh.service';
 
 interface TrailStep {
   code: InvoiceStatusCode;
@@ -38,7 +42,33 @@ interface ShipmentOption {
   reference: string;
 }
 
+interface ItemOption {
+  id: string;
+  name: string;
+  sellingPrice: number | null;
+  hsnCode: string | null;
+  gstRate: number | null;
+}
+
+/**
+ * One editable line. Every numeric field is held as a STRING, matching how the
+ * rest of this form works: an `<input>` yields text, and parsing on every
+ * keystroke makes a half-typed "1." or "" unrepresentable.
+ */
+interface FormLine {
+  inventoryItemId: string;
+  description: string;
+  hsnCode: string;
+  quantity: string;
+  unitPrice: string;
+  gstRate: string;
+}
+
 type MarkPaidAvailability = 'hidden' | 'disabled' | 'enabled';
+
+function emptyLine(): FormLine {
+  return { inventoryItemId: '', description: '', hsnCode: '', quantity: '1', unitPrice: '', gstRate: '' };
+}
 
 /**
  * Invoice generate / detail (ACTION_PLAN E8-10), wired against the real
@@ -78,6 +108,7 @@ export class InvoiceDetailComponent {
   private readonly invoicesService = inject(InvoicesService);
   private readonly customersService = inject(CustomersService);
   private readonly shipmentsService = inject(ShipmentsService);
+  private readonly inventoryService = inject(InventoryService);
   private readonly masterDataService = inject(MasterDataService);
   private readonly styles = inject(StatusStyleService);
   private readonly auth = inject(AuthService);
@@ -105,7 +136,7 @@ export class InvoiceDetailComponent {
   readonly canIssue = computed(() => canIssueInvoices(this.companySettings()));
   readonly issueDisabledReason = computed(() => {
     if (this.companySettingsLoading()) return 'Checking company billing settings…';
-    return 'Company billing details are not configured. A Super Admin must set the legal entity name and registered address under Admin > Company Settings before this invoice can be issued.';
+    return 'Company billing details are not configured. A Super Admin must set the legal entity name, registered address and GST state under Admin > Company Settings before this invoice can be issued.';
   });
 
   // ---- Customer directory, for the Bill-to picker in generate/edit mode ----
@@ -119,10 +150,31 @@ export class InvoiceDetailComponent {
   readonly formCustomerId = signal('');
   readonly formInvoiceDate = signal(this.today());
   readonly formLineDescription = signal('');
-  readonly formAmount = signal('');
-  readonly formTaxAmount = signal('');
   readonly formError = signal<string | null>(null);
   readonly saving = signal(false);
+
+  // ---- Line items -----------------------------------------------------------
+  //
+  // Amount and tax are no longer typed in at all: both are derived server-side
+  // from these lines. The form shows a taxable subtotal per line (plain
+  // quantity x price arithmetic) for immediate feedback, but deliberately does
+  // NOT compute the GST split — that has exactly one implementation, on the
+  // server, and the authoritative CGST/SGST/IGST figures come back with the
+  // saved invoice. Two implementations of tax maths is how a PDF and a screen
+  // start disagreeing.
+  readonly formLines = signal<FormLine[]>([emptyLine()]);
+  readonly itemOptions = signal<ItemOption[]>([]);
+  readonly gstRates = GST_RATES;
+
+  /** Plain arithmetic, not tax logic — safe to do here. */
+  readonly formTaxableTotal = computed(() =>
+    this.formLines().reduce((sum, line) => {
+      const qty = Number(line.quantity);
+      const price = Number(line.unitPrice);
+      if (Number.isNaN(qty) || Number.isNaN(price)) return sum;
+      return sum + qty * price;
+    }, 0)
+  );
 
   // ---- Shipment picker (N-32) — optional, scoped to the selected Bill-to customer.
   // Leaving no shipment selected is the normal, fully valid case (freight-only);
@@ -206,10 +258,16 @@ export class InvoiceDetailComponent {
   readonly markPaidSaving = signal(false);
   readonly markPaidError = signal<string | null>(null);
 
+  private readonly refreshService = inject(RefreshService);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => { this.retry(); this.retryCompanySettings(); });
+
     this.masterDataService.ensureLoaded().subscribe({ error: () => {} });
     this.loadCompanySettings();
     this.loadCustomers();
+    this.loadItems();
 
     effect(() => {
       const id = this.routeId();
@@ -249,8 +307,21 @@ export class InvoiceDetailComponent {
     this.formCustomerId.set(inv.customer.id);
     this.formInvoiceDate.set(inv.invoiceDate);
     this.formLineDescription.set(inv.lineDescription ?? '');
-    this.formAmount.set(String(inv.amount));
-    this.formTaxAmount.set(String(inv.taxAmount));
+    // Seed the editor from the saved lines. A legacy invoice created before line
+    // items existed has none — it opens with one blank row rather than silently
+    // showing an empty editor for a non-zero invoice.
+    this.formLines.set(
+      inv.lines.length > 0
+        ? inv.lines.map((l) => ({
+            inventoryItemId: l.inventoryItemId ?? '',
+            description: l.description,
+            hsnCode: l.hsnCode ?? '',
+            quantity: String(l.quantity),
+            unitPrice: String(l.unitPrice),
+            gstRate: l.gstRate != null ? String(l.gstRate) : ''
+          }))
+        : [emptyLine()]
+    );
     // Set before the customer-id effect's shipment fetch resolves; the fetch
     // keeps this selection as long as it's present in the reloaded options
     // for `inv.customer.id`, which it will be since it's already that
@@ -270,8 +341,6 @@ export class InvoiceDetailComponent {
 
     const customerId = this.formCustomerId();
     const invoiceDate = this.formInvoiceDate();
-    const amountNum = Number(this.formAmount());
-    const taxNum = Number(this.formTaxAmount());
 
     if (!customerId) {
       this.formError.set('Bill-to customer is required.');
@@ -281,13 +350,10 @@ export class InvoiceDetailComponent {
       this.formError.set('Invoice date is required.');
       return;
     }
-    if (!this.formAmount().trim() || Number.isNaN(amountNum) || amountNum < 0) {
-      this.formError.set('Amount must be a non-negative number.');
-      return;
-    }
-    if (!this.formTaxAmount().trim() || Number.isNaN(taxNum) || taxNum < 0) {
-      this.formError.set('Tax amount must be a non-negative number.');
-      return;
+
+    const lines = this.buildLineRequests();
+    if (lines === null) {
+      return; // buildLineRequests has already set the specific message
     }
 
     const request: CreateInvoiceRequest = {
@@ -295,9 +361,8 @@ export class InvoiceDetailComponent {
       shipmentId: this.formShipmentId() || null,
       invoiceDate,
       lineDescription: this.formLineDescription().trim() || null,
-      amount: amountNum,
-      taxAmount: taxNum,
-      currency: 'INR'
+      currency: 'INR',
+      lines
     };
 
     this.formError.set(null);
@@ -494,6 +559,131 @@ export class InvoiceDetailComponent {
     });
   }
 
+  // ---- Line editing ---------------------------------------------------------
+
+  addLine(): void {
+    this.formLines.update((lines) => [...lines, emptyLine()]);
+  }
+
+  removeLine(index: number): void {
+    // Never leave the editor with nothing to type into: emptying the last row is
+    // the same intent as clearing it.
+    this.formLines.update((lines) => (lines.length <= 1 ? [emptyLine()] : lines.filter((_, i) => i !== index)));
+  }
+
+  updateLine(index: number, field: keyof FormLine, value: string): void {
+    this.formLines.update((lines) => lines.map((line, i) => (i === index ? { ...line, [field]: value } : line)));
+  }
+
+  /**
+   * Picking an item fills description, HSN, rate and unit price from it — the whole
+   * point of the change: none of those is manual entry any more.
+   *
+   * Only ever fills a field the operator has left BLANK, so a deliberate override
+   * survives a later item change. `sellingPrice` may legitimately be null (the item
+   * has no list price), in which case the field stays empty and the server's
+   * issue-time check will refuse — it never falls back to the item's cost.
+   */
+  onLineItemSelected(index: number, itemId: string): void {
+    const item = this.itemOptions().find((o) => o.id === itemId);
+    this.formLines.update((lines) =>
+      lines.map((line, i) => {
+        if (i !== index) return line;
+        const next: FormLine = { ...line, inventoryItemId: itemId };
+        if (!item) return next;
+        if (!next.description.trim()) next.description = item.name;
+        if (!next.hsnCode.trim() && item.hsnCode) next.hsnCode = item.hsnCode;
+        if (!next.gstRate.trim() && item.gstRate != null) next.gstRate = String(item.gstRate);
+        if (!next.unitPrice.trim() && item.sellingPrice != null) next.unitPrice = String(item.sellingPrice);
+        return next;
+      })
+    );
+  }
+
+  /** Per-line taxable subtotal for the form preview. Plain arithmetic — see `formTaxableTotal`. */
+  lineSubtotal(line: FormLine): number {
+    const qty = Number(line.quantity);
+    const price = Number(line.unitPrice);
+    return Number.isNaN(qty) || Number.isNaN(price) ? 0 : qty * price;
+  }
+
+  /**
+   * Validates and converts the form lines, or returns null having set `formError`.
+   *
+   * Blank HSN/rate are ALLOWED through: a draft is permitted to be incomplete, and
+   * the server's issue-time gate is what refuses. Rejecting them here would make it
+   * impossible to save a partially-researched draft, which is the normal way this
+   * screen gets used.
+   */
+  private buildLineRequests(): UpsertInvoiceLineRequest[] | null {
+    const lines = this.formLines();
+    const filled = lines.filter((l) => l.description.trim() || l.inventoryItemId || l.quantity.trim() || l.unitPrice.trim());
+
+    if (filled.length === 0) {
+      this.formError.set('Add at least one line before saving.');
+      return null;
+    }
+
+    const requests: UpsertInvoiceLineRequest[] = [];
+    for (const [index, line] of filled.entries()) {
+      const label = `Line ${index + 1}`;
+
+      const quantity = Number(line.quantity);
+      if (!line.quantity.trim() || Number.isNaN(quantity) || quantity <= 0) {
+        this.formError.set(`${label}: quantity must be greater than zero.`);
+        return null;
+      }
+
+      const unitPriceText = line.unitPrice.trim();
+      const unitPrice = unitPriceText ? Number(unitPriceText) : null;
+      if (unitPriceText && (Number.isNaN(unitPrice) || unitPrice! < 0)) {
+        this.formError.set(`${label}: unit price must be a non-negative number.`);
+        return null;
+      }
+
+      const gstRateText = line.gstRate.trim();
+      const gstRate = gstRateText ? Number(gstRateText) : null;
+      if (gstRateText && (Number.isNaN(gstRate) || gstRate! < 0 || gstRate! > 100)) {
+        this.formError.set(`${label}: GST rate must be between 0 and 100.`);
+        return null;
+      }
+
+      if (!line.description.trim() && !line.inventoryItemId) {
+        this.formError.set(`${label}: pick an item or type a description.`);
+        return null;
+      }
+
+      requests.push({
+        inventoryItemId: line.inventoryItemId || null,
+        description: line.description.trim() || null,
+        hsnCode: line.hsnCode.trim() || null,
+        quantity,
+        unitPrice,
+        gstRate
+      });
+    }
+
+    return requests;
+  }
+
+  private loadItems(): void {
+    this.inventoryService.list({ page: 1, pageSize: 200 }).subscribe({
+      next: (res) =>
+        this.itemOptions.set(
+          res.items.map((i) => ({
+            id: i.id,
+            name: i.name,
+            sellingPrice: i.sellingPrice,
+            hsnCode: i.hsnCode,
+            gstRate: i.gstRate
+          }))
+        ),
+      // Non-fatal: the line editor still works with hand-typed descriptions, which
+      // is exactly the freight-only case. No banner for a picker that is optional.
+      error: () => this.itemOptions.set([])
+    });
+  }
+
   private loadCustomers(): void {
     this.customersLoading.set(true);
     this.customersService.list({ page: 1, pageSize: 200 }).subscribe({
@@ -509,8 +699,7 @@ export class InvoiceDetailComponent {
     this.formCustomerId.set('');
     this.formInvoiceDate.set(this.today());
     this.formLineDescription.set('');
-    this.formAmount.set('');
-    this.formTaxAmount.set('');
+    this.formLines.set([emptyLine()]);
     this.formShipmentId.set('');
     this.formError.set(null);
   }

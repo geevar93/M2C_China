@@ -10,14 +10,6 @@
   font-size: 13px;
 }
 
-.muted {
-  color: var(--color-text-muted);
-}
-
-.nowrap {
-  white-space: nowrap;
-}
-
 .align-right {
   text-align: right;
 }
@@ -222,24 +214,13 @@
   max-width: 420px;
 }
 
-.dialog-title {
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0 0 var(--space-3) 0;
-}
-
 .dialog-intro {
   font-size: 13px;
   margin: 0 0 var(--space-9) 0;
 }
 
-.dialog-actions {
-  justify-content: flex-end;
-  margin-top: var(--space-8);
-}
-
 // ---- Phone width -----------------------------------------------------------
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   .party-grid,
   .form-row {
     grid-template-columns: 1fr;
@@ -252,5 +233,81 @@
 
   .totals {
     align-items: stretch;
+  }
+}
+
+// ---- Line-item editor (generate/edit mode) -------------------------------------
+.inv-lines {
+  margin-bottom: var(--space-8);
+}
+
+.inv-lines__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.inv-lines__title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+// The editor is a grid of inputs, so rows need to breathe more than a read-only
+// table does; the widths keep the numeric columns from stealing space from the
+// description, which is the one column that actually needs room.
+.inv-lines__table {
+  th,
+  td {
+    padding: var(--space-3) var(--space-4);
+    vertical-align: middle;
+  }
+
+  .field-input {
+    margin: 0;
+  }
+}
+
+.inv-lines__item {
+  min-width: 120px;
+}
+
+.inv-lines__hsn {
+  width: 90px;
+}
+
+.inv-lines__num {
+  width: 90px;
+  text-align: right;
+}
+
+.inv-lines__rate {
+  width: 80px;
+}
+
+.inv-lines__total {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  font-weight: 600;
+  padding: var(--space-5) var(--space-4) 0;
+}
+
+.inv-lines__note {
+  text-align: right;
+  font-size: 12px;
+  padding: var(--space-2) var(--space-4) 0;
+}
+
+.pos-line {
+  font-size: 12px;
+  margin-bottom: var(--space-5);
+}
+
+@media (max-width: 640px) {
+  .inv-lines__head {
+    flex-wrap: wrap;
+    gap: var(--space-4);
   }
 }

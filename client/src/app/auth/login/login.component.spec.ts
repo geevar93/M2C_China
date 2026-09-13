@@ -38,7 +38,7 @@ describe('LoginComponent', () => {
     setPassword('secret123');
     expect(fixture.componentInstance.form.valid).toBeFalse();
 
-    setEmail('user@meridian.example');
+    setEmail('user@m2c.example');
     expect(fixture.componentInstance.form.valid).toBeTrue();
   });
 
@@ -50,7 +50,7 @@ describe('LoginComponent', () => {
   });
 
   it('disables the submit button and swaps its label while the request is in flight', () => {
-    setEmail('user@meridian.example');
+    setEmail('user@m2c.example');
     setPassword('secret123');
     fixture.componentInstance.submit();
     fixture.detectChanges();
@@ -67,7 +67,7 @@ describe('LoginComponent', () => {
   });
 
   it('shows the same generic error message whether the email is unknown or the password is wrong', () => {
-    setEmail('unknown@meridian.example');
+    setEmail('unknown@m2c.example');
     setPassword('wrong-password');
     fixture.componentInstance.submit();
 
@@ -97,7 +97,7 @@ describe('LoginComponent', () => {
 
   it('routes to force-change-password when the API reports mustChangePassword', () => {
     const navigateSpy = spyOn(router, 'navigate');
-    setEmail('user@meridian.example');
+    setEmail('user@m2c.example');
     setPassword('temp-password');
     fixture.componentInstance.submit();
 
@@ -106,7 +106,7 @@ describe('LoginComponent', () => {
       refreshToken: 'r',
       expiresAtUtc: new Date(Date.now() + 3600_000).toISOString(),
       mustChangePassword: true,
-      user: { id: 'u1', name: 'Test User', email: 'user@meridian.example', roles: [], permissions: [] }
+      user: { id: 'u1', name: 'Test User', email: 'user@m2c.example', roles: [], permissions: [] }
     });
 
     expect(navigateSpy).toHaveBeenCalledWith(['/force-change-password']);
@@ -114,7 +114,7 @@ describe('LoginComponent', () => {
 
   it('routes to the dashboard when mustChangePassword is false', () => {
     const navigateSpy = spyOn(router, 'navigate');
-    setEmail('user@meridian.example');
+    setEmail('user@m2c.example');
     setPassword('correct-password');
     fixture.componentInstance.submit();
 
@@ -123,7 +123,7 @@ describe('LoginComponent', () => {
       refreshToken: 'r',
       expiresAtUtc: new Date(Date.now() + 3600_000).toISOString(),
       mustChangePassword: false,
-      user: { id: 'u1', name: 'Test User', email: 'user@meridian.example', roles: [], permissions: [] }
+      user: { id: 'u1', name: 'Test User', email: 'user@m2c.example', roles: [], permissions: [] }
     });
 
     expect(navigateSpy).toHaveBeenCalledWith(['/dashboard']);

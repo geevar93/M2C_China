@@ -1,0 +1,55 @@
+<div class="palette-backdrop" (click)="close()">
+  <div class="palette" role="dialog" aria-label="Search" (click)="$event.stopPropagation()">
+    <div class="palette__input-row">
+      <span class="palette__glyph" aria-hidden="true">⌕</span>
+      <input
+        #paletteInput
+        class="palette__input"
+        type="text"
+        [value]="query()"
+        (input)="onInput($any($event.target).value)"
+        (keydown)="onKeydown($event)"
+        placeholder="Jump to a customer, vendor, catalog, shipment, item or screen"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="Search"
+      />
+      @if (loading()) {
+        <span class="spinner palette__spinner" aria-label="Searching"></span>
+      } @else {
+        <span class="palette__kbd">Esc</span>
+      }
+    </div>
+
+    <div class="palette__results" role="listbox">
+      @for (r of results(); track r.kind + r.label + r.route.join('/'); let i = $index) {
+        <div
+          class="palette__item"
+          [class.palette__item--active]="i === activeIndex()"
+          role="option"
+          [attr.aria-selected]="i === activeIndex()"
+          (mouseenter)="setActive(i)"
+          (click)="go(r)"
+        >
+          <span class="palette__icon">{{ r.icon }}</span>
+          <div class="palette__text">
+            <div class="palette__label">{{ r.label }}</div>
+            @if (r.sub) {
+              <div class="palette__sub">{{ r.sub }}</div>
+            }
+          </div>
+          <span class="palette__kind">{{ r.kind }}</span>
+        </div>
+      }
+      @if (empty()) {
+        <div class="palette__empty">No matches for “{{ query() }}”.</div>
+      }
+    </div>
+
+    <div class="palette__footer">
+      <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> open</span>
+      <span><kbd>Esc</kbd> close</span>
+    </div>
+  </div>
+</div>

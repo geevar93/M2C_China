@@ -31,6 +31,16 @@ export interface CustomerDetail extends CustomerListItem {
   /** Buyer's GST registration number (N-37). `string | null`, max length 15.
    *  Deliberately NOT on CustomerListItem — the list payload stays lean. */
   gstin: string | null;
+  /**
+   * Two-digit GST state code — the buyer's PLACE OF SUPPLY. Decides CGST+SGST
+   * (same state as the seller) versus IGST (different states), so the API
+   * **refuses to issue an invoice with a 400 when it is null** and cannot be
+   * derived from `gstin`. Defaulted server-side from the GSTIN's first two
+   * digits when left blank.
+   */
+  stateCode: string | null;
+  /** Server-resolved display name for `stateCode`, e.g. `"Gujarat"`. Read-only. */
+  stateName: string | null;
   notes: string | null;
   externalMarketplace: string | null;
   externalOrderRef: string | null;
@@ -77,6 +87,8 @@ export interface CreateCustomerRequest {
   email?: string | null;
   /** N-37. `string | null`, max length 15; server stores it uppercased. */
   gstin?: string | null;
+  /** Two-digit GST state code. Omit/null to let the server derive it from `gstin`. */
+  stateCode?: string | null;
   city?: string | null;
   region?: string | null;
   sourceChannel: string;

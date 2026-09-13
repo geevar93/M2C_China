@@ -27,8 +27,8 @@ public class AdminCompanySettingsEndpointTests : IClassFixture<AdminSeededFixtur
     public async Task Put_ThenGet_RoundTripsEveryField()
     {
         var request = new UpsertCompanySettingsRequest(
-            "Meridian Sourcing Pvt Ltd", "24AAAAA0000A1Z5", "123 Industrial Estate, Surat, Gujarat",
-            "Meridian Sourcing", "000123456789", "HDFC0000123", "Surat Main", "inv",
+            "M2C Sourcing Pvt Ltd", "24AAAAA0000A1Z5", "24", "123 Industrial Estate, Surat, Gujarat",
+            "M2C Sourcing", "000123456789", "HDFC0000123", "Surat Main", "inv",
             "Goods once sold will not be taken back.");
 
         var putResponse = await _fixture.AdminClient.PutAsJsonAsync("/api/v1/admin/company-settings", request);
@@ -37,10 +37,10 @@ public class AdminCompanySettingsEndpointTests : IClassFixture<AdminSeededFixtur
         var getResponse = await _fixture.AdminClient.GetAsync("/api/v1/admin/company-settings");
         var body = (await getResponse.Content.ReadFromJsonAsync<CompanySettingsDto>())!;
 
-        body.LegalEntityName.Should().Be("Meridian Sourcing Pvt Ltd");
+        body.LegalEntityName.Should().Be("M2C Sourcing Pvt Ltd");
         body.Gstin.Should().Be("24AAAAA0000A1Z5");
         body.RegisteredAddress.Should().Be("123 Industrial Estate, Surat, Gujarat");
-        body.BankAccountName.Should().Be("Meridian Sourcing");
+        body.BankAccountName.Should().Be("M2C Sourcing");
         body.InvoiceNumberPrefix.Should().Be("inv");
         body.UpdatedAt.Should().NotBeNull();
         body.UpdatedByName.Should().NotBeNullOrWhiteSpace();
@@ -66,7 +66,7 @@ public class AdminCompanySettingsEndpointTests : IClassFixture<AdminSeededFixtur
     {
         var client = await GetNoPermissionClientAsync();
         var response = await client.PutAsJsonAsync("/api/v1/admin/company-settings",
-            new UpsertCompanySettingsRequest(null, null, null, null, null, null, null, null, null));
+            new UpsertCompanySettingsRequest(null, null, null, null, null, null, null, null, null, null));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 

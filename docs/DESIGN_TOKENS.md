@@ -16,12 +16,12 @@ The real, buildable version of these tokens lives in `client/src/app/shared/styl
 
 | Token | Value | Used for |
 | --- | --- | --- |
-| `--color-navy` | `#1a2332` | Sidebar background; primary text colour on white surfaces (`body{color:#1a2332}`) |
-| `--color-accent` | `#2d5be3` | Primary buttons, links, active nav item background, focus border, brand dot after "Meridian" |
+| `--color-navy` | `#151d2b` | Sidebar background; primary text colour on white surfaces (`body{color:#1a2332}`) |
+| `--color-accent` | `#2d5be3` | Primary buttons, links, active nav item background, focus border |
 | `--color-accent-hover` | `#2449b5` | Link hover colour (`a:hover`) |
-| `--color-page-bg` | `#f8f9fb` | App background behind cards; table header cell background; hover background for list rows/nav collapse control area |
+| `--color-page-bg` | `#f4f6fa` | App background behind cards; table header cell background; hover background for list rows/nav collapse control area |
 | `--color-surface` | `#ffffff` | Card/dialog/table/input background |
-| `--color-track` | `#f1f3f6` | Progress-bar/funnel-bar track background |
+| `--color-track` | `#eef1f5` | Progress-bar/funnel-bar track background |
 
 ### Text / borders (neutral ramp)
 
@@ -30,30 +30,46 @@ The real, buildable version of these tokens lives in `client/src/app/shared/styl
 | `--color-text` | `#1a2332` | Primary body text (same as navy) |
 | `--color-text-muted` | `#6b7280` | Secondary text, placeholders, help text, table row secondary line |
 | `--color-text-strong-muted` | `#374151` | `NEW`/`PACKED` status label foreground (darker neutral than `#6b7280`) |
-| `--color-border` | `#e5e7eb` | Default 1px borders on cards, inputs, table rules, dividers |
-| `--color-border-strong` | `#e5e7eb` | (same value; kept as one token — the prototype never uses a second border weight) |
+| `--color-border` | `#e4e7ec` | Default 1px borders on cards, inputs, table rules, dividers |
+| `--color-border-strong` | `#d0d5dd` | Hover border on inputs/secondary buttons |
 
 ### Semantic accents
 
 | Token | Value | Used for |
 | --- | --- | --- |
-| `--color-warning` | `#f57f17` | Freight-only accent, low-stock, "ON-HOLD"/"IN TRANSIT" status fg, warning banner text |
-| `--color-warning-bg` | `#fff3e0` | Warning banner / chip background pair for `--color-warning` |
-| `--color-warning-border` | `#ffcc80` | Warning banner border (freight-only info banner on intake form) |
-| `--color-danger` | `#e53935` | Negative stock, LOST status, in-transit-overdue KPI sub-text |
-| `--color-danger-bg` | `#ffebee` | Danger **chip** background |
+| `--color-warning` | `#d97706` | Freight-only accent, low-stock, "ON-HOLD"/"IN TRANSIT" status fg, warning banner text |
+| `--color-warning-bg` | `#fff7e6` | Warning banner / chip background pair for `--color-warning` |
+| `--color-warning-border` | `#fcd48a` | Warning banner border (freight-only info banner on intake form) |
+| `--color-danger` | `#dc2626` | Negative stock, LOST status, in-transit-overdue KPI sub-text |
+| `--color-danger-bg` | `#fef2f2` | Danger **chip** background |
 | `--color-danger-bg-subtle` | `#fff8f8` | Negative-stock **row** tint (inventory table, E7-11). Deliberately distinct from `--color-danger-bg`: the prototype uses both, and `#ffebee` behind a full-width row reads as an error state rather than the quiet flag the approved screen intends |
-| `--color-success` | `#2e7d32` | ACTIVE/WON/DELIVERED status fg, positive KPI sub-text |
-| `--color-success-bg` | `#e8f5e9` | Success chip background |
-| `--color-info` | `#1565c0` | CIF service-type fg, QUALIFIED/DISPATCHED status fg, user-avatar-initials fg |
-| `--color-info-bg` | `#e3f2fd` | CIF chip background, user-avatar background |
-| `--color-neutral-chip-bg` | `#e5e7eb` | NEW/DORMANT/INACTIVE/PACKED chip background |
+| `--color-success` | `#15803d` | ACTIVE/WON/DELIVERED status fg, positive KPI sub-text |
+| `--color-success-bg` | `#ecfdf3` | Success chip background |
+| `--color-info` | `#1d4ed8` | CIF service-type fg, QUALIFIED/DISPATCHED status fg, user-avatar-initials fg |
+| `--color-info-bg` | `#e8f0fe` | CIF chip background, user-avatar background |
+| `--color-neutral-chip-bg` | `#eceff3` | NEW/DORMANT/INACTIVE/PACKED chip background |
 
 ### WhatsApp preview bubble (dispatch dialog only)
 
 | Token | Value |
 | --- | --- |
 | `--color-wa-bubble` | `#dbeafe` |
+
+### Added by the UI refresh pass (responsiveness + modernisation)
+
+| Token | Value | Used for |
+| --- | --- | --- |
+| `--color-navy-raised` | `#1f2937` | Reserved for raised surfaces on the navy sidebar |
+| `--color-accent-ring` | `rgba(45,91,227,.18)` | 3px focus ring on every interactive atom (`:focus-visible` and input focus) |
+| `--color-surface-hover` | `#f8f9fc` | Table row hover, secondary button hover |
+| `--color-text-placeholder` | `#9ca3af` | Input placeholders |
+| `--color-accent-soft-bg` | `#eef3ff` | Active pill tab, selected service-type card, chosen chip, completed dispatch step |
+| `--content-padding` | `24px` (`16px` ≤ 640px) | Content area and topbar horizontal padding |
+| `--font-size-sm` | `12px` | Secondary meta text |
+
+Breakpoints (SCSS, literal in component files): phone `640px`, tablet `900px`. At ≤ 900px the sidebar becomes an off-canvas drawer opened from a topbar hamburger; at ≤ 640px the topbar drops the search trigger, user name and refresh label, page headers stack, filter bars stack, dialogs go edge-to-edge with 12px margins, and `.table-wrap` scrolls horizontally (tables keep a 720px minimum width).
+
+Shared atoms promoted by that pass (previously copied per screen): `.filter-bar` / `.filter-search` / `.filter-spacer`, `.pager`, `.row-link` / `.row-name` / `.row-sub`, `.muted`, `.nowrap`, `.back-link`, `.page-sub`, `.section-title`, `.dialog-header` / `.dialog-title` / `.dialog-close` / `.dialog-actions`, `.banner-success`, `.choice-chip`, `.kv-row`.
 
 ---
 
@@ -119,10 +135,10 @@ Layout constants (not a scale step, but fixed and reused):
 
 | Token | Value |
 | --- | --- |
-| `--font-family-base` | `-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif` |
+| `--font-family-base` | `'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif` (Inter loaded from Google Fonts in `index.html`; system stack as fallback) |
 | `--font-family-mono` | `ui-monospace, SFMono-Regular, Menlo, monospace` (used once, for a placeholder image caption) |
 | `--font-size-base` | `14px` (body default) |
-| `--line-height-base` | `1.4` |
+| `--line-height-base` | `1.45` |
 
 Font-size steps actually used in the prototype (no separate named scale exists — carried over as literal values per element): `11px` (micro labels, badges, ⌘K hint), `12px` (secondary meta text, table header labels), `13px` (secondary body text, form labels, buttons), `14px` (body text, inputs, primary buttons), `15px` (command palette input), `16px` (topbar title, dialog close glyph), `18px` (app wordmark, dialog titles), `20px` (page `<h1>`), `22px` (upload icon), `28px` (KPI stat value).
 
@@ -134,9 +150,10 @@ Font weights used: `400` (default), `500` (buttons, labels, table primary cell),
 
 | Token | Value | Used for |
 | --- | --- | --- |
-| `--radius-sm` | `4px` | ⌘K keycap hint, progress-bar track/fill |
-| `--radius-md` | `8px` | **Default** — cards, buttons, inputs, selects, nav item, dialogs |
-| `--radius-pill` | `12px` | Status/service-type chips |
+| `--radius-sm` | `6px` | Buttons, inputs, selects, nav items, banners |
+| `--radius-md` | `10px` | Cards, stat tiles, table container, user menu |
+| `--radius-lg` | `14px` | Dialog panels |
+| `--radius-pill` | `999px` | Status/service-type chips, pill tabs, selectable chips |
 | `--radius-circle` | `50%` / half-of-size | Avatar circle (`14px` on 28px box), spinner, step-indicator dot (`10px` on 20px box) |
 
 ---
@@ -145,9 +162,10 @@ Font weights used: `400` (default), `500` (buttons, labels, table primary cell),
 
 | Token | Value | Used for |
 | --- | --- | --- |
-| `--shadow-card` | `0 1px 4px rgba(0,0,0,.08)` | Cards, stat tiles, table container, filter bar |
-| `--shadow-dialog` | `0 8px 32px rgba(0,0,0,.2)` | Modal dialogs (WhatsApp dispatch, upload, vendor edit, command palette) |
-| `--overlay-scrim` | `rgba(0,0,0,.4)` | Full-screen dialog backdrop (`position:fixed;inset:0`) |
+| `--shadow-card` | `0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06)` | Cards, stat tiles, table container, filter bar |
+| `--shadow-raised` | `0 4px 12px rgba(16,24,40,.08), 0 1px 3px rgba(16,24,40,.06)` | Auth card, user menu popover |
+| `--shadow-dialog` | `0 24px 48px rgba(16,24,40,.22), 0 4px 12px rgba(16,24,40,.08)` | Modal dialogs (WhatsApp dispatch, upload, vendor edit, command palette) |
+| `--overlay-scrim` | `rgba(17,24,39,.5)` | Full-screen dialog backdrop (`position:fixed;inset:0`) |
 
 ---
 

@@ -63,6 +63,16 @@ public sealed record InventoryItemDto(
     decimal OnHandQty,
     decimal ReorderThreshold,
     decimal? UnitCost,
+    /// <summary>
+    /// Per-unit SELLING price, GST exclusive — what a customer is billed. A DIFFERENT figure
+    /// from <c>UnitCost</c>, which is acquisition cost. Invoicing defaults a line's unit price
+    /// from this and never falls back to cost.
+    /// </summary>
+    decimal? SellingPrice,
+    /// <summary>HSN (goods) or SAC (services) code. Required on every invoice line before it can be issued.</summary>
+    string? HsnCode,
+    /// <summary>GST rate as a PERCENT (18m = 18%), not a fraction.</summary>
+    decimal? GstRate,
     decimal? StockValue,
     string StockLevel);
 
@@ -118,7 +128,17 @@ public sealed record CreateInventoryItemRequest(
     string? Unit,
     decimal? OnHandQty,
     decimal? ReorderThreshold,
-    decimal? UnitCost);
+    decimal? UnitCost,
+    /// <summary>
+    /// Per-unit SELLING price, GST exclusive — what a customer is billed. A DIFFERENT figure
+    /// from <c>UnitCost</c>, which is acquisition cost. Invoicing defaults a line's unit price
+    /// from this and never falls back to cost.
+    /// </summary>
+    decimal? SellingPrice = null,
+    /// <summary>HSN (goods) or SAC (services) code. Required on every invoice line before it can be issued.</summary>
+    string? HsnCode = null,
+    /// <summary>GST rate as a PERCENT (18m = 18%), not a fraction.</summary>
+    decimal? GstRate = null);
 
 /// <summary>
 /// Deliberately has NO <c>OnHandQty</c>. Stock moves only through the two recorded paths —
@@ -135,7 +155,17 @@ public sealed record UpdateInventoryItemRequest(
     Guid? VendorId,
     string? Unit,
     decimal? ReorderThreshold,
-    decimal? UnitCost);
+    decimal? UnitCost,
+    /// <summary>
+    /// Per-unit SELLING price, GST exclusive — what a customer is billed. A DIFFERENT figure
+    /// from <c>UnitCost</c>, which is acquisition cost. Invoicing defaults a line's unit price
+    /// from this and never falls back to cost.
+    /// </summary>
+    decimal? SellingPrice = null,
+    /// <summary>HSN (goods) or SAC (services) code. Required on every invoice line before it can be issued.</summary>
+    string? HsnCode = null,
+    /// <summary>GST rate as a PERCENT (18m = 18%), not a fraction.</summary>
+    decimal? GstRate = null);
 
 /// <summary>
 /// E7-02. <see cref="EntryDate"/> defaults to today (UTC) when omitted;

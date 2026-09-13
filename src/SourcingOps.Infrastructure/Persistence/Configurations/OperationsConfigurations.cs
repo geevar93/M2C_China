@@ -70,6 +70,11 @@ public class InventoryItemConfiguration : IEntityTypeConfiguration<InventoryItem
         b.Property(x => x.OnHandQty).HasPrecision(18, 3);
         b.Property(x => x.ReorderThreshold).HasPrecision(18, 3);
         b.Property(x => x.UnitCost).HasPrecision(18, 2); // D-a
+        // Selling price is a DIFFERENT figure from UnitCost - see the entity doc.
+        b.Property(x => x.SellingPrice).HasPrecision(18, 2);
+        b.Property(x => x.HsnCode).HasMaxLength(10);
+        // Percent, e.g. 18.00 - 5,2 covers every slab including 0.25%.
+        b.Property(x => x.GstRate).HasPrecision(5, 2);
         b.HasIndex(x => x.Sku);
         b.HasIndex(x => x.Name);
 
@@ -238,6 +243,8 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         b.Property(x => x.TaxAmount).HasPrecision(18, 2);
         b.Property(x => x.Currency).IsRequired().HasMaxLength(3);
         b.Property(x => x.PaidReference).HasMaxLength(300); // M6/E8-07
+        // Two-digit GST state code snapshotted at issue; null while draft.
+        b.Property(x => x.PlaceOfSupplyStateCode).HasMaxLength(2);
         b.HasIndex(x => x.InvoiceNumber).IsUnique();
         b.HasIndex(x => x.InvoiceDate);
 
@@ -245,6 +252,32 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         b.HasOne(x => x.Shipment).WithMany().HasForeignKey(x => x.ShipmentId).OnDelete(DeleteBehavior.SetNull);
         b.HasOne(x => x.Status).WithMany().HasForeignKey(x => x.StatusId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+/// <summary>
+/// Invoice line items. Mirrors <see cref="ShipmentLineConfiguration"/> — same quantity
+/// precision (3dp, for units sold by weight), same cascade-from-parent / restrict-to-item
+/// delete behaviour, so deleting an invoice takes its lines but an item referenced by any
+/// line cannot be deleted out from under it.
+/// </summary>
+public class InvoiceLineConfiguration : IEntityTypeConfiguration<InvoiceLine>
+{
+    public void Configure(EntityTypeBuilder<InvoiceLine> b)
+    {
+        b.ToTable("invoice_lines");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Description).IsRequired().HasMaxLength(500);
+        b.Property(x => x.HsnCode).HasMaxLength(10);
+        b.Property(x => x.Quantity).HasPrecision(18, 3);
+        b.Property(x => x.UnitPrice).HasPrecision(18, 2);
+        // Percent, e.g. 18.00 — 5,2 covers every statutory slab including 0.25%.
+        b.Property(x => x.GstRate).HasPrecision(5, 2);
+        // Serves the only query: this invoice's lines in display order.
+        b.HasIndex(x => new { x.InvoiceId, x.SortOrder });
+
+        b.HasOne(x => x.Invoice).WithMany(i => i.Lines).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne(x => x.InventoryItem).WithMany().HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

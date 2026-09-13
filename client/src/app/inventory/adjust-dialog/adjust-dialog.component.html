@@ -1,11 +1,11 @@
 <div class="dialog-backdrop">
   <div class="dialog-panel dialog-panel--narrow">
-    <div class="adj-header">
+    <div class="dialog-header">
       <div>
-        <div class="section-title">Adjust Stock</div>
+        <div class="dialog-title">Adjust Stock</div>
         <div class="muted">Records a correction against a physical count — this does not silently overwrite the on-hand quantity.</div>
       </div>
-      <div class="dialog-close" (click)="cancel()">✕</div>
+      <button type="button" class="dialog-close" (click)="cancel()" aria-label="Close">✕</button>
     </div>
 
     @if (error()) {

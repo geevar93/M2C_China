@@ -29,6 +29,9 @@ const EXISTING_ITEM: InventoryItem = {
   onHandQty: 1840,
   reorderThreshold: 600,
   unitCost: 120,
+  sellingPrice: null,
+  hsnCode: null,
+  gstRate: null,
   stockValue: 220800,
   stockLevel: 'HEALTHY'
 };

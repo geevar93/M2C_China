@@ -197,7 +197,8 @@ public class DispatchEndpointTests : IClassFixture<AdminSeededFixture>
     private async Task<InvoiceDetailDto> CreateInvoiceAsync(Guid customerId)
     {
         var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/invoices",
-            new CreateInvoiceRequest(customerId, null, new DateOnly(2026, 8, 1), "Consulting services", 1000m, 180m, "INR"));
+            new CreateInvoiceRequest(customerId, null, new DateOnly(2026, 8, 1), "Consulting services", "INR",
+                [new UpsertInvoiceLineRequest(null, "Consulting services", "998311", 1m, 1000m, 18m)]));
         await response.EnsureSuccessOrThrowWithBodyAsync();
         return (await response.Content.ReadFromJsonAsync<InvoiceDetailDto>())!;
     }

@@ -28,7 +28,7 @@ E0-02 and E0-03 are **outside** the shell — an unauthenticated user has no sid
 | Region | Composition |
 | --- | --- |
 | Card | `.card`, `max-width: 380px`, centred both axes |
-| Brand | `Meridian` + `.` in `--color-accent`, 20px/700 `--color-navy` — the same wordmark the sidebar renders, so the first screen a user sees already matches the shell they land in |
+| Brand | The M2C logo (`logo-dark.png`, navy ink for the light card), 30px tall — the same lockup the sidebar renders in its white-ink variant, so the first screen a user sees already matches the shell they land in |
 | Eyebrow | `SOURCING OPS`, 11px, `--color-text-muted`, `.06em` tracking |
 | Title / subtitle | `Sign in` (20px/700) over `Internal tool — staff accounts only.` (13px muted) — states FSD A1's internal-only posture on the one screen where an outsider could arrive |
 | Error state | `.banner-warning` with `role="alert"`, above the form |

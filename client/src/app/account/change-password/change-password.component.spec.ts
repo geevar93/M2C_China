@@ -12,7 +12,7 @@ function authResponse() {
     refreshToken: 'r',
     expiresAtUtc: new Date(Date.now() + 3600_000).toISOString(),
     mustChangePassword: false,
-    user: { id: 'u1', name: 'Test User', email: 'user@meridian.example', roles: ['SuperAdmin'], permissions: [] }
+    user: { id: 'u1', name: 'Test User', email: 'user@m2c.example', roles: ['SuperAdmin'], permissions: [] }
   };
 }
 

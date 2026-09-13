@@ -1,8 +1,3 @@
-.back-link {
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
 .vd-head {
   display: flex;
   align-items: flex-start;
@@ -98,18 +93,6 @@
   color: var(--color-text-strong-muted);
 }
 
-.muted {
-  color: var(--color-text-muted);
-}
-
-.nowrap {
-  white-space: nowrap;
-
-  .btn {
-    margin-right: var(--space-4);
-  }
-}
-
 .vd-wa-btn {
   width: 30px;
   height: 30px;
@@ -202,5 +185,19 @@
 @media (max-width: 640px) {
   .vd-head {
     flex-direction: column;
+  }
+
+  .vd-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .vd-sec-head {
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .vd-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-6);
   }
 }

@@ -4,34 +4,13 @@
   margin-top: var(--space-4);
 }
 
-.filter-bar {
-  display: flex;
-  gap: var(--space-6);
-  align-items: flex-end;
-  flex-wrap: wrap;
-  margin-bottom: var(--space-8);
-
-  .field {
-    margin-bottom: 0;
-  }
-}
-
-.filter-search {
-  flex: 1 1 220px;
-  min-width: 180px;
-}
-
 .cat-banner {
   margin-bottom: var(--space-8);
 }
 
-.muted {
-  color: var(--color-text-muted);
-}
-
 .cat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: var(--space-8);
 }
 
@@ -151,12 +130,4 @@
   border-top: 1px solid var(--color-track);
   padding-top: var(--space-5);
   margin-top: auto;
-}
-
-.pager {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  margin-top: var(--space-8);
-  font-size: 13px;
 }

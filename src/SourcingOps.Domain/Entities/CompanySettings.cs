@@ -24,6 +24,15 @@ public class CompanySettings
 
     public string? LegalEntityName { get; set; }
     public string? Gstin { get; set; }
+
+    /// <summary>
+    /// Two-digit GST state code of the SELLER (see <c>IndianStateCodes</c>) — the other half of
+    /// the place-of-supply comparison. Defaulted from <see cref="Gstin"/>'s first two digits
+    /// when blank, so a correctly-entered GSTIN normally means nobody has to set this by hand.
+    /// Required before an invoice can be issued, alongside legal entity name and address.
+    /// </summary>
+    public string? StateCode { get; set; }
+
     public string? RegisteredAddress { get; set; }
     public string? BankAccountName { get; set; }
     public string? BankAccountNumber { get; set; }

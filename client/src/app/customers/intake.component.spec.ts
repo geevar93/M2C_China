@@ -47,6 +47,8 @@ const savedDetail: CustomerDetail = {
   id: 'cust-new',
   email: null,
   gstin: null,
+  stateCode: null,
+  stateName: null,
   notes: null,
   externalMarketplace: null,
   externalOrderRef: null,

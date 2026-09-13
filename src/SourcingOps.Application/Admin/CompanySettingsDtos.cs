@@ -9,6 +9,8 @@ namespace SourcingOps.Application.Admin;
 public sealed record CompanySettingsDto(
     string? LegalEntityName,
     string? Gstin,
+    string? StateCode,
+    string? StateName,
     string? RegisteredAddress,
     string? BankAccountName,
     string? BankAccountNumber,
@@ -28,6 +30,7 @@ public sealed record CompanySettingsDto(
 public sealed record UpsertCompanySettingsRequest(
     string? LegalEntityName,
     string? Gstin,
+    string? StateCode,
     string? RegisteredAddress,
     string? BankAccountName,
     string? BankAccountNumber,

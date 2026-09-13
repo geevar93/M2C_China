@@ -18,6 +18,7 @@ import { VendorsService } from '../services/vendors.service';
 import { VendorDetail, VendorDocument } from '../models/vendor.models';
 import { VendorFormDialogComponent } from '../vendor-form-dialog/vendor-form-dialog.component';
 import { VendorDocumentUploadDialogComponent } from '../document-upload-dialog/document-upload-dialog.component';
+import { RefreshService } from '../../core/services/refresh.service';
 
 interface StatTile {
   label: string;
@@ -153,7 +154,12 @@ export class VendorDetailComponent {
 
   readonly complianceDocs = computed<ComplianceDocRow[]>(() => this.documents().map((d) => this.toComplianceDocRow(d)));
 
+  private readonly refreshService = inject(RefreshService);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => this.retry());
+
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((params) => {
       const id = params.get('id');
       if (id) this.load(id);

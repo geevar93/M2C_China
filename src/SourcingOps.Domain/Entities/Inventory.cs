@@ -35,6 +35,33 @@ public class InventoryItem
     /// </summary>
     public decimal? UnitCost { get; set; }
 
+    /// <summary>
+    /// Per-unit SELLING price, exclusive of GST — what a customer is billed, as distinct from
+    /// <see cref="UnitCost"/>, which is what the item cost to acquire. Nullable: not every
+    /// stocked item is sold at a list price.
+    ///
+    /// These two must never be conflated. Invoicing defaults a line's unit price from this
+    /// field and NEVER falls back to <see cref="UnitCost"/> — silently billing a customer at
+    /// cost would under-charge by the entire margin, and would do it invisibly, on a document
+    /// that is legally binding once issued.
+    /// </summary>
+    public decimal? SellingPrice { get; set; }
+
+    /// <summary>
+    /// HSN (goods) or SAC (services) code. Nullable on the item, but an invoice line without
+    /// one cannot be issued — a compliant tax invoice must state it per line.
+    /// </summary>
+    public string? HsnCode { get; set; }
+
+    /// <summary>
+    /// GST rate as a PERCENT, not a fraction — <c>18m</c> means 18%, matching how the statutory
+    /// slabs (0/5/12/18/28) are written and read. Stored per item because a mixed basket
+    /// legitimately spans slabs. Snapshotted onto the invoice line at creation so a later rate
+    /// change never rewrites the basis of an invoice that has already been issued (the same
+    /// reasoning <see cref="ShipmentLine.UnitCost"/> documents for its own snapshot).
+    /// </summary>
+    public decimal? GstRate { get; set; }
+
     public ICollection<ShipmentLine> ShipmentLines { get; set; } = new List<ShipmentLine>();
     public ICollection<InventoryInboundEntry> InboundEntries { get; set; } = new List<InventoryInboundEntry>();
     public ICollection<InventoryStockAdjustment> StockAdjustments { get; set; } = new List<InventoryStockAdjustment>();

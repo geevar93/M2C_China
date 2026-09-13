@@ -6,6 +6,7 @@ import { tap } from 'rxjs/operators';
 import { extractErrorMessage } from '../../core/services/problem-details.util';
 import { AdminUsersService } from '../services/admin-users.service';
 import { AdminUserDto, RoleDto } from '../models/admin-user.models';
+import { RefreshService } from '../../core/services/refresh.service';
 
 const PAGE_SIZE = 20;
 
@@ -82,7 +83,12 @@ export class AdminUsersComponent {
   readonly resettingUserId = signal<string | null>(null);
   readonly restoringUserId = signal<string | null>(null);
 
+  private readonly refreshService = inject(RefreshService);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => this.retry());
+
     this.search$.pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed()).subscribe((value) => {
       this.search.set(value);
       this.page.set(1);

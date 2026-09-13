@@ -70,25 +70,114 @@ public sealed class QuestPdfInvoiceRenderer : IInvoicePdfRenderer
 
                     col.Item().PaddingTop(15).LineHorizontal(0.5f);
 
+                    var intra = model.TaxSummary.IsIntraState;
+
+                    // Place of supply is stated explicitly: it is what justifies the tax heads
+                    // below, and a reader (or an auditor) should not have to infer it.
+                    if (!string.IsNullOrWhiteSpace(model.TaxSummary.PlaceOfSupplyStateName))
+                    {
+                        col.Item().PaddingTop(6).Text(
+                            $"Place of Supply: {model.TaxSummary.PlaceOfSupplyStateName} ({model.TaxSummary.PlaceOfSupplyStateCode})" +
+                            $" — {(intra ? "Intra-state (CGST + SGST)" : "Inter-state (IGST)")}")
+                            .FontSize(9);
+                    }
+
                     col.Item().PaddingTop(10).Table(table =>
                     {
+                        // Only the heads that apply get columns — see InvoicePdfTaxSummary's
+                        // doc on why zero-filled CGST/SGST columns on an IGST invoice are worse
+                        // than absent ones.
                         table.ColumnsDefinition(c =>
                         {
-                            c.RelativeColumn(3);
-                            c.RelativeColumn(1);
+                            c.RelativeColumn(4);   // Description
+                            c.RelativeColumn(1.2f); // HSN/SAC
+                            c.RelativeColumn(1);   // Qty
+                            c.RelativeColumn(1.4f); // Rate
+                            c.RelativeColumn(1.6f); // Taxable
+                            if (intra)
+                            {
+                                c.RelativeColumn(1.4f); // CGST
+                                c.RelativeColumn(1.4f); // SGST
+                            }
+                            else
+                            {
+                                c.RelativeColumn(1.6f); // IGST
+                            }
+                            c.RelativeColumn(1.8f); // Total
                         });
 
-                        table.Cell().Text("Description");
-                        table.Cell().AlignRight().Text("Amount");
+                        table.Header(header =>
+                        {
+                            header.Cell().Text("Description").Bold().FontSize(9);
+                            header.Cell().Text("HSN/SAC").Bold().FontSize(9);
+                            header.Cell().AlignRight().Text("Qty").Bold().FontSize(9);
+                            header.Cell().AlignRight().Text("Rate").Bold().FontSize(9);
+                            header.Cell().AlignRight().Text("Taxable").Bold().FontSize(9);
+                            if (intra)
+                            {
+                                header.Cell().AlignRight().Text("CGST").Bold().FontSize(9);
+                                header.Cell().AlignRight().Text("SGST").Bold().FontSize(9);
+                            }
+                            else
+                            {
+                                header.Cell().AlignRight().Text("IGST").Bold().FontSize(9);
+                            }
+                            header.Cell().AlignRight().Text("Total").Bold().FontSize(9);
+                        });
 
-                        table.Cell().Text(string.IsNullOrWhiteSpace(model.LineDescription) ? "Services rendered" : model.LineDescription);
-                        table.Cell().AlignRight().Text(MoneyFormatter.Format(model.Currency, model.Amount));
+                        foreach (var line in model.Lines)
+                        {
+                            table.Cell().PaddingVertical(2).Text(line.Description).FontSize(9);
+                            table.Cell().PaddingVertical(2).Text(line.HsnCode ?? "—").FontSize(9);
+                            table.Cell().PaddingVertical(2).AlignRight().Text(QuantityFormatter.Format(line.Quantity)).FontSize(9);
+                            table.Cell().PaddingVertical(2).AlignRight().Text($"{line.GstRate:0.##}%").FontSize(9);
+                            table.Cell().PaddingVertical(2).AlignRight().Text(MoneyFormatter.Format(model.Currency, line.TaxableValue)).FontSize(9);
+                            if (intra)
+                            {
+                                table.Cell().PaddingVertical(2).AlignRight().Text(MoneyFormatter.Format(model.Currency, line.CgstAmount)).FontSize(9);
+                                table.Cell().PaddingVertical(2).AlignRight().Text(MoneyFormatter.Format(model.Currency, line.SgstAmount)).FontSize(9);
+                            }
+                            else
+                            {
+                                table.Cell().PaddingVertical(2).AlignRight().Text(MoneyFormatter.Format(model.Currency, line.IgstAmount)).FontSize(9);
+                            }
+                            table.Cell().PaddingVertical(2).AlignRight().Text(MoneyFormatter.Format(model.Currency, line.LineTotal)).FontSize(9);
+                        }
+                    });
 
-                        table.Cell().Text("Tax");
-                        table.Cell().AlignRight().Text(MoneyFormatter.Format(model.Currency, model.TaxAmount));
+                    col.Item().PaddingTop(10).LineHorizontal(0.5f);
 
-                        table.Cell().PaddingTop(4).Text("Total").Bold();
-                        table.Cell().PaddingTop(4).AlignRight().Text(MoneyFormatter.Format(model.Currency, model.TotalAmount)).Bold();
+                    col.Item().PaddingTop(6).AlignRight().Table(totals =>
+                    {
+                        totals.ColumnsDefinition(c =>
+                        {
+                            c.ConstantColumn(150);
+                            c.ConstantColumn(120);
+                        });
+
+                        void Row(string label, decimal value, bool bold = false)
+                        {
+                            var l = totals.Cell().PaddingVertical(1).Text(label).FontSize(9);
+                            var v = totals.Cell().PaddingVertical(1).AlignRight().Text(MoneyFormatter.Format(model.Currency, value)).FontSize(9);
+                            if (bold)
+                            {
+                                l.Bold();
+                                v.Bold();
+                            }
+                        }
+
+                        Row("Taxable Value", model.TaxSummary.TaxableValue);
+                        if (intra)
+                        {
+                            Row("CGST", model.TaxSummary.CgstAmount);
+                            Row("SGST", model.TaxSummary.SgstAmount);
+                        }
+                        else
+                        {
+                            Row("IGST", model.TaxSummary.IgstAmount);
+                        }
+
+                        Row("Total", model.TotalAmount, bold: true);
                     });
 
                     if (model.BankDetails is not null)

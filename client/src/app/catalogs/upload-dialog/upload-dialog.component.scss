@@ -4,31 +4,8 @@
   max-width: 560px;
 }
 
-.upload-dialog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-8);
-}
-
-.dialog-close {
-  font-size: 16px;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 0 var(--space-2);
-}
-
-.section-title {
-  font-size: 18px;
-  font-weight: 600;
-}
-
 .upload-banner {
   margin-bottom: var(--space-8);
-}
-
-.muted {
-  color: var(--color-text-muted);
 }
 
 .upload-mode-tabs {

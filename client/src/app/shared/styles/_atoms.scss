@@ -1,6 +1,15 @@
-// Reusable atoms ported from the prototype's markup (buttons, cards, tables, form fields,
-// dialogs, chips, stat tiles). Defined once here and consumed by class name everywhere —
-// never copy-pasted per screen. See docs/DESIGN_TOKENS.md §8 for the source values.
+// Reusable atoms (buttons, cards, tables, form fields, dialogs, chips, stat
+// tiles, page chrome). Defined once here and consumed by class name everywhere —
+// never copy-pasted per screen. See docs/DESIGN_TOKENS.md §8 for the reference.
+@use 'tokens' as t;
+
+// ---- Focus ring (shared by every interactive atom) ----------------------------
+@mixin focus-ring {
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-accent-ring);
+  }
+}
 
 // ---- Buttons ---------------------------------------------------------
 .btn {
@@ -8,17 +17,25 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-3);
-  border-radius: var(--radius-md);
-  padding: var(--space-5) var(--space-7);
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  padding: 8px var(--space-7);
+  min-height: 36px;
+  font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
   font-family: inherit;
-  line-height: var(--line-height-base);
-  transition: background .15s, border-color .15s;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background .15s, border-color .15s, box-shadow .15s, color .15s;
+  @include focus-ring;
+
+  &:hover {
+    text-decoration: none;
+  }
 
   &:disabled {
-    opacity: .55;
+    opacity: .5;
     cursor: not-allowed;
   }
 }
@@ -27,10 +44,12 @@
   background: var(--color-accent);
   color: #fff;
   border: 1px solid var(--color-accent);
+  box-shadow: 0 1px 2px rgba(45, 91, 227, .25);
 
   &:hover:not(:disabled) {
     background: var(--color-accent-hover);
     border-color: var(--color-accent-hover);
+    color: #fff;
   }
 }
 
@@ -38,15 +57,19 @@
   background: var(--color-surface);
   color: var(--color-text);
   border: 1px solid var(--color-border);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
 
   &:hover:not(:disabled) {
-    background: var(--color-page-bg);
+    background: var(--color-surface-hover);
+    border-color: var(--color-border-strong);
+    color: var(--color-text);
   }
 }
 
 .btn-sm {
-  padding: 6px 10px;
-  font-size: 13px;
+  padding: 5px 10px;
+  min-height: 30px;
+  font-size: 12.5px;
 }
 
 .btn-block {
@@ -65,19 +88,23 @@
 // ---- Stat tile -----------------------------------------------------------
 .stat-tile {
   @extend .card;
+  min-width: 0;
 }
 
 .stat-tile__label {
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--color-text-muted);
   text-transform: uppercase;
-  letter-spacing: .05em;
+  letter-spacing: .06em;
 }
 
 .stat-tile__value {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
+  letter-spacing: -.02em;
   margin-top: var(--space-4);
+  overflow-wrap: anywhere;
 }
 
 .stat-tile__sub {
@@ -91,12 +118,16 @@
 }
 
 // ---- .table-style list ---------------------------------------------------
+// The wrapper scrolls horizontally on narrow viewports instead of letting an
+// eight-column table crush its cells — the page itself never scrolls sideways.
 .table-wrap {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   overflow: hidden;
   box-shadow: var(--shadow-card);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table-wrap table {
@@ -104,16 +135,23 @@
   width: 100%;
 }
 
+@media (max-width: t.$bp-tablet) {
+  .table-wrap table {
+    min-width: 720px;
+  }
+}
+
 .table-wrap th {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: .05em;
+  letter-spacing: .06em;
   color: var(--color-text-muted);
   background: var(--color-page-bg);
   padding: 10px var(--space-8);
   text-align: left;
   border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
 
   &.align-right {
     text-align: right;
@@ -121,17 +159,54 @@
 }
 
 .table-wrap td {
-  font-size: 14px;
+  font-size: 13.5px;
   padding: var(--space-6) var(--space-8);
   border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+
+  &.align-right {
+    text-align: right;
+  }
 }
 
 .table-wrap tbody tr {
   background: var(--color-surface);
   transition: background .15s;
 
+  &:last-child td {
+    border-bottom: none;
+  }
+
   &:hover {
-    background: #f9fafb;
+    background: var(--color-surface-hover);
+  }
+}
+
+// Shared row typography — every list screen renders a primary line and a
+// muted secondary line; defined once so the lists stay identical.
+.row-link {
+  font-weight: 600;
+}
+
+.row-name {
+  font-weight: 600;
+}
+
+.row-sub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.nowrap {
+  white-space: nowrap;
+
+  .btn + .btn {
+    margin-left: var(--space-4);
   }
 }
 
@@ -139,6 +214,7 @@
 .field {
   display: block;
   margin-bottom: var(--space-8);
+  min-width: 0;
 }
 
 .field label {
@@ -146,6 +222,7 @@
   font-size: 13px;
   font-weight: 500;
   margin-bottom: var(--space-3);
+  color: var(--color-text-strong-muted);
 }
 
 .field-input,
@@ -153,17 +230,28 @@ input.field-input,
 select.field-input,
 textarea.field-input {
   width: 100%;
-  padding: var(--space-5) var(--space-6);
+  min-height: 38px;
+  padding: 8px var(--space-6);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   font-size: 14px;
   font-family: inherit;
   background: var(--color-surface);
   color: var(--color-text);
+  transition: border-color .15s, box-shadow .15s;
+
+  &::placeholder {
+    color: var(--color-text-placeholder);
+  }
+
+  &:hover:not(:disabled):not(:focus) {
+    border-color: var(--color-border-strong);
+  }
 
   &:focus {
     border-color: var(--color-accent);
     outline: none;
+    box-shadow: 0 0 0 3px var(--color-accent-ring);
   }
 
   &:disabled {
@@ -172,8 +260,22 @@ textarea.field-input {
   }
 }
 
+select.field-input {
+  appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
 textarea.field-input {
   resize: vertical;
+  min-height: 84px;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--color-accent);
 }
 
 .field-error {
@@ -190,11 +292,16 @@ textarea.field-input {
 
 // ---- Chip / badge ----------------------------------------------------------
 .chip {
-  display: inline-block;
-  padding: var(--space-1) var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
   border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
 // ---- Dialog ------------------------------------------------------------
@@ -205,28 +312,120 @@ textarea.field-input {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 64px var(--space-10);
+  padding: 56px var(--space-10);
   overflow-y: auto;
   z-index: 50;
+  animation: fade-in .12s ease-out;
 }
 
 .dialog-panel {
   background: var(--color-surface);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: var(--space-10);
   width: 100%;
   max-width: 720px;
   box-shadow: var(--shadow-dialog);
+  animation: rise-in .16s ease-out;
+}
+
+// One header shape for every dialog — a title block on the left, a close
+// glyph on the right — so the dialogs stop drifting from one another.
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.dialog-title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  margin: 0;
+}
+
+.dialog-close {
+  appearance: none;
+  border: none;
+  background: transparent;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin: -6px -8px 0 0;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, color .15s;
+  @include focus-ring;
+
+  &:hover {
+    background: var(--color-track);
+    color: var(--color-text);
+  }
+}
+
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  margin-top: var(--space-8);
+}
+
+@media (max-width: t.$bp-phone) {
+  .dialog-backdrop {
+    padding: 12px;
+    align-items: flex-start;
+  }
+
+  .dialog-panel {
+    padding: var(--space-9) var(--space-8);
+    border-radius: var(--radius-md);
+  }
+
+  .dialog-actions {
+    flex-wrap: wrap;
+
+    .btn {
+      flex: 1 1 auto;
+    }
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
 
 // ---- Banner (freight-only / warning info strip) -----------------------------
 .banner-warning {
   background: var(--color-warning-bg);
   border: 1px solid var(--color-warning-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   padding: var(--space-6) var(--space-8);
   font-size: 13px;
   color: var(--color-warning);
+  overflow-wrap: anywhere;
+}
+
+.banner-success {
+  background: var(--color-success-bg);
+  border: 1px solid #a7e3bf;
+  border-radius: var(--radius-sm);
+  padding: var(--space-6) var(--space-8);
+  font-size: 13px;
+  color: var(--color-success);
 }
 
 // ---- Loading / empty / error states (DoD: every screen must handle these) --
@@ -236,10 +435,16 @@ textarea.field-input {
   align-items: center;
   justify-content: center;
   gap: var(--space-6);
-  padding: 120px 0;
+  padding: 96px var(--space-8);
   color: var(--color-text-muted);
   font-size: 13px;
   text-align: center;
+}
+
+@media (max-width: t.$bp-phone) {
+  .state-panel {
+    padding: 56px var(--space-8);
+  }
 }
 
 .spinner {
@@ -256,9 +461,6 @@ textarea.field-input {
 }
 
 // ---- Page header -----------------------------------------------------------
-// Promoted from the per-screen copies each ported screen carried. Values are
-// unchanged, so existing component-scoped copies (which win on specificity)
-// render identically. See docs/SCREEN_DESIGNS.md.
 .page-header {
   display: flex;
   align-items: center;
@@ -269,22 +471,115 @@ textarea.field-input {
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.25;
   margin: 0;
+}
+
+.page-sub {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 var(--space-6);
 }
 
 .toolbar {
   display: flex;
   align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+@media (max-width: t.$bp-phone) {
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbar {
+    width: 100%;
+
+    > .btn,
+    > .field-input {
+      flex: 1 1 auto;
+    }
+  }
+}
+
+// ---- Filter bar --------------------------------------------------------------
+// Every list screen carries the same search + selects strip. It is a card that
+// lays its fields out in a row and stacks them on a phone.
+.filter-bar {
+  display: flex;
   gap: var(--space-6);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-8);
+  padding: var(--space-8);
+
+  .field {
+    margin-bottom: 0;
+    flex: 1 1 160px;
+  }
+}
+
+.filter-search {
+  flex: 2 1 220px;
+}
+
+.filter-spacer {
+  flex: 1 1 auto;
+}
+
+@media (max-width: t.$bp-phone) {
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+
+    .field,
+    .filter-search {
+      flex: 0 0 auto;
+    }
+
+    .filter-spacer {
+      display: none;
+    }
+
+    > .btn {
+      width: 100%;
+    }
+  }
+}
+
+// ---- Pager --------------------------------------------------------------------
+.pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-top: var(--space-8);
+  font-size: 13px;
   flex-wrap: wrap;
 }
 
 // ---- Tabs ------------------------------------------------------------------
-// Collection selector for the master-data screen (E0-04b); also the shape the
-// shipments status tabs (E7-12) will need. Buttons, not links — the selection
-// is component state, not a route.
+// Collection selector for the master-data screen (E0-04b). Buttons, not links —
+// the selection is component state, not a route.
 .tabs {
   display: flex;
   gap: var(--space-2);
@@ -306,6 +601,7 @@ textarea.field-input {
   cursor: pointer;
   margin-bottom: -1px;
   transition: color .15s, border-color .15s;
+  @include focus-ring;
 
   &:hover:not(:disabled) {
     color: var(--color-text);
@@ -318,8 +614,6 @@ textarea.field-input {
 }
 
 // ---- One-time secret value -------------------------------------------------
-// Temp password display (E0-04a). Monospace and large enough to be read aloud
-// over a phone, because this is the only time the value is ever shown.
 .secret-value {
   font-family: var(--font-family-mono);
   font-size: 18px;
@@ -327,7 +621,7 @@ textarea.field-input {
   letter-spacing: .04em;
   background: var(--color-page-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   padding: var(--space-6) var(--space-8);
   word-break: break-all;
   user-select: all;
@@ -338,13 +632,9 @@ textarea.field-input {
   opacity: .6;
 }
 
-// ---- Pill tab (M5, E7-12) ---------------------------------------------------
-// The prototype uses TWO distinct tab treatments and they are not
-// interchangeable: `.tab` above is the underline tab (admin master data), while
-// the shipments status tabs are bordered pills carrying a count. Added as a
-// second atom rather than by overloading `.tab` with a modifier — they share no
-// declarations beyond the font size, so a variant would have overridden almost
-// every property. Ported from the prototype's `shipTabs` markup (~line 755).
+// ---- Pill tab (E7-12) --------------------------------------------------------
+// A second, distinct tab treatment: bordered pills carrying a count (shipments
+// status filter). Shares nothing with the underline `.tab` above.
 .pill-tabs {
   display: flex;
   gap: var(--space-4);
@@ -358,15 +648,17 @@ textarea.field-input {
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
-  border-radius: var(--radius-md);
-  padding: var(--space-4) var(--space-7);
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background .15s;
+  transition: background .15s, border-color .15s;
+  @include focus-ring;
 
   &:hover:not(:disabled) {
-    background: var(--color-page-bg);
+    background: var(--color-surface-hover);
+    border-color: var(--color-border-strong);
   }
 
   &--active {
@@ -375,19 +667,37 @@ textarea.field-input {
     color: var(--color-accent);
   }
 
-  // The per-tab count stays muted even when the tab is active, exactly as the
-  // prototype renders it (`<span style="color:#6b7280">`).
   &__count {
     color: var(--color-text-muted);
   }
 }
 
-// ---- Stock level bar (M5, E7-11) -------------------------------------------
-// The inventory screen's low-stock visual indicator: a fixed 40x6 track with a
-// fill whose width and colour are bound per row. Both are inline `[style]`
-// bindings on the fill, because they are data-driven per item (the ratio maths
-// lives in the component, where presentation logic belongs — see §15.3 on why
-// the API returns raw `onHandQty`/`reorderThreshold` alongside `stockLevel`).
+// ---- Selectable chip (categories / tags in forms) ---------------------------
+.choice-chip {
+  appearance: none;
+  font-family: inherit;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-strong-muted);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+  @include focus-ring;
+
+  &:hover {
+    border-color: var(--color-border-strong);
+  }
+
+  &--active {
+    border-color: var(--color-accent);
+    background: var(--color-accent-soft-bg);
+    color: var(--color-accent);
+  }
+}
+
+// ---- Stock level bar (E7-11) --------------------------------------------------
 .stock-bar {
   width: 40px;
   height: 6px;
@@ -402,12 +712,7 @@ textarea.field-input {
   border-radius: 3px;
 }
 
-// ---- Status stepper (M5, E7-13) --------------------------------------------
-// The shipment detail 4-step progress stepper. Each step is an equal-width
-// column whose connector line is drawn by the step itself, so the markup stays
-// a flat `*ngFor` with no separate separator elements. Dot/line/label colours
-// are bound per step from the component, driven by the shipment's real
-// `statusHistory` (D-33) rather than invented timestamps.
+// ---- Status stepper (E7-13) --------------------------------------------------
 .stepper {
   display: flex;
   align-items: flex-start;
@@ -451,4 +756,34 @@ textarea.field-input {
   font-size: 12px;
   color: var(--color-text-muted);
   margin-top: var(--space-1);
+}
+
+@media (max-width: t.$bp-phone) {
+  .stepper__label {
+    font-size: 11px;
+  }
+
+  .stepper__when {
+    font-size: 10px;
+  }
+}
+
+// ---- Definition rows (detail screens) ----------------------------------------
+.kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-track);
+  font-size: 13px;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.kv-row__value {
+  font-weight: 500;
+  text-align: right;
+  overflow-wrap: anywhere;
 }

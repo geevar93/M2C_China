@@ -41,11 +41,13 @@ public class QuestPdfInvoiceRendererTests
         TotalAmount: 1180m,
         Currency: "INR",
         ShipmentReference: null,
-        LegalEntityName: "Meridian Sourcing Pvt Ltd",
+        LegalEntityName: "M2C Sourcing Pvt Ltd",
         RegisteredAddress: "123 Industrial Estate, Surat, Gujarat",
         Gstin: null, // seller GSTIN — deliberately not set here, this suite is about the buyer's
         BankDetails: null,
-        DeclarationText: null);
+        DeclarationText: null,
+        Lines: [new InvoicePdfLine("Consulting services", "998311", 1m, 1000m, 18m, 1000m, 0m, 0m, 180m, 1180m)],
+        TaxSummary: new InvoicePdfTaxSummary("27", "Maharashtra", IsIntraState: false, 1000m, 0m, 0m, 180m, 180m));
 
     [Fact]
     public void Render_CustomerWithGstin_ProducesDifferentOutputThanWithout()

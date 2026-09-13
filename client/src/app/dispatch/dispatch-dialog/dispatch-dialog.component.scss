@@ -4,29 +4,6 @@
 // width, matching docs/DESIGN_TOKENS.md §8's "720px WhatsApp/vendor-edit
 // dialogs" note) — nothing overridden here.
 
-.section-title {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.muted {
-  color: var(--color-text-muted);
-}
-
-.dialog-close {
-  font-size: 16px;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 0 var(--space-2);
-}
-
-.wa-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--space-8);
-}
-
 .wa-header-sub {
   font-size: 13px;
   margin-top: var(--space-2);
@@ -203,13 +180,13 @@
   cursor: pointer;
 }
 
-// #f5f8ff is the prototype's literal "selected/active" tint used wherever an
+// var(--color-accent-soft-bg) is the prototype's literal "selected/active" tint used wherever an
 // accent-bordered surface needs a lighter fill than --color-info-bg — the
 // same literal already appears in intake.component.scss's `.svc-card--active`
 // / `.cat-chip--active` for the identical visual role.
 .step-tile--done {
   border-color: var(--color-accent);
-  background: #f5f8ff;
+  background: var(--color-accent-soft-bg);
 }
 
 .step-tile--disabled {

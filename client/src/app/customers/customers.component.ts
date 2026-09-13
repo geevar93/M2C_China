@@ -8,6 +8,7 @@ import { extractErrorMessage } from '../core/services/problem-details.util';
 import { StatusStyleService } from '../shared/services/status-style.service';
 import { CustomersService } from './services/customers.service';
 import { CustomerListItem } from './models/customer.models';
+import { RefreshService } from '../core/services/refresh.service';
 
 interface CustomerRow {
   id: string;
@@ -81,7 +82,12 @@ export class CustomersComponent {
   private readonly search$ = new Subject<string>();
   private readonly tag$ = new Subject<string>();
 
+  private readonly refreshService = inject(RefreshService);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => this.retry());
+
     this.masterDataService.ensureLoaded().subscribe({ error: () => {} });
 
     this.search$

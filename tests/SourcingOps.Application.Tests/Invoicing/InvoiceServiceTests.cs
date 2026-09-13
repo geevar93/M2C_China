@@ -50,7 +50,7 @@ public class InvoiceServiceTests
         var leadStatus = new LeadStatus { Id = Guid.NewGuid(), Code = "ACTIVE", Label = "Active", IsActive = true, SortOrder = 1 };
         db.LeadStatuses.Add(leadStatus);
 
-        var customer = new Customer { Id = Guid.NewGuid(), Name = "Meena Patel", BusinessName = "Meena Traders", Phone = "+919000000001", ServiceTypeId = cif.Id, ServiceType = cif, StatusId = leadStatus.Id, CreatedAt = DateTime.UtcNow };
+        var customer = new Customer { Id = Guid.NewGuid(), Name = "Meena Patel", BusinessName = "Meena Traders", Phone = "+919000000001", StateCode = "24", ServiceTypeId = cif.Id, ServiceType = cif, StatusId = leadStatus.Id, CreatedAt = DateTime.UtcNow };
         db.Customers.Add(customer);
 
         var shipmentStatus = new ShipmentStatus { Id = Guid.NewGuid(), Code = "PACKED", Label = "Packed", IsActive = true, SortOrder = 1 };
@@ -70,14 +70,27 @@ public class InvoiceServiceTests
         return new Fixture(customer, cif, shipment, draft, issued, paid, cancelled);
     }
 
+    /// <summary>
+    /// One line at qty 1 x 1,000 at 18% — reproducing the 1,000 + 180 the hand-entered
+    /// Amount/TaxAmount used to carry, so the existing total assertions still pin the same
+    /// figures now that both are derived rather than supplied.
+    /// </summary>
     private static CreateInvoiceRequest ValidCreate(Fixture f, Guid? shipmentId = null) =>
-        new(f.Customer.Id, shipmentId, new DateOnly(2026, 8, 1), "Consulting services", 1000m, 180m, "INR");
+        new(f.Customer.Id, shipmentId, new DateOnly(2026, 8, 1), "Consulting services", "INR", [Line(1000m, 18m)]);
 
+    private static UpsertInvoiceLineRequest Line(decimal unitPrice, decimal gstRate, decimal quantity = 1m) =>
+        new(null, "Consulting services", "998311", quantity, unitPrice, gstRate);
+
+    /// <summary>
+    /// State code 24 matches the seeded customer's, so the fixture's default supply is
+    /// INTRA-state (CGST + SGST). Tests that need the inter-state path move the customer.
+    /// </summary>
     private static CompanySettings ValidCompanySettings() => new()
     {
         Id = CompanySettings.SingletonId,
-        LegalEntityName = "Meridian Sourcing Pvt Ltd",
-        RegisteredAddress = "123 Industrial Estate, Surat, Gujarat"
+        LegalEntityName = "M2C Sourcing Pvt Ltd",
+        RegisteredAddress = "123 Industrial Estate, Surat, Gujarat",
+        StateCode = "24"
     };
 
     // ---- Create (E8-01) -----------------------------------------------------------------
@@ -126,15 +139,42 @@ public class InvoiceServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_NegativeAmount_Throws()
+    public async Task CreateAsync_NegativeLineUnitPrice_Throws()
     {
         using var db = TestDbContextFactory.Create();
         var f = SeedMasterData(db);
         var sut = CreateSut(db, out _, out _, out _);
 
-        var act = () => sut.CreateAsync(ValidCreate(f) with { Amount = -1m }, Actor);
+        var act = () => sut.CreateAsync(ValidCreate(f) with { Lines = [Line(-1m, 18m)] }, Actor);
 
-        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("amount");
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("lines[0].unitPrice");
+    }
+
+    [Fact]
+    public async Task CreateAsync_NoLines_Throws()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var act = () => sut.CreateAsync(ValidCreate(f) with { Lines = [] }, Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("lines");
+    }
+
+    [Fact]
+    public async Task CreateAsync_DerivesAmountAndTaxFromTheLines_RatherThanAcceptingThem()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        // 2 x 2,500 at 12% = 5,000 taxable + 600 tax.
+        var result = await sut.CreateAsync(ValidCreate(f) with { Lines = [Line(2500m, 12m, quantity: 2m)] }, Actor);
+
+        result.Amount.Should().Be(5000m);
+        result.TaxAmount.Should().Be(600m);
+        result.TotalAmount.Should().Be(5600m);
     }
 
     [Fact]
@@ -179,7 +219,7 @@ public class InvoiceServiceTests
 
         // Two DRAFT invoices: 1000+180 and 500+50 -> DRAFT total 1730.
         await sut.CreateAsync(ValidCreate(f), Actor);
-        await sut.CreateAsync(ValidCreate(f) with { Amount = 500m, TaxAmount = 50m }, Actor);
+        await sut.CreateAsync(ValidCreate(f) with { Lines = [Line(500m, 10m)] }, Actor); // 500 + 50
 
         var result = await sut.ListAsync(AllQuery());
 
@@ -229,7 +269,7 @@ public class InvoiceServiceTests
         var sut = CreateSut(db, out _, out var storageMock, out _);
 
         await sut.CreateAsync(ValidCreate(f), Actor); // DRAFT 1000+180
-        var toIssue = await sut.CreateAsync(ValidCreate(f) with { Amount = 2000m, TaxAmount = 200m }, Actor);
+        var toIssue = await sut.CreateAsync(ValidCreate(f) with { Lines = [Line(2000m, 10m)] }, Actor); // 2000 + 200
         db.CompanySettings.Add(ValidCompanySettings());
         await db.SaveChangesAsync();
         await sut.ChangeStatusAsync(toIssue.Id, new ChangeInvoiceStatusRequest(f.Issued.Id, null), Actor); // ISSUED 2200
@@ -257,7 +297,7 @@ public class InvoiceServiceTests
         var sut = CreateSut(db, out _, out _, out _);
         var created = await sut.CreateAsync(ValidCreate(f), Actor);
 
-        var update = new UpdateInvoiceRequest(f.Customer.Id, null, created.InvoiceDate, "Updated description", 2000m, 360m, "INR");
+        var update = new UpdateInvoiceRequest(f.Customer.Id, null, created.InvoiceDate, "Updated description", "INR", [Line(2000m, 18m)]);
         var result = await sut.UpdateAsync(created.Id, update, Actor);
 
         result!.Amount.Should().Be(2000m);
@@ -275,7 +315,7 @@ public class InvoiceServiceTests
         var created = await sut.CreateAsync(ValidCreate(f), Actor);
         await sut.ChangeStatusAsync(created.Id, new ChangeInvoiceStatusRequest(f.Issued.Id, null), Actor);
 
-        var update = new UpdateInvoiceRequest(f.Customer.Id, null, created.InvoiceDate, "x", 1m, 0m, "INR");
+        var update = new UpdateInvoiceRequest(f.Customer.Id, null, created.InvoiceDate, "x", "INR", [Line(1m, 0m)]);
         var act = () => sut.UpdateAsync(created.Id, update, Actor);
 
         var ex = await act.Should().ThrowAsync<InvoiceConflictException>();
@@ -289,12 +329,256 @@ public class InvoiceServiceTests
         SeedMasterData(db);
         var sut = CreateSut(db, out _, out _, out _);
 
-        var result = await sut.UpdateAsync(Guid.NewGuid(), new UpdateInvoiceRequest(Guid.NewGuid(), null, new DateOnly(2026, 8, 1), null, 1m, 0m, "INR"), Actor);
+        var result = await sut.UpdateAsync(Guid.NewGuid(), new UpdateInvoiceRequest(Guid.NewGuid(), null, new DateOnly(2026, 8, 1), null, "INR", [Line(1m, 0m)]), Actor);
 
         result.Should().BeNull();
     }
 
     // ---- Status transitions (E8-02, E8-03) -----------------------------------------------
+
+    // ---- Place of supply and the issue-time completeness gate ----------------------------
+
+    /// <summary>
+    /// Seeds settings and issues, returning the issued detail. Kept local to these tests so the
+    /// place-of-supply cases read as one flow rather than three setup lines each.
+    /// </summary>
+    private static async Task<InvoiceDetailDto?> IssueAsync(InvoiceService sut, AppDbContext db, Fixture f, CreateInvoiceRequest create, CompanySettings? settings = null)
+    {
+        db.CompanySettings.Add(settings ?? ValidCompanySettings());
+        await db.SaveChangesAsync();
+        var created = await sut.CreateAsync(create, Actor);
+        return await sut.ChangeStatusAsync(created.Id, new ChangeInvoiceStatusRequest(f.Issued.Id, null), Actor);
+    }
+
+    [Fact]
+    public async Task ChangeStatusAsync_DraftToIssued_SameState_SplitsTaxIntoCgstAndSgst()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db); // customer state 24, seller state 24
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var issued = await IssueAsync(sut, db, f, ValidCreate(f));
+
+        issued!.TaxSummary.IsIntraState.Should().BeTrue();
+        issued.TaxSummary.PlaceOfSupplyStateCode.Should().Be("24");
+        issued.TaxSummary.PlaceOfSupplyStateName.Should().Be("Gujarat");
+        issued.TaxSummary.CgstAmount.Should().Be(90m);
+        issued.TaxSummary.SgstAmount.Should().Be(90m);
+        issued.TaxSummary.IgstAmount.Should().Be(0m);
+        issued.TaxAmount.Should().Be(180m);
+    }
+
+    [Fact]
+    public async Task ChangeStatusAsync_DraftToIssued_DifferentState_ChargesIgst()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        f.Customer.StateCode = "27"; // Maharashtra buyer, Gujarat seller
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var issued = await IssueAsync(sut, db, f, ValidCreate(f));
+
+        issued!.TaxSummary.IsIntraState.Should().BeFalse();
+        issued.TaxSummary.PlaceOfSupplyStateCode.Should().Be("27");
+        issued.TaxSummary.IgstAmount.Should().Be(180m);
+        issued.TaxSummary.CgstAmount.Should().Be(0m);
+        issued.TaxSummary.SgstAmount.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task ChangeStatusAsync_DraftToIssued_CustomerWithNoStateCodeOrGstin_RefusesRatherThanGuessing()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        f.Customer.StateCode = null;
+        f.Customer.Gstin = null;
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var act = () => IssueAsync(sut, db, f, ValidCreate(f));
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("customer");
+    }
+
+    [Fact]
+    public async Task ChangeStatusAsync_DraftToIssued_CustomerStateDerivedFromGstin_WhenStateCodeIsBlank()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        f.Customer.StateCode = null;
+        f.Customer.Gstin = "27ABCDE1234F1Z5"; // 27 = Maharashtra
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var issued = await IssueAsync(sut, db, f, ValidCreate(f));
+
+        issued!.TaxSummary.PlaceOfSupplyStateCode.Should().Be("27");
+        issued.TaxSummary.IsIntraState.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ChangeStatusAsync_DraftToIssued_SellerWithNoStateCodeOrGstin_ThrowsValidation()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var settings = ValidCompanySettings();
+        settings.StateCode = null;
+        settings.Gstin = null;
+
+        var act = () => IssueAsync(sut, db, f, ValidCreate(f), settings);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("companySettings");
+    }
+
+    [Fact]
+    public async Task ChangeStatusAsync_DraftToIssued_LineWithNoGstRate_ThrowsValidation()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var noRate = ValidCreate(f) with { Lines = [new UpsertInvoiceLineRequest(null, "Consulting", "998311", 1m, 1000m, null)] };
+        var act = () => IssueAsync(sut, db, f, noRate);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("lines");
+    }
+
+    [Fact]
+    public async Task ChangeStatusAsync_DraftToIssued_LineWithNoHsnCode_ThrowsValidation()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var noHsn = ValidCreate(f) with { Lines = [new UpsertInvoiceLineRequest(null, "Consulting", null, 1m, 1000m, 18m)] };
+        var act = () => IssueAsync(sut, db, f, noHsn);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("lines");
+    }
+
+    [Fact]
+    public async Task ChangeStatusAsync_DraftToIssued_LineWithNoUnitPrice_ThrowsValidation()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        // No price on the request AND no SellingPrice on any item - the line lands at 0, which
+        // is an unset price, not a giveaway.
+        var noPrice = ValidCreate(f) with { Lines = [new UpsertInvoiceLineRequest(null, "Consulting", "998311", 1m, null, 18m)] };
+        var act = () => IssueAsync(sut, db, f, noPrice);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("lines");
+    }
+
+    // ---- Unit price / HSN / rate default from the inventory item -------------------------
+
+    [Fact]
+    public async Task CreateAsync_LineWithAnItem_DefaultsPriceHsnAndRateFromTheItem_SoNoneIsManualEntry()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = SeedItem(db, sellingPrice: 120m, unitCost: 40m);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var request = ValidCreate(f) with { Lines = [new UpsertInvoiceLineRequest(item.Id, null, null, 10m, null, null)] };
+        var result = await sut.CreateAsync(request, Actor);
+
+        var line = result.Lines.Single();
+        line.Description.Should().Be("Brass Hinge");
+        line.UnitPrice.Should().Be(120m);   // SellingPrice, NOT the 40 UnitCost
+        line.HsnCode.Should().Be("8302");
+        line.GstRate.Should().Be(18m);
+        line.TaxableValue.Should().Be(1200m);
+    }
+
+    [Fact]
+    public async Task CreateAsync_LineWithAnItemThatHasNoSellingPrice_DoesNotFallBackToUnitCost()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = SeedItem(db, sellingPrice: null, unitCost: 40m);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var request = ValidCreate(f) with { Lines = [new UpsertInvoiceLineRequest(item.Id, null, null, 10m, null, null)] };
+        var result = await sut.CreateAsync(request, Actor);
+
+        // 0, not 40: billing a customer at cost would silently discard the whole margin.
+        result.Lines.Single().UnitPrice.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ExplicitLineValues_OverrideTheItemDefaults()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = SeedItem(db, sellingPrice: 120m, unitCost: null);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var request = ValidCreate(f) with { Lines = [new UpsertInvoiceLineRequest(item.Id, "Special order hinge", "8302", 2m, 150m, 12m)] };
+        var result = await sut.CreateAsync(request, Actor);
+
+        var line = result.Lines.Single();
+        line.Description.Should().Be("Special order hinge");
+        line.UnitPrice.Should().Be(150m);
+        line.GstRate.Should().Be(12m);
+    }
+
+    [Fact]
+    public async Task CreateAsync_UnknownInventoryItem_ThrowsWithTheOffendingLineIndex()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var request = ValidCreate(f) with
+        {
+            Lines = [Line(100m, 18m), new UpsertInvoiceLineRequest(Guid.NewGuid(), "Ghost", "1234", 1m, 10m, 5m)]
+        };
+        var act = () => sut.CreateAsync(request, Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("lines[1].inventoryItemId");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ReplacesLinesWholesale_AndRederivesTheTotals()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+        var created = await sut.CreateAsync(ValidCreate(f), Actor);
+        created.Lines.Should().HaveCount(1);
+
+        var update = new UpdateInvoiceRequest(f.Customer.Id, null, created.InvoiceDate, null, "INR",
+            [Line(100m, 5m), Line(200m, 12m)]);
+        var result = await sut.UpdateAsync(created.Id, update, Actor);
+
+        result!.Lines.Should().HaveCount(2);
+        result.Amount.Should().Be(300m);      // 100 + 200 taxable
+        result.TaxAmount.Should().Be(29m);    // 5 + 24
+    }
+
+    private static InventoryItem SeedItem(AppDbContext db, decimal? sellingPrice, decimal? unitCost)
+    {
+        var category = new Category { Id = Guid.NewGuid(), Name = "Hardware", IsActive = true, SortOrder = 1 };
+        db.Categories.Add(category);
+        var item = new InventoryItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Brass Hinge",
+            CategoryId = category.Id,
+            UnitCost = unitCost,
+            SellingPrice = sellingPrice,
+            HsnCode = "8302",
+            GstRate = 18m
+        };
+        db.InventoryItems.Add(item);
+        db.SaveChanges();
+        return item;
+    }
 
     [Fact]
     public async Task ChangeStatusAsync_DraftToIssued_WithoutCompanySettings_ThrowsValidation()
@@ -315,7 +599,7 @@ public class InvoiceServiceTests
         using var db = TestDbContextFactory.Create();
         var f = SeedMasterData(db);
         // LegalEntityName set, RegisteredAddress still null — both are required (M6 contract §0).
-        db.CompanySettings.Add(new CompanySettings { Id = CompanySettings.SingletonId, LegalEntityName = "Meridian Sourcing Pvt Ltd" });
+        db.CompanySettings.Add(new CompanySettings { Id = CompanySettings.SingletonId, LegalEntityName = "M2C Sourcing Pvt Ltd" });
         await db.SaveChangesAsync();
         var sut = CreateSut(db, out _, out _, out _);
         var created = await sut.CreateAsync(ValidCreate(f), Actor);

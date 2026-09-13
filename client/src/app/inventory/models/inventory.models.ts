@@ -32,6 +32,17 @@ export interface InventoryItem {
   onHandQty: number;
   reorderThreshold: number;
   unitCost: number | null;
+  /**
+   * Per-unit SELLING price, GST **exclusive** — what a customer is billed.
+   * A different figure from `unitCost`, which is what the item cost to acquire.
+   * An invoice line defaults its unit price from this and **never** falls back
+   * to `unitCost`: billing at cost would discard the whole margin silently.
+   */
+  sellingPrice: number | null;
+  /** HSN (goods) or SAC (services) code. Required on an invoice line before it can be issued. */
+  hsnCode: string | null;
+  /** GST rate as a PERCENT (`18` = 18%), not a fraction. Required before issuing. */
+  gstRate: number | null;
   /** COMPUTED `onHandQty * unitCost` server-side. `null` means "not costed", NOT "worth zero" (D-30). */
   stockValue: number | null;
   stockLevel: StockLevel;
@@ -79,6 +90,9 @@ export interface CreateInventoryItemRequest {
   onHandQty: number;
   reorderThreshold: number;
   unitCost?: number | null;
+  sellingPrice?: number | null;
+  hsnCode?: string | null;
+  gstRate?: number | null;
 }
 
 /**
@@ -97,6 +111,9 @@ export interface UpdateInventoryItemRequest {
   unit: string;
   reorderThreshold: number;
   unitCost?: number | null;
+  sellingPrice?: number | null;
+  hsnCode?: string | null;
+  gstRate?: number | null;
 }
 
 /** A durable, queryable business record (D-32) — distinct from the audit log. */

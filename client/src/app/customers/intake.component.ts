@@ -10,6 +10,7 @@ import { StatusStyleService } from '../shared/services/status-style.service';
 import { SERVICE_TYPE_CIF, SERVICE_TYPE_FREIGHT_ONLY } from '../shared/constants/service-type-codes';
 import { CustomersService } from './services/customers.service';
 import { CreateCustomerRequest, DuplicateCustomerProblemDetails } from './models/customer.models';
+import { INDIAN_STATES, stateCodeFromGstin } from '../shared/models/indian-states';
 
 interface ServiceTypeCardCopy {
   headline: string;
@@ -126,6 +127,8 @@ export class CustomerIntakeComponent {
    *  instead of as a banner, since GSTIN has one specific home to surface in). */
   readonly gstinServerError = signal<string | null>(null);
 
+  readonly states = INDIAN_STATES;
+
   readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
     businessName: ['', Validators.required],
@@ -133,6 +136,7 @@ export class CustomerIntakeComponent {
     phone: ['', [Validators.required, phoneDigitsValidator]],
     email: ['', Validators.email],
     gstin: ['', gstinFormatValidator],
+    stateCode: [''],
     city: [''],
     sourceChannel: ['WhatsApp', Validators.required],
     notes: [''],
@@ -209,6 +213,14 @@ export class CustomerIntakeComponent {
   onGstinBlur(): void {
     const value = this.form.controls.gstin.value;
     if (value) this.form.controls.gstin.setValue(value.toUpperCase());
+
+    // A GSTIN's first two digits ARE the state code, so fill the selector from it
+    // — a derivation, not a guess. Only ever fills a BLANK selection: a state
+    // picked by hand is never overwritten, since the GSTIN may be the wrong one.
+    if (!this.form.controls.stateCode.value) {
+      const derived = stateCodeFromGstin(value);
+      if (derived) this.form.controls.stateCode.setValue(derived);
+    }
   }
 
   get showExtRef(): boolean {
@@ -324,6 +336,7 @@ export class CustomerIntakeComponent {
       phone: this.rawPhone(),
       email: raw.email.trim() || null,
       gstin: raw.gstin.trim() ? raw.gstin.trim().toUpperCase() : null,
+      stateCode: raw.stateCode.trim() ? raw.stateCode.trim() : null,
       city: raw.city.trim() || null,
       sourceChannel: raw.sourceChannel,
       serviceTypeId: this.serviceTypeId(),

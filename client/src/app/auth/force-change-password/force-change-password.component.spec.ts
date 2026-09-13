@@ -115,7 +115,7 @@ describe('ForceChangePasswordComponent', () => {
       refreshToken: 'r',
       expiresAtUtc: new Date(Date.now() + 3600_000).toISOString(),
       mustChangePassword: false,
-      user: { id: 'u1', name: 'Test User', email: 'user@meridian.example', roles: [], permissions: [] }
+      user: { id: 'u1', name: 'Test User', email: 'user@m2c.example', roles: [], permissions: [] }
     });
 
     expect(navigateSpy).toHaveBeenCalledWith(['/dashboard']);

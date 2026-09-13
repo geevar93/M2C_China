@@ -9,6 +9,7 @@ import { StatusStyleService } from '../shared/services/status-style.service';
 import { VendorsService } from './services/vendors.service';
 import { VendorDetail, VendorListItem } from './models/vendor.models';
 import { VendorFormDialogComponent } from './vendor-form-dialog/vendor-form-dialog.component';
+import { RefreshService } from '../core/services/refresh.service';
 
 interface VendorRow {
   id: string;
@@ -73,7 +74,12 @@ export class VendorsComponent {
 
   private readonly search$ = new Subject<string>();
 
+  private readonly refreshService = inject(RefreshService);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => this.retry());
+
     this.masterDataService.ensureLoaded().subscribe({ error: () => {} });
 
     this.search$.pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed()).subscribe((value) => {

@@ -1,5 +1,6 @@
-// Global styles — ported 1:1 from the prototype's <helmet><style> block plus the
-// design tokens and shared atoms extracted into docs/DESIGN_TOKENS.md.
+// Global styles: design tokens + shared atoms, plus the handful of element
+// defaults every screen relies on. Screen-specific rules live next to each
+// component; shared shapes live in app/shared/styles/_atoms.scss.
 @use 'app/shared/styles/tokens';
 @use 'app/shared/styles/atoms';
 
@@ -7,6 +8,11 @@ html,
 body {
   margin: 0;
   padding: 0;
+  height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -16,10 +22,26 @@ body {
   font-size: var(--font-size-base);
   line-height: var(--line-height-base);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 * {
   box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
+  letter-spacing: -.01em;
+  margin: 0;
+}
+
+p {
+  margin: 0;
 }
 
 a {
@@ -32,6 +54,11 @@ a {
   }
 }
 
+img,
+svg {
+  max-width: 100%;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;
@@ -42,4 +69,19 @@ select,
 textarea,
 button {
   font-family: inherit;
+  font-size: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+::selection {
+  background: var(--color-accent-soft-bg);
+}
+
+// Thin, unobtrusive scrollbars for the app's scrolling panes.
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
 }

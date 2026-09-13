@@ -90,6 +90,19 @@
           <div class="field-error">{{ gstinServerError() }}</div>
         }
       </div>
+      <div class="field">
+        <label for="in-state-code">GST state <span class="label-hint">(place of supply)</span></label>
+        <select id="in-state-code" class="field-input" formControlName="stateCode">
+          <option value="">Choose…</option>
+          @for (state of states; track state.code) {
+            <option [value]="state.code">{{ state.code }} — {{ state.name }}</option>
+          }
+        </select>
+        <div class="field-hint">
+          Decides whether GST is charged as CGST + SGST or IGST. Filled in from the GSTIN automatically.
+          An invoice cannot be issued until it is set.
+        </div>
+      </div>
     </div>
 
     <div class="card intake-card">
@@ -226,7 +239,7 @@
   @if (duplicate(); as dup) {
     <div class="dialog-backdrop">
       <div class="dialog-panel dup-dialog">
-        <div class="section-title">Possible duplicate</div>
+        <div class="dialog-title">Possible duplicate</div>
         <p>
           <strong>{{ dup.businessName }}</strong>
           @if (dup.name) { ({{ dup.name }}) }

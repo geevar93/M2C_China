@@ -130,7 +130,8 @@
             <div class="not-configured__title">Company billing details not configured</div>
             <div class="not-configured__body">
               The legal entity name and registered address have not been set yet. No invoice can be issued until a
-              Super Admin configures them under Admin &gt; Company Settings.
+              Super Admin configures them under
+              <a routerLink="/admin/company-settings">Admin &gt; Company Settings</a>.
             </div>
           </div>
         }
@@ -214,30 +215,120 @@
             placeholder="e.g. Freight forwarding, Shenzhen to Chennai"
           />
         </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="inv-amount">Amount</label>
-            <input
-              id="inv-amount"
-              class="field-input"
-              type="number"
-              min="0"
-              step="0.01"
-              [value]="formAmount()"
-              (input)="formAmount.set($any($event.target).value)"
-            />
+        <div class="inv-lines">
+          <div class="inv-lines__head">
+            <h3 class="inv-lines__title">Line items</h3>
+            <button type="button" class="btn btn-secondary btn-sm" (click)="addLine()">+ Add line</button>
           </div>
-          <div class="field">
-            <label for="inv-tax">Tax amount</label>
-            <input
-              id="inv-tax"
-              class="field-input"
-              type="number"
-              min="0"
-              step="0.01"
-              [value]="formTaxAmount()"
-              (input)="formTaxAmount.set($any($event.target).value)"
-            />
+
+          <!-- Amount and tax are NOT editable here: both are computed from these lines
+               server-side. The only figure shown live is the taxable subtotal, which is
+               plain quantity x price; the GST split has one implementation, on the
+               server, and lands with the saved invoice. -->
+          <div class="table-wrap">
+            <table class="inv-lines__table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Description</th>
+                  <th>HSN/SAC</th>
+                  <th class="align-right">Qty</th>
+                  <th class="align-right">Unit price</th>
+                  <th class="align-right">GST</th>
+                  <th class="align-right">Taxable</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of formLines(); track $index) {
+                  <tr>
+                    <td>
+                      <select
+                        class="field-input inv-lines__item"
+                        [value]="line.inventoryItemId"
+                        (change)="onLineItemSelected($index, $any($event.target).value)"
+                        [attr.aria-label]="'Item for line ' + ($index + 1)"
+                      >
+                        <option value="">— none —</option>
+                        @for (opt of itemOptions(); track opt.id) {
+                          <option [value]="opt.id" [selected]="opt.id === line.inventoryItemId">{{ opt.name }}</option>
+                        }
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        class="field-input"
+                        [value]="line.description"
+                        (input)="updateLine($index, 'description', $any($event.target).value)"
+                        [attr.aria-label]="'Description for line ' + ($index + 1)"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        class="field-input inv-lines__hsn"
+                        [value]="line.hsnCode"
+                        (input)="updateLine($index, 'hsnCode', $any($event.target).value)"
+                        [attr.aria-label]="'HSN or SAC for line ' + ($index + 1)"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        class="field-input inv-lines__num"
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        [value]="line.quantity"
+                        (input)="updateLine($index, 'quantity', $any($event.target).value)"
+                        [attr.aria-label]="'Quantity for line ' + ($index + 1)"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        class="field-input inv-lines__num"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        [value]="line.unitPrice"
+                        (input)="updateLine($index, 'unitPrice', $any($event.target).value)"
+                        [attr.aria-label]="'Unit price for line ' + ($index + 1)"
+                      />
+                    </td>
+                    <td>
+                      <select
+                        class="field-input inv-lines__rate"
+                        [value]="line.gstRate"
+                        (change)="updateLine($index, 'gstRate', $any($event.target).value)"
+                        [attr.aria-label]="'GST rate for line ' + ($index + 1)"
+                      >
+                        <option value="">—</option>
+                        @for (rate of gstRates; track rate) {
+                          <option [value]="rate" [selected]="line.gstRate === rate.toString()">{{ rate }}%</option>
+                        }
+                      </select>
+                    </td>
+                    <td class="align-right nowrap">{{ formatInr(lineSubtotal(line)) }}</td>
+                    <td class="align-right">
+                      <button
+                        type="button"
+                        class="btn btn-secondary btn-sm"
+                        (click)="removeLine($index)"
+                        [attr.aria-label]="'Remove line ' + ($index + 1)"
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <div class="inv-lines__total">
+            <span class="muted">Taxable value</span>
+            <span class="nowrap">{{ formatInr(formTaxableTotal()) }}</span>
+          </div>
+          <div class="inv-lines__note muted">
+            GST is calculated when you save — CGST + SGST when the customer is in your own state, IGST otherwise.
           </div>
         </div>
         @if (formError()) {
@@ -303,32 +394,89 @@
         </div>
       </div>
 
+      <!-- Place of supply justifies which tax heads appear below, so it is stated
+           rather than left to be inferred. On a DRAFT the server has not fixed it
+           yet (isIntraState is null) and the split shown is provisional. -->
+      @if (inv.taxSummary.isIntraState !== null) {
+        <div class="pos-line muted">
+          Place of supply: {{ inv.taxSummary.placeOfSupplyStateName }} ({{ inv.taxSummary.placeOfSupplyStateCode }}) —
+          {{ inv.taxSummary.isIntraState ? 'intra-state, CGST + SGST' : 'inter-state, IGST' }}
+        </div>
+      } @else if (inv.lines.length > 0) {
+        <div class="pos-line muted">
+          Place of supply is fixed when the invoice is issued. The split below is provisional until then.
+        </div>
+      }
+
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>Description</th>
-              <th class="align-right">Amount</th>
+              <th>HSN/SAC</th>
+              <th class="align-right">Qty</th>
+              <th class="align-right">Unit price</th>
+              <th class="align-right">GST</th>
+              <th class="align-right">Taxable</th>
+              @if (inv.taxSummary.isIntraState) {
+                <th class="align-right">CGST</th>
+                <th class="align-right">SGST</th>
+              } @else {
+                <th class="align-right">IGST</th>
+              }
+              <th class="align-right">Total</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>{{ inv.lineDescription || '—' }}</td>
-              <td class="align-right nowrap">{{ formatInr(inv.amount) }}</td>
-            </tr>
+            @for (line of inv.lines; track line.id) {
+              <tr>
+                <td>{{ line.description }}</td>
+                <td>{{ line.hsnCode || '—' }}</td>
+                <td class="align-right nowrap">{{ line.quantity }}</td>
+                <td class="align-right nowrap">{{ formatInr(line.unitPrice) }}</td>
+                <td class="align-right nowrap">{{ line.gstRate !== null ? line.gstRate + '%' : '—' }}</td>
+                <td class="align-right nowrap">{{ formatInr(line.taxableValue) }}</td>
+                @if (inv.taxSummary.isIntraState) {
+                  <td class="align-right nowrap">{{ formatInr(line.cgstAmount) }}</td>
+                  <td class="align-right nowrap">{{ formatInr(line.sgstAmount) }}</td>
+                } @else {
+                  <td class="align-right nowrap">{{ formatInr(line.igstAmount) }}</td>
+                }
+                <td class="align-right nowrap">{{ formatInr(line.lineTotal) }}</td>
+              </tr>
+            } @empty {
+              <!-- An invoice created before line items existed. Its stored totals are
+                   still shown below; it simply has nothing to itemise. -->
+              <tr>
+                <td colspan="10" class="muted">{{ inv.lineDescription || 'No line items on this invoice.' }}</td>
+              </tr>
+            }
           </tbody>
         </table>
       </div>
 
       <div class="totals">
         <div class="totals-row">
-          <span class="muted">Subtotal</span>
+          <span class="muted">Taxable value</span>
           <span class="nowrap">{{ formatInr(inv.amount) }}</span>
         </div>
-        <div class="totals-row">
-          <span class="muted">Tax</span>
-          <span class="nowrap">{{ formatInr(inv.taxAmount) }}</span>
-        </div>
+        <!-- Only the heads that actually apply are printed: zero-filled CGST/SGST rows
+             on an IGST invoice are how a reader loses confidence in a tax document. -->
+        @if (inv.taxSummary.isIntraState) {
+          <div class="totals-row">
+            <span class="muted">CGST</span>
+            <span class="nowrap">{{ formatInr(inv.taxSummary.cgstAmount) }}</span>
+          </div>
+          <div class="totals-row">
+            <span class="muted">SGST</span>
+            <span class="nowrap">{{ formatInr(inv.taxSummary.sgstAmount) }}</span>
+          </div>
+        } @else {
+          <div class="totals-row">
+            <span class="muted">{{ inv.taxSummary.isIntraState === null ? 'Tax (provisional)' : 'IGST' }}</span>
+            <span class="nowrap">{{ formatInr(inv.taxAmount) }}</span>
+          </div>
+        }
         <div class="totals-row totals-row--grand">
           <span>Total</span>
           <span class="nowrap">{{ formatInr(inv.totalAmount) }}</span>

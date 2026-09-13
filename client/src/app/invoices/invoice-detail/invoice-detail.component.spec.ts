@@ -36,10 +36,12 @@ const MASTER_DATA: MasterDataResponse = {
 };
 
 const CONFIGURED_SETTINGS: CompanySettings = {
-  legalEntityName: 'Meridian Sourcing Pvt Ltd',
+  legalEntityName: 'M2C Sourcing Pvt Ltd',
   gstin: '27AAAAA0000A1Z5',
+  stateCode: '27',
+  stateName: 'Maharashtra',
   registeredAddress: '14 MG Road, Bengaluru 560001',
-  bankAccountName: 'Meridian Sourcing Pvt Ltd',
+  bankAccountName: 'M2C Sourcing Pvt Ltd',
   bankAccountNumber: '000123456789',
   bankIfsc: 'HDFC0000123',
   bankBranch: 'MG Road',
@@ -52,6 +54,8 @@ const CONFIGURED_SETTINGS: CompanySettings = {
 const UNCONFIGURED_SETTINGS: CompanySettings = {
   legalEntityName: null,
   gstin: null,
+  stateCode: null,
+  stateName: null,
   registeredAddress: null,
   bankAccountName: null,
   bankAccountNumber: null,
@@ -84,6 +88,35 @@ function invoice(overrides: Partial<InvoiceDetail> = {}): InvoiceDetail {
     createdByName: 'Super Admin',
     createdAt: '2026-08-03T06:23:38.19Z',
     paidReference: null,
+    // One line reproducing the fixture's 125,000 + 22,500 at 18%, inter-state.
+    lines: [
+      {
+        id: 'line-1',
+        inventoryItemId: null,
+        description: 'Freight forwarding, Shenzhen to Chennai',
+        hsnCode: '996511',
+        quantity: 1,
+        unitPrice: 125000.0,
+        gstRate: 18,
+        taxableValue: 125000.0,
+        cgstAmount: 0,
+        sgstAmount: 0,
+        igstAmount: 22500.0,
+        lineTotal: 147500.0,
+        sortOrder: 0
+      }
+    ],
+    taxSummary: {
+      placeOfSupplyStateCode: '33',
+      placeOfSupplyStateName: 'Tamil Nadu',
+      isIntraState: false,
+      taxableValue: 125000.0,
+      cgstAmount: 0,
+      sgstAmount: 0,
+      igstAmount: 22500.0,
+      totalTax: 22500.0,
+      rateBreakdown: [{ gstRate: 18, taxableValue: 125000.0, cgstAmount: 0, sgstAmount: 0, igstAmount: 22500.0 }]
+    },
     statusHistory: [
       {
         id: 'hist-1',
@@ -142,6 +175,40 @@ describe('InvoiceDetailComponent', () => {
       .flush({ items: [{ id: 'cust-2', businessName: 'Sundar Exports', name: 'Sundar Exports', phone: '9', city: null, region: null, sourceChannel: 'Referral', serviceTypeId: 'svc-1', statusId: 'st-1', categoryIds: [], ownerUserId: null, ownerName: null, tags: [], createdAt: '2026-01-01T00:00:00Z' }], page: 1, pageSize: 200, totalCount: 1 });
   }
 
+  /**
+   * The line editor's item picker. Fetched on construction alongside the customer
+   * directory, so every test that renders this component must drain it.
+   */
+  function flushItems(): void {
+    httpMock
+      .expectOne((r) => r.url === '/api/v1/inventory')
+      .flush({
+        items: [
+          {
+            id: 'item-1',
+            name: 'Brass Hinge',
+            sku: 'BH-1',
+            description: null,
+            sellingPrice: 120,
+            hsnCode: '8302',
+            gstRate: 18,
+            category: { id: 'cat-1', name: 'Hardware' },
+            vendor: null,
+            unit: 'pcs',
+            onHandQty: 50,
+            reorderThreshold: 10,
+            unitCost: 40,
+            stockValue: 2000,
+            stockLevel: 'HEALTHY'
+          }
+        ],
+        page: 1,
+        pageSize: 200,
+        totalCount: 1,
+        summary: null
+      });
+  }
+
   function flushInvoice(id: string, payload: InvoiceDetail = invoice()): void {
     httpMock.expectOne((r) => r.url === `/api/v1/invoices/${id}`).flush(payload);
   }
@@ -178,6 +245,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     flushInvoice('259b39f6-0000-0000-0000-000000000001');
     fixture.detectChanges();
 
@@ -195,6 +263,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     fixture.detectChanges();
 
     fixture.componentInstance.formCustomerId.set('cust-2');
@@ -202,19 +271,30 @@ describe('InvoiceDetailComponent', () => {
     flushShipments(); // no shipments for cust-2 — stays a freight-only invoice
     fixture.componentInstance.formInvoiceDate.set('2026-08-03');
     fixture.componentInstance.formLineDescription.set('Freight forwarding');
-    fixture.componentInstance.formAmount.set('50000');
-    fixture.componentInstance.formTaxAmount.set('9000');
+    fixture.componentInstance.formLines.set([
+      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '50000', gstRate: '18' }
+    ]);
     fixture.componentInstance.save();
 
     const req = httpMock.expectOne((r) => r.url === '/api/v1/invoices' && r.method === 'POST');
+    // No `amount`/`taxAmount` anywhere in the body: both are derived from the lines
+    // server-side, and sending them would assert a total that could disagree.
     expect(req.request.body).toEqual({
       customerId: 'cust-2',
       shipmentId: null,
       invoiceDate: '2026-08-03',
       lineDescription: 'Freight forwarding',
-      amount: 50000,
-      taxAmount: 9000,
-      currency: 'INR'
+      currency: 'INR',
+      lines: [
+        {
+          inventoryItemId: null,
+          description: 'Freight forwarding',
+          hsnCode: '996511',
+          quantity: 1,
+          unitPrice: 50000,
+          gstRate: 18
+        }
+      ]
     });
     req.flush(invoice({ id: 'new-inv-id', invoiceNumber: 'INV-2608-002' }));
   });
@@ -225,6 +305,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     flushInvoice('inv-issued', invoice({ id: 'inv-issued', status: { id: 'inv-st-2', code: 'ISSUED', label: 'Issued' } }));
     fixture.detectChanges();
 
@@ -236,8 +317,9 @@ describe('InvoiceDetailComponent', () => {
     fixture.detectChanges();
     flushShipments();
     fixture.componentInstance.formInvoiceDate.set('2026-08-03');
-    fixture.componentInstance.formAmount.set('125000');
-    fixture.componentInstance.formTaxAmount.set('22500');
+    fixture.componentInstance.formLines.set([
+      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '125000', gstRate: '18' }
+    ]);
     fixture.componentInstance.isEditing.set(true);
     fixture.componentInstance.save();
 
@@ -257,6 +339,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     flushInvoice('inv-draft', invoice({ id: 'inv-draft' })); // DRAFT
     fixture.detectChanges();
 
@@ -290,6 +373,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings(UNCONFIGURED_SETTINGS);
     flushCustomers();
+    flushItems();
     flushInvoice('inv-draft'); // DRAFT
     fixture.detectChanges();
 
@@ -307,11 +391,12 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings(CONFIGURED_SETTINGS);
     flushCustomers();
+    flushItems();
     flushInvoice('inv-draft'); // DRAFT
     fixture.detectChanges();
 
     expect(fixture.componentInstance.canIssue()).toBeTrue();
-    expect(fixture.nativeElement.textContent).toContain('Meridian Sourcing Pvt Ltd');
+    expect(fixture.nativeElement.textContent).toContain('M2C Sourcing Pvt Ltd');
     expect(fixture.nativeElement.textContent).not.toContain('Company billing details not configured');
   });
 
@@ -321,6 +406,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     flushInvoice('inv-1', invoice({ hasPdf: false }));
     fixture.detectChanges();
 
@@ -336,6 +422,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings(CONFIGURED_SETTINGS);
     flushCustomers();
+    flushItems();
     flushInvoice('inv-1', invoice({ status: { id: 'inv-st-1', code: 'DRAFT', label: 'Draft' } }));
     fixture.detectChanges();
 
@@ -351,6 +438,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings(CONFIGURED_SETTINGS);
     flushCustomers();
+    flushItems();
     flushInvoice('inv-1', invoice({ status: { id: 'inv-st-2', code: 'ISSUED', label: 'Issued' } }));
     fixture.detectChanges();
 
@@ -365,6 +453,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings(CONFIGURED_SETTINGS);
     flushCustomers();
+    flushItems();
     flushInvoice('inv-1', invoice({ status: { id: 'inv-st-3', code: 'PAID', label: 'Paid' }, paidAt: '2026-08-03T00:00:00Z' }));
     fixture.detectChanges();
 
@@ -379,6 +468,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings(CONFIGURED_SETTINGS);
     flushCustomers();
+    flushItems();
     flushInvoice('inv-1', invoice({ status: { id: 'inv-st-4', code: 'CANCELLED', label: 'Cancelled' } }));
     fixture.detectChanges();
 
@@ -393,6 +483,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     flushInvoice('inv-1', invoice({ status: { id: 'inv-st-2', code: 'ISSUED', label: 'Issued' } }));
     fixture.detectChanges();
 
@@ -406,6 +497,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     httpMock
       .expectOne((r) => r.url === '/api/v1/invoices/missing-id')
       .flush({ title: 'Not Found', detail: 'Invoice not found' }, { status: 404, statusText: 'Not Found' });
@@ -423,6 +515,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     fixture.detectChanges();
 
     fixture.componentInstance.formCustomerId.set('cust-2');
@@ -443,8 +536,9 @@ describe('InvoiceDetailComponent', () => {
 
     fixture.componentInstance.formShipmentId.set('shp-9');
     fixture.componentInstance.formInvoiceDate.set('2026-08-03');
-    fixture.componentInstance.formAmount.set('50000');
-    fixture.componentInstance.formTaxAmount.set('9000');
+    fixture.componentInstance.formLines.set([
+      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '50000', gstRate: '18' }
+    ]);
     fixture.componentInstance.save();
 
     const req = httpMock.expectOne((r) => r.url === '/api/v1/invoices' && r.method === 'POST');
@@ -458,6 +552,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     fixture.detectChanges();
 
     fixture.componentInstance.formCustomerId.set('cust-2');
@@ -496,6 +591,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     fixture.detectChanges();
 
     fixture.componentInstance.formCustomerId.set('cust-2');
@@ -513,6 +609,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     fixture.detectChanges();
 
     fixture.componentInstance.formCustomerId.set('cust-2');
@@ -522,8 +619,9 @@ describe('InvoiceDetailComponent', () => {
 
     // Deliberately leave formShipmentId unset.
     fixture.componentInstance.formInvoiceDate.set('2026-08-03');
-    fixture.componentInstance.formAmount.set('50000');
-    fixture.componentInstance.formTaxAmount.set('9000');
+    fixture.componentInstance.formLines.set([
+      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '50000', gstRate: '18' }
+    ]);
     fixture.componentInstance.save();
 
     const req = httpMock.expectOne((r) => r.url === '/api/v1/invoices' && r.method === 'POST');
@@ -537,6 +635,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     flushInvoice('inv-1', invoice({ shipmentId: 'shp-9', shipmentReference: 'SHP-2608-009' }));
     fixture.detectChanges();
 
@@ -549,6 +648,7 @@ describe('InvoiceDetailComponent', () => {
     flushMasterData();
     flushCompanySettings();
     flushCustomers();
+    flushItems();
     flushInvoice('inv-1', invoice({ shipmentId: null, shipmentReference: null }));
     fixture.detectChanges();
 

@@ -46,7 +46,9 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
             CategoryIds: null, OwnerUserId: null, Tags: null, Notes: null,
             ExternalMarketplace: null, ExternalOrderRef: null, ExternalSupplierName: null,
             ExternalOrderValue: null, ExternalOrderCurrency: null, ExternalOrderDate: null,
-            Gstin: null, ConfirmDuplicate: true);
+            // State code 24 matches the seller's in EnsureCompanySettingsConfiguredAsync, so this
+            // suite's default supply is intra-state. Without it, issuing now 400s by design.
+            Gstin: null, StateCode: "24", ConfirmDuplicate: true);
 
         var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/customers", request);
         await response.EnsureSuccessOrThrowWithBodyAsync();
@@ -55,7 +57,16 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
     }
 
     private async Task<CreateInvoiceRequest> ValidCreateAsync(MasterDataAggregateDto md) =>
-        new(await CreateCustomerAsync(md), null, new DateOnly(2026, 8, 1), "Consulting services", 1000m, 180m, "INR");
+        new(await CreateCustomerAsync(md), null, new DateOnly(2026, 8, 1), "Consulting services", "INR", [Line(1000m, 18m)]);
+
+    /// <summary>
+    /// One line at qty 1 x <paramref name="unitPrice"/> at <paramref name="gstRate"/>%, carrying
+    /// an HSN so the issue-time completeness gate is satisfied. Reproduces the figures the
+    /// hand-entered Amount/TaxAmount used to supply, now that both are derived from the lines.
+    /// </summary>
+    private static UpsertInvoiceLineRequest Line(decimal unitPrice, decimal gstRate) =>
+        new(null, "Consulting services", "998311", 1m, unitPrice, gstRate);
+
 
     private async Task<InvoiceDetailDto> PostInvoiceAsync(CreateInvoiceRequest request)
     {
@@ -67,8 +78,8 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
     private async Task EnsureCompanySettingsConfiguredAsync()
     {
         var request = new UpsertCompanySettingsRequest(
-            "Meridian Sourcing Pvt Ltd", "24AAAAA0000A1Z5", "123 Industrial Estate, Surat, Gujarat",
-            "Meridian Sourcing", "000123456789", "HDFC0000123", "Surat Main", "INV", null);
+            "M2C Sourcing Pvt Ltd", "24AAAAA0000A1Z5", "24", "123 Industrial Estate, Surat, Gujarat",
+            "M2C Sourcing", "000123456789", "HDFC0000123", "Surat Main", "INV", null);
         var response = await _fixture.AdminClient.PutAsJsonAsync("/api/v1/admin/company-settings", request);
         await response.EnsureSuccessOrThrowWithBodyAsync();
     }
@@ -92,7 +103,7 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
     public async Task Create_UnknownCustomer_Returns400ProblemDetails()
     {
         var response = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/invoices",
-            new CreateInvoiceRequest(Guid.NewGuid(), null, new DateOnly(2026, 8, 1), null, 100m, 0m, "INR"));
+            new CreateInvoiceRequest(Guid.NewGuid(), null, new DateOnly(2026, 8, 1), null, "INR", [Line(100m, 0m)]));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
@@ -207,7 +218,7 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
         var created = await PostInvoiceAsync(await ValidCreateAsync(md));
 
         var response = await _fixture.AssociateClient.PutAsJsonAsync($"/api/v1/invoices/{created.Id}",
-            new UpdateInvoiceRequest(created.Customer.Id, null, created.InvoiceDate, "Revised description", 2000m, 360m, "INR"));
+            new UpdateInvoiceRequest(created.Customer.Id, null, created.InvoiceDate, "Revised description", "INR", [Line(2000m, 18m)]));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = (await response.Content.ReadFromJsonAsync<InvoiceDetailDto>())!;
@@ -230,9 +241,16 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
             shipmentId = (Guid?)null,
             invoiceDate = created.InvoiceDate,
             lineDescription = "Attempted smuggle",
+            // amount/taxAmount are no longer request properties at all — both are derived from
+            // the lines. Left in the raw payload deliberately: they must be dropped exactly like
+            // the three server-owned fields below, not applied over the computed figures.
             amount = 500m,
             taxAmount = 90m,
             currency = "INR",
+            lines = new[]
+            {
+                new { inventoryItemId = (Guid?)null, description = "Consulting services", hsnCode = "998311", quantity = 1m, unitPrice = 100m, gstRate = 18m }
+            },
             statusId = md.InvoiceStatuses.Single(s => s.Code == "ISSUED").Id,
             invoiceNumber = "INV-HACKED-001",
             pdfFilePath = "/etc/passwd"
@@ -245,6 +263,9 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
         body.Status.Code.Should().Be("DRAFT", "PUT /invoices/{id} must never move status");
         body.InvoiceNumber.Should().NotBe("INV-HACKED-001");
         body.HasPdf.Should().BeFalse();
+        // Derived from the one line (100 @ 18%), NOT the 500/90 the payload tried to assert.
+        body.Amount.Should().Be(100m);
+        body.TaxAmount.Should().Be(18m);
     }
 
     [Fact]
@@ -259,7 +280,7 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
         await issue.EnsureSuccessOrThrowWithBodyAsync();
 
         var response = await _fixture.AssociateClient.PutAsJsonAsync($"/api/v1/invoices/{created.Id}",
-            new UpdateInvoiceRequest(created.Customer.Id, null, created.InvoiceDate, "x", 1m, 0m, "INR"));
+            new UpdateInvoiceRequest(created.Customer.Id, null, created.InvoiceDate, "x", "INR", [Line(1m, 0m)]));
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
@@ -271,7 +292,7 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
         var md = await GetMasterDataAsync();
         var customerId = await CreateCustomerAsync(md);
         var response = await _fixture.AssociateClient.PutAsJsonAsync($"/api/v1/invoices/{Guid.NewGuid()}",
-            new UpdateInvoiceRequest(customerId, null, new DateOnly(2026, 8, 1), null, 1m, 0m, "INR"));
+            new UpdateInvoiceRequest(customerId, null, new DateOnly(2026, 8, 1), null, "INR", [Line(1m, 0m)]));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -440,7 +461,7 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
     {
         var client = await GetNoPermissionClientAsync();
         var response = await client.PostAsJsonAsync("/api/v1/invoices",
-            new CreateInvoiceRequest(Guid.NewGuid(), null, new DateOnly(2026, 8, 1), null, 1m, 0m, "INR"));
+            new CreateInvoiceRequest(Guid.NewGuid(), null, new DateOnly(2026, 8, 1), null, "INR", [Line(1m, 0m)]));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -449,7 +470,7 @@ public class InvoicesEndpointTests : IClassFixture<AdminSeededFixture>
     {
         var client = await GetNoPermissionClientAsync();
         var response = await client.PutAsJsonAsync($"/api/v1/invoices/{Guid.NewGuid()}",
-            new UpdateInvoiceRequest(Guid.NewGuid(), null, new DateOnly(2026, 8, 1), null, 1m, 0m, "INR"));
+            new UpdateInvoiceRequest(Guid.NewGuid(), null, new DateOnly(2026, 8, 1), null, "INR", [Line(1m, 0m)]));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -529,7 +550,8 @@ public class InvoicesWithoutCompanySettingsEndpointTests : IClassFixture<AdminSe
         var customerId = customerDoc.RootElement.GetProperty("id").GetGuid();
 
         var createResponse = await _fixture.AssociateClient.PostAsJsonAsync("/api/v1/invoices",
-            new CreateInvoiceRequest(customerId, null, new DateOnly(2026, 8, 1), "Consulting services", 1000m, 180m, "INR"));
+            new CreateInvoiceRequest(customerId, null, new DateOnly(2026, 8, 1), "Consulting services", "INR",
+                [new UpsertInvoiceLineRequest(null, "Consulting services", "998311", 1m, 1000m, 18m)]));
         await createResponse.EnsureSuccessOrThrowWithBodyAsync();
         var created = (await createResponse.Content.ReadFromJsonAsync<InvoiceDetailDto>())!;
 

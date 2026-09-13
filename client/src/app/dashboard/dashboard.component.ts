@@ -30,6 +30,7 @@ import {
   resolveDateRange,
   toPolylinePoints
 } from './utils/dashboard.util';
+import { RefreshService } from '../core/services/refresh.service';
 
 type LoadStatus = 'loading' | 'loaded' | 'error';
 
@@ -204,7 +205,12 @@ export class DashboardComponent {
   readonly shipmentsByStatusStatus = computed(() => this.inventoryState().status);
   readonly shipmentsByStatusError = computed(() => this.inventoryState().error);
 
+  private readonly refreshService = inject(RefreshService);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => this.fetchAll());
+
     this.fetchAll();
   }
 

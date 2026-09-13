@@ -13,6 +13,7 @@ import { ShipmentsService } from '../services/shipments.service';
 import { ShipmentDetail, ShipmentDocument } from '../models/shipment.models';
 import { ShipmentFormDialogComponent } from '../shipment-form-dialog/shipment-form-dialog.component';
 import { ShipmentDocumentUploadDialogComponent } from '../document-upload-dialog/document-upload-dialog.component';
+import { RefreshService } from '../../core/services/refresh.service';
 
 interface StepView {
   id: string;
@@ -204,7 +205,12 @@ export class ShipmentDetailComponent {
     return s.documents.map((d) => this.toDocRow(d));
   });
 
+  private readonly refreshService = inject(RefreshService);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => this.retry());
+
     this.masterDataService.ensureLoaded().subscribe({ error: () => {} });
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((params) => {
       const id = params.get('id');

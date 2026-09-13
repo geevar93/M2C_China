@@ -1,14 +1,23 @@
-<div class="shell">
-  <aside class="sidebar" [style.width.px]="sidebarOpen() ? 220 : 64">
+<div class="shell" [class.shell--nav-collapsed]="!sidebarOpen()" [class.shell--mobile-nav-open]="mobileNavOpen()">
+  <!-- Phone-width scrim behind the off-canvas drawer. -->
+  <div class="nav-scrim" (click)="closeMobileNav()" aria-hidden="true"></div>
+
+  <aside class="sidebar" [class.sidebar--collapsed]="!sidebarOpen()" [attr.aria-label]="'Primary navigation'">
     <div class="sidebar__brand">
-      <div class="sidebar__wordmark">Meridian<span class="sidebar__wordmark-dot">.</span></div>
-      <div class="sidebar__eyebrow" [style.display]="sidebarOpen() ? 'block' : 'none'">SOURCING OPS</div>
+      <img
+        class="sidebar__logo"
+        [class.sidebar__logo--mark]="!sidebarOpen()"
+        [src]="sidebarOpen() ? 'logo.png' : 'logo-mark.png'"
+        alt="M2C"
+      />
+      <div class="sidebar__eyebrow">SOURCING OPS</div>
+      <button type="button" class="sidebar__close" (click)="closeMobileNav()" aria-label="Close navigation">✕</button>
     </div>
 
     <nav class="sidebar__nav">
       @for (group of navGroups(); track group.label) {
         <div class="sidebar__group">
-          <div class="sidebar__group-label" [style.display]="sidebarOpen() ? 'block' : 'none'">{{ group.label }}</div>
+          <div class="sidebar__group-label">{{ group.label }}</div>
           @for (item of group.items; track item.id) {
             <a
               class="sidebar__item"
@@ -16,47 +25,79 @@
               routerLinkActive="sidebar__item--active"
               [routerLinkActiveOptions]="{ exact: true }"
               [title]="item.label"
+              (click)="closeMobileNav()"
             >
               <span class="sidebar__icon">{{ item.icon }}</span>
-              <span class="sidebar__label" [style.display]="sidebarOpen() ? 'block' : 'none'">{{ item.label }}</span>
+              <span class="sidebar__label">{{ item.label }}</span>
             </a>
           }
         </div>
       }
     </nav>
 
-    <div class="sidebar__collapse" (click)="toggleSidebar()">
-      {{ sidebarOpen() ? '« Collapse' : '»' }}
-    </div>
+    <button type="button" class="sidebar__collapse" (click)="toggleSidebar()" [title]="sidebarOpen() ? 'Collapse navigation' : 'Expand navigation'">
+      <span class="sidebar__collapse-glyph">{{ sidebarOpen() ? '«' : '»' }}</span>
+      <span class="sidebar__label">Collapse</span>
+    </button>
   </aside>
 
   <div class="main">
     <header class="topbar">
+      <button type="button" class="topbar__menu" (click)="openMobileNav()" aria-label="Open navigation">
+        <span></span><span></span><span></span>
+      </button>
       <div class="topbar__title">{{ pageTitle() }}</div>
-      <!-- Search trigger is ported visually from the prototype's ⌘K box; wiring the global
-           command palette is ACTION_PLAN E12-05 and intentionally out of scope this pass. -->
-      <div class="topbar__search" title="Command palette (coming soon)">
-        <span>⌕</span>
-        <span class="topbar__search-label">Search customers, vendors, catalogs</span>
-        <span class="topbar__kbd">⌘K</span>
-      </div>
+      <button type="button" class="topbar__search" (click)="openPalette()" title="Search (Ctrl+K)">
+        <span class="topbar__search-glyph" aria-hidden="true">⌕</span>
+        <span class="topbar__search-label">Search customers, vendors, catalogs…</span>
+        <span class="topbar__kbd">Ctrl K</span>
+      </button>
+      <button type="button" class="topbar__search-icon" (click)="openPalette()" aria-label="Search" title="Search (Ctrl+K)">⌕</button>
       <div class="topbar__spacer"></div>
-      <!-- Refresh is ported visually; wiring per-screen data refresh depends on feature
-           services not yet built (M3+), so it is a no-op for now. -->
-      <div class="topbar__refresh" title="Refresh (coming soon)">↻ Refresh</div>
+      <button
+        type="button"
+        class="topbar__refresh"
+        [class.topbar__refresh--busy]="refreshing()"
+        [disabled]="refreshing()"
+        (click)="refresh()"
+        title="Reload this screen's data"
+        aria-label="Refresh"
+      >
+        <span class="topbar__refresh-glyph" aria-hidden="true">↻</span>
+        <span class="topbar__refresh-label">Refresh</span>
+      </button>
       <div class="topbar__divider"></div>
-      <div class="topbar__user">
-        <div class="topbar__avatar">{{ userInitials() }}</div>
-        <div class="topbar__user-name">
-          {{ userName() }}
-          @if (userRoleLabel()) {
-            <span class="topbar__user-role">· {{ userRoleLabel() }}</span>
-          }
-        </div>
-        @if (canChangeOwnPassword()) {
-          <a class="topbar__account-link" routerLink="/account/password">Change password</a>
+      <div class="topbar__user" (keydown.escape)="closeUserMenu()">
+        <button
+          type="button"
+          class="topbar__user-btn"
+          (click)="toggleUserMenu()"
+          [attr.aria-expanded]="userMenuOpen()"
+          aria-haspopup="menu"
+          [title]="userName()"
+        >
+          <span class="topbar__avatar">{{ userInitials() }}</span>
+          <span class="topbar__user-name">{{ userName() }}</span>
+          <span class="topbar__chevron" aria-hidden="true">⌄</span>
+        </button>
+
+        @if (userMenuOpen()) {
+          <div class="user-menu-scrim" (click)="closeUserMenu()" aria-hidden="true"></div>
+          <div class="user-menu" role="menu">
+            <div class="user-menu__head">
+              <div class="user-menu__name">{{ userName() }}</div>
+              @if (userRoleLabel()) {
+                <div class="user-menu__role">{{ userRoleLabel() }}</div>
+              }
+            </div>
+            @if (canChangeOwnPassword()) {
+              <a class="user-menu__item topbar__account-link" routerLink="/account/password" role="menuitem" (click)="closeUserMenu()">
+                Change password
+              </a>
+            }
+            <button type="button" class="user-menu__item topbar__logout" role="menuitem" (click)="logout()">Log out</button>
+          </div>
         }
-        <button type="button" class="topbar__logout" (click)="logout()">Log out</button>
       </div>
     </header>
 
@@ -64,4 +105,8 @@
       <router-outlet></router-outlet>
     </main>
   </div>
+
+  @if (paletteOpen()) {
+    <app-command-palette (closed)="closePalette()"></app-command-palette>
+  }
 </div>

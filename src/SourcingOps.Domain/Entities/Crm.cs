@@ -20,6 +20,19 @@ public class Customer
     /// </summary>
     public string? Gstin { get; set; }
 
+    /// <summary>
+    /// Two-digit GST state code (see <c>IndianStateCodes</c>) — the buyer's PLACE OF SUPPLY.
+    /// Comparing it with the seller's code decides CGST+SGST (same state) versus IGST
+    /// (different states), so it is the single input the tax split turns on.
+    ///
+    /// Nullable for the same reason <see cref="Gstin"/> is: requiring it on save would block
+    /// creating non-registered customers and strand every existing row. Defaulted from the
+    /// GSTIN's first two digits when one is supplied and this is blank. An invoice cannot be
+    /// ISSUED while it is still null — <c>InvoiceService</c> refuses rather than guessing a
+    /// tax treatment, since guessing wrong means charging the wrong tax on a legal document.
+    /// </summary>
+    public string? StateCode { get; set; }
+
     public string? City { get; set; }
     public string? Region { get; set; }
     public string? SourceChannel { get; set; }

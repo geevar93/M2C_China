@@ -275,6 +275,11 @@ namespace SourcingOps.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("registered_address");
 
+                    b.Property<string>("StateCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("state_code");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -383,6 +388,11 @@ namespace SourcingOps.Infrastructure.Persistence.Migrations
                     b.Property<string>("SourceChannel")
                         .HasColumnType("text")
                         .HasColumnName("source_channel");
+
+                    b.Property<string>("StateCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("state_code");
 
                     b.Property<Guid>("StatusId")
                         .HasColumnType("uuid")
@@ -726,6 +736,16 @@ namespace SourcingOps.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<decimal?>("GstRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("gst_rate");
+
+                    b.Property<string>("HsnCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("hsn_code");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -741,6 +761,11 @@ namespace SourcingOps.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)")
                         .HasColumnName("reorder_threshold");
+
+                    b.Property<decimal?>("SellingPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("selling_price");
 
                     b.Property<string>("Sku")
                         .HasMaxLength(100)
@@ -878,6 +903,10 @@ namespace SourcingOps.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("invoice_number");
 
+                    b.Property<bool?>("IsIntraState")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_intra_state");
+
                     b.Property<string>("LineDescription")
                         .HasColumnType("text")
                         .HasColumnName("line_description");
@@ -894,6 +923,11 @@ namespace SourcingOps.Infrastructure.Persistence.Migrations
                     b.Property<string>("PdfFilePath")
                         .HasColumnType("text")
                         .HasColumnName("pdf_file_path");
+
+                    b.Property<string>("PlaceOfSupplyStateCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("place_of_supply_state_code");
 
                     b.Property<Guid?>("ShipmentId")
                         .HasColumnType("uuid")
@@ -931,6 +965,63 @@ namespace SourcingOps.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_invoices_status_id");
 
                     b.ToTable("invoices", (string)null);
+                });
+
+            modelBuilder.Entity("SourcingOps.Domain.Entities.InvoiceLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<decimal?>("GstRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("gst_rate");
+
+                    b.Property<string>("HsnCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("hsn_code");
+
+                    b.Property<Guid?>("InventoryItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("inventory_item_id");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invoice_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("unit_price");
+
+                    b.HasKey("Id")
+                        .HasName("pk_invoice_lines");
+
+                    b.HasIndex("InventoryItemId")
+                        .HasDatabaseName("ix_invoice_lines_inventory_item_id");
+
+                    b.HasIndex("InvoiceId", "SortOrder")
+                        .HasDatabaseName("ix_invoice_lines_invoice_id_sort_order");
+
+                    b.ToTable("invoice_lines", (string)null);
                 });
 
             modelBuilder.Entity("SourcingOps.Domain.Entities.InvoiceStatus", b =>
@@ -2017,6 +2108,26 @@ namespace SourcingOps.Infrastructure.Persistence.Migrations
                     b.Navigation("Status");
                 });
 
+            modelBuilder.Entity("SourcingOps.Domain.Entities.InvoiceLine", b =>
+                {
+                    b.HasOne("SourcingOps.Domain.Entities.InventoryItem", "InventoryItem")
+                        .WithMany()
+                        .HasForeignKey("InventoryItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_invoice_lines_inventory_items_inventory_item_id");
+
+                    b.HasOne("SourcingOps.Domain.Entities.Invoice", "Invoice")
+                        .WithMany("Lines")
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_invoice_lines_invoices_invoice_id");
+
+                    b.Navigation("InventoryItem");
+
+                    b.Navigation("Invoice");
+                });
+
             modelBuilder.Entity("SourcingOps.Domain.Entities.InvoiceStatusHistory", b =>
                 {
                     b.HasOne("SourcingOps.Domain.Entities.User", "ChangedBy")
@@ -2303,6 +2414,8 @@ namespace SourcingOps.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("SourcingOps.Domain.Entities.Invoice", b =>
                 {
+                    b.Navigation("Lines");
+
                     b.Navigation("StatusHistory");
                 });
 

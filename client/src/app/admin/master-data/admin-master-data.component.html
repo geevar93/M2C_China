@@ -123,7 +123,7 @@
   @if (formOpen()) {
     <div class="dialog-backdrop">
       <div class="dialog-panel">
-        <div class="section-title">{{ formMode() === 'create' ? 'Add' : 'Rename' }} — {{ collectionLabels[activeCollection()] }}</div>
+        <div class="dialog-title">{{ formMode() === 'create' ? 'Add' : 'Rename' }} — {{ collectionLabels[activeCollection()] }}</div>
         @if (formError()) {
           <div class="field-error" role="alert">{{ formError() }}</div>
         }

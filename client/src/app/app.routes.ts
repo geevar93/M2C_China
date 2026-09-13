@@ -149,6 +149,17 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./admin/master-data/admin-master-data.component').then((m) => m.AdminMasterDataComponent)
       },
+      {
+        // Billing block behind AdminCompanySettingsController. Gated on
+        // Admin.ManageMasterData, matching the controller's own policy — the
+        // backend gates the read as well as the write here, because billing and
+        // bank details are sensitive in a way master-data labels are not.
+        path: 'admin/company-settings',
+        canActivate: [permissionGuard],
+        data: { title: 'Company Settings', permission: 'Admin.ManageMasterData' },
+        loadComponent: () =>
+          import('./admin/company-settings/admin-company-settings.component').then((m) => m.AdminCompanySettingsComponent)
+      },
       // Self-service password change. Sits under the shell (not with the
       // /force-change-password screen) because it is voluntary — the forced
       // flow is the one that must render outside the shell. Gated on

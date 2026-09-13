@@ -69,6 +69,8 @@ export interface InvoiceDetail extends InvoiceListItem {
   createdAt: string;
   paidReference: string | null;
   statusHistory: InvoiceStatusHistoryEntry[];
+  lines: InvoiceLine[];
+  taxSummary: InvoiceTaxSummary;
 }
 
 /**
@@ -117,19 +119,95 @@ export interface InvoiceListParams {
 }
 
 /**
+ * One billable line as it comes back from the API. Every money figure here is
+ * **computed server-side** by the one GST implementation — never re-derive
+ * them in the client, or the screen and the PDF can disagree.
+ *
+ * On a DRAFT the split is provisional: place of supply is only fixed at issue,
+ * so `cgstAmount`/`sgstAmount`/`igstAmount` reflect a working assumption until
+ * `taxSummary.isIntraState` is non-null.
+ */
+export interface InvoiceLine {
+  id: string;
+  inventoryItemId: string | null;
+  description: string;
+  /** HSN (goods) or SAC (services). Required before the invoice can be issued. */
+  hsnCode: string | null;
+  quantity: number;
+  /** Per-unit price EXCLUSIVE of GST — tax is added on top, never backed out. */
+  unitPrice: number;
+  /** Percent, e.g. `18` for 18%. Required before the invoice can be issued. */
+  gstRate: number | null;
+  taxableValue: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  lineTotal: number;
+  sortOrder: number;
+}
+
+/** Taxable value and tax grouped by rate — the rate-wise summary a GST invoice carries. */
+export interface InvoiceTaxRateBreakdown {
+  gstRate: number;
+  taxableValue: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+}
+
+/**
+ * Invoice-level tax block. `isIntraState` is **null on a DRAFT** — place of
+ * supply is only settled at issue — so render it as provisional rather than
+ * presenting a guess as final.
+ */
+export interface InvoiceTaxSummary {
+  placeOfSupplyStateCode: string | null;
+  placeOfSupplyStateName: string | null;
+  isIntraState: boolean | null;
+  taxableValue: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  totalTax: number;
+  rateBreakdown: InvoiceTaxRateBreakdown[];
+}
+
+/**
+ * One line as it goes OUT. `unitPrice`, `hsnCode` and `gstRate` are all
+ * nullable: send just an `inventoryItemId` and a `quantity` and the server
+ * fills them from the item. A value that IS sent wins, so an operator can
+ * override a price or slab per line.
+ *
+ * Nothing is invented when both the request and the item are silent — the
+ * field stays null and the issue-time check refuses. In particular the server
+ * NEVER falls back to the item's cost price.
+ */
+export interface UpsertInvoiceLineRequest {
+  inventoryItemId: string | null;
+  description: string | null;
+  hsnCode: string | null;
+  quantity: number;
+  unitPrice: number | null;
+  gstRate: number | null;
+}
+
+/**
  * E8-01. Deliberately has NO `statusId` — every invoice is created DRAFT
  * server-side — and no `invoiceNumber`/`pdfFilePath`, both server-owned.
  * `shipmentId` is nullable: CIF invoices reference a shipment, freight-only
  * invoices stand alone. When supplied it must belong to `customerId`.
+ *
+ * `amount`/`taxAmount` are **not** part of this request. Both are derived from
+ * `lines` server-side; sending them would assert a total that could disagree
+ * with the lines backing it.
  */
 export interface CreateInvoiceRequest {
   customerId: string;
   shipmentId: string | null;
   invoiceDate: string;
   lineDescription: string | null;
-  amount: number;
-  taxAmount: number;
   currency: string;
+  lines: UpsertInvoiceLineRequest[];
 }
 
 /**
@@ -164,6 +242,15 @@ export interface MarkInvoicePaidRequest {
 export interface CompanySettings {
   legalEntityName: string | null;
   gstin: string | null;
+  /**
+   * Two-digit GST state code of the SELLER. Decides CGST+SGST (buyer in the
+   * same state) versus IGST (different states) on every invoice issued, so
+   * the API **refuses DRAFT → ISSUED with a 400 when it is null** and cannot
+   * be derived from `gstin`'s first two digits.
+   */
+  stateCode: string | null;
+  /** Server-resolved display name for `stateCode`, e.g. `"Gujarat"`. Read-only. */
+  stateName: string | null;
   registeredAddress: string | null;
   bankAccountName: string | null;
   bankAccountNumber: string | null;
@@ -175,9 +262,18 @@ export interface CompanySettings {
   updatedByName: string | null;
 }
 
-export type UpsertCompanySettingsRequest = Omit<CompanySettings, 'updatedAt' | 'updatedByName'>;
+/** `stateName` is server-derived, so it is never sent back. */
+export type UpsertCompanySettingsRequest = Omit<CompanySettings, 'updatedAt' | 'updatedByName' | 'stateName'>;
 
-/** True when the two fields the API requires before an invoice may be issued are both present. */
+/**
+ * True when every company field the API requires before an invoice may be
+ * issued is present. `stateCode` joined the set with the GST work: without it
+ * the server cannot decide the tax treatment and refuses rather than guessing.
+ */
 export function canIssueInvoices(settings: CompanySettings | null | undefined): boolean {
-  return !!settings?.legalEntityName?.trim() && !!settings?.registeredAddress?.trim();
+  return (
+    !!settings?.legalEntityName?.trim() &&
+    !!settings?.registeredAddress?.trim() &&
+    !!settings?.stateCode?.trim()
+  );
 }

@@ -29,6 +29,8 @@ describe('CustomersService', () => {
     ...listItem,
     email: null,
     gstin: null,
+    stateCode: null,
+    stateName: null,
     notes: null,
     externalMarketplace: null,
     externalOrderRef: null,

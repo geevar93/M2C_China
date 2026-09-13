@@ -61,7 +61,9 @@ public sealed record InvoiceDetailDto(
     string CreatedByName,
     DateTime CreatedAt,
     string? PaidReference,
-    IReadOnlyList<InvoiceStatusHistoryDto> StatusHistory);
+    IReadOnlyList<InvoiceStatusHistoryDto> StatusHistory,
+    IReadOnlyList<InvoiceLineDto> Lines,
+    InvoiceTaxSummaryDto TaxSummary);
 
 /// <summary>
 /// Per-status count across the WHOLE filtered set excluding the status filter itself — E7-08's
@@ -93,15 +95,19 @@ public sealed record InvoiceListResultDto(
 /// (M6 contract §1/§3). <see cref="ShipmentId"/> is nullable — CIF invoices reference a
 /// shipment, freight-only invoices stand alone (E8-01); when supplied it must belong to
 /// <see cref="CustomerId"/>.
+///
+/// <c>Amount</c>/<c>TaxAmount</c> were REMOVED from this request in the line-items pass. Both
+/// are now derived from <see cref="Lines"/> server-side, so accepting them would be accepting
+/// a figure the server is about to overwrite - and, worse, would let a caller state a total
+/// that disagrees with the lines backing it on a document that is legally binding once issued.
 /// </summary>
 public sealed record CreateInvoiceRequest(
     Guid CustomerId,
     Guid? ShipmentId,
     DateOnly InvoiceDate,
     string? LineDescription,
-    decimal Amount,
-    decimal TaxAmount,
-    string Currency);
+    string Currency,
+    IReadOnlyList<UpsertInvoiceLineRequest> Lines);
 
 /// <summary>
 /// E8-01/E8-02. Editable ONLY while the invoice is Draft (409 otherwise — M6 contract §2).
@@ -114,9 +120,8 @@ public sealed record UpdateInvoiceRequest(
     Guid? ShipmentId,
     DateOnly InvoiceDate,
     string? LineDescription,
-    decimal Amount,
-    decimal TaxAmount,
-    string Currency);
+    string Currency,
+    IReadOnlyList<UpsertInvoiceLineRequest> Lines);
 
 /// <summary>
 /// E8-02. Any status in the lookup may be targeted; <c>InvoiceService</c> enforces the M6
@@ -140,6 +145,76 @@ public sealed record InvoiceListQuery(
     Guid? ServiceTypeId,
     DateOnly? FromDate,
     DateOnly? ToDate);
+
+/// <summary>
+/// One line as it goes OUT. Every money figure here is computed server-side from
+/// <see cref="Quantity"/>, <see cref="UnitPrice"/> and <see cref="GstRate"/> via
+/// <c>GstCalculator</c> — the client renders them, never derives them, so there is exactly one
+/// implementation of the tax arithmetic and the PDF, the screen and the GST return cannot
+/// disagree.
+/// </summary>
+public sealed record InvoiceLineDto(
+    Guid Id,
+    Guid? InventoryItemId,
+    string Description,
+    string? HsnCode,
+    decimal Quantity,
+    decimal UnitPrice,
+    decimal? GstRate,
+    decimal TaxableValue,
+    decimal CgstAmount,
+    decimal SgstAmount,
+    decimal IgstAmount,
+    decimal LineTotal,
+    int SortOrder);
+
+/// <summary>
+/// One line as it comes IN. <see cref="InventoryItemId"/> is optional — a line may bill
+/// something unstocked (freight, handling), which is the freight-only invoice case.
+///
+/// <see cref="UnitPrice"/>, <see cref="HsnCode"/> and <see cref="GstRate"/> are all nullable
+/// so the client can send just an item id and a quantity and let the server fill the rest from
+/// the item. A value that IS supplied wins — the operator can override a price or slab per
+/// line — but nothing is invented when both the request and the item are silent: the field
+/// stays null and the issue-time check refuses, rather than defaulting a tax rate.
+/// </summary>
+public sealed record UpsertInvoiceLineRequest(
+    Guid? InventoryItemId,
+    string? Description,
+    string? HsnCode,
+    decimal Quantity,
+    decimal? UnitPrice,
+    decimal? GstRate);
+
+/// <summary>
+/// The invoice-level tax summary the PDF and the detail screen both render. Derived from the
+/// lines, never stored — see <c>Invoice.IsIntraState</c> for why the per-head amounts have no
+/// column of their own.
+///
+/// <see cref="IsIntraState"/> is null on a DRAFT: place of supply is only fixed at issue, and
+/// a draft deliberately shows a provisional split rather than claiming a settled one.
+/// </summary>
+public sealed record InvoiceTaxSummaryDto(
+    string? PlaceOfSupplyStateCode,
+    string? PlaceOfSupplyStateName,
+    bool? IsIntraState,
+    decimal TaxableValue,
+    decimal CgstAmount,
+    decimal SgstAmount,
+    decimal IgstAmount,
+    decimal TotalTax,
+    IReadOnlyList<InvoiceTaxRateBreakdownDto> RateBreakdown);
+
+/// <summary>
+/// Taxable value and tax grouped by rate — the "rate-wise summary" a GST invoice carries when
+/// its lines span more than one slab. Ordered by rate ascending.
+/// </summary>
+public sealed record InvoiceTaxRateBreakdownDto(
+    decimal GstRate,
+    decimal TaxableValue,
+    decimal CgstAmount,
+    decimal SgstAmount,
+    decimal IgstAmount);
 
 /// <summary>Carries the open stream + metadata the authenticated PDF download endpoint needs.</summary>
 public sealed record InvoicePdfDownload(Stream Content, string FileName);

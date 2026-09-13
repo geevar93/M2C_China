@@ -5,6 +5,7 @@ import { TimelineDatePipe } from '../../shared/pipes/timeline-date.pipe';
 import { describeFollowUpDue } from '../../shared/utils/date-format.util';
 import { CustomersService } from '../services/customers.service';
 import { DueFollowUp } from '../models/customer.models';
+import { RefreshService } from '../../core/services/refresh.service';
 
 interface FollowUpRow {
   interactionId: string;
@@ -68,7 +69,12 @@ export class FollowUpsComponent {
 
   readonly empty = computed(() => !this.loading() && !this.error() && this.rows().length === 0);
 
+  private readonly refreshService = inject(RefreshService);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => this.retry());
+
     this.fetch();
   }
 

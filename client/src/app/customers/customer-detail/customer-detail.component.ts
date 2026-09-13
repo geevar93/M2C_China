@@ -12,6 +12,7 @@ import { SERVICE_TYPE_FREIGHT_ONLY } from '../../shared/constants/service-type-c
 import { DispatchCustomerLock, DispatchDialogComponent } from '../../dispatch/dispatch-dialog/dispatch-dialog.component';
 import { CustomersService } from '../services/customers.service';
 import { CustomerDetail, TimelineEvent } from '../models/customer.models';
+import { RefreshService } from '../../core/services/refresh.service';
 
 interface ProfileField {
   k: string;
@@ -132,6 +133,10 @@ export class CustomerDetailComponent {
       // technique already used below for the freight-only external-* block,
       // just applied to a single field instead of a group.
       ...(c.gstin ? [{ k: 'GSTIN', v: c.gstin }] : []),
+      // Shown unconditionally, unlike GSTIN above: this one being absent is
+      // actionable — an invoice cannot be issued to this customer until it is
+      // set — so an em-dash here is signal, not noise.
+      { k: 'GST State', v: c.stateName ? `${c.stateName} (${c.stateCode})` : '— not set, blocks invoicing' },
       // `sourceChannel` is a non-nullable string on the DTO, so it never hits the
       // `?? '—'` the nullable fields use — but it can be EMPTY, and an empty string
       // rendered a blank row where every neighbour shows an em-dash. Found in the
@@ -155,7 +160,12 @@ export class CustomerDetailComponent {
     return fields;
   });
 
+  private readonly refreshService = inject(RefreshService);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => this.retry());
+
     this.masterDataService.ensureLoaded().subscribe({ error: () => {} });
 
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((params) => {

@@ -127,6 +127,16 @@ public sealed class InventoryService : IInventoryService
         {
             throw new AppValidationException("reorderThreshold", "Reorder threshold cannot be negative.");
         }
+        if (request.SellingPrice is < 0)
+        {
+            throw new AppValidationException("sellingPrice", "Selling price cannot be negative.");
+        }
+
+        if (request.GstRate is < 0 or > 100)
+        {
+            throw new AppValidationException("gstRate", "GST rate must be between 0 and 100.");
+        }
+
         if (request.UnitCost is < 0)
         {
             throw new AppValidationException("unitCost", "Unit cost cannot be negative.");
@@ -147,7 +157,10 @@ public sealed class InventoryService : IInventoryService
             // shipment line, which is why UpdateInventoryItemRequest has no OnHandQty at all.
             OnHandQty = request.OnHandQty ?? 0m,
             ReorderThreshold = reorderThreshold,
-            UnitCost = request.UnitCost
+            UnitCost = request.UnitCost,
+            SellingPrice = request.SellingPrice,
+            HsnCode = Trim(request.HsnCode),
+            GstRate = request.GstRate
         };
 
         _db.InventoryItems.Add(item);
@@ -183,6 +196,16 @@ public sealed class InventoryService : IInventoryService
         {
             throw new AppValidationException("reorderThreshold", "Reorder threshold cannot be negative.");
         }
+        if (request.SellingPrice is < 0)
+        {
+            throw new AppValidationException("sellingPrice", "Selling price cannot be negative.");
+        }
+
+        if (request.GstRate is < 0 or > 100)
+        {
+            throw new AppValidationException("gstRate", "GST rate must be between 0 and 100.");
+        }
+
         if (request.UnitCost is < 0)
         {
             throw new AppValidationException("unitCost", "Unit cost cannot be negative.");
@@ -198,6 +221,9 @@ public sealed class InventoryService : IInventoryService
         item.Unit = Trim(request.Unit) ?? "pcs";
         item.ReorderThreshold = reorderThreshold;
         item.UnitCost = request.UnitCost;
+        item.SellingPrice = request.SellingPrice;
+        item.HsnCode = Trim(request.HsnCode);
+        item.GstRate = request.GstRate;
         // OnHandQty is deliberately untouched — see UpdateInventoryItemRequest's doc comment.
 
         await _db.SaveChangesAsync(ct);
@@ -412,6 +438,9 @@ public sealed class InventoryService : IInventoryService
         i.OnHandQty,
         i.ReorderThreshold,
         i.UnitCost,
+        i.SellingPrice,
+        i.HsnCode,
+        i.GstRate,
         // Null rather than 0 when the item is not costed, so the screen can tell
         // "worth nothing" apart from "no cost captured yet".
         i.UnitCost.HasValue ? i.OnHandQty * i.UnitCost.Value : null,

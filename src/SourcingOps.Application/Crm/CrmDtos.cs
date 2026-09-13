@@ -47,7 +47,9 @@ public sealed record CustomerDetailDto(
     decimal? ExternalOrderValue,
     string? ExternalOrderCurrency,
     DateTime? ExternalOrderDate,
-    string? Gstin);
+    string? Gstin,
+    string? StateCode,
+    string? StateName);
 
 public sealed record CustomerListResultDto(IReadOnlyList<CustomerListItemDto> Items, int Page, int PageSize, int TotalCount);
 
@@ -139,6 +141,11 @@ public sealed record CreateCustomerRequest(
     string? ExternalOrderCurrency,
     DateTime? ExternalOrderDate,
     string? Gstin,
+    /// <summary>
+    /// Two-digit GST state code — the buyer's place of supply. Optional; defaulted from
+    /// <c>Gstin</c>'s first two digits when blank and that prefix is a real state code.
+    /// </summary>
+    string? StateCode = null,
     bool ConfirmDuplicate = false);
 
 /// <summary>
@@ -166,7 +173,8 @@ public sealed record UpdateCustomerRequest(
     decimal? ExternalOrderValue,
     string? ExternalOrderCurrency,
     DateTime? ExternalOrderDate,
-    string? Gstin);
+    string? Gstin,
+    string? StateCode = null);
 
 /// <summary><see cref="Type"/> defaults to "Note" when omitted; the three system-reserved type strings are rejected (see <see cref="CustomerService"/>).</summary>
 public sealed record CreateInteractionRequest(string? Type, string Text, DateTime? FollowUpDate);

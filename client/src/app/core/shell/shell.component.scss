@@ -1,11 +1,25 @@
+// App shell: fixed sidebar + topbar + scrolling content column.
+//
+// Three layouts, driven by viewport width:
+//  - desktop (> 900px): sidebar in the flow, collapsible to an icon rail;
+//  - phone/tablet (<= 900px): sidebar becomes an off-canvas drawer opened from
+//    a hamburger in the topbar, always at full width when open;
+//  - phone (<= 640px): the topbar sheds the search trigger and user name.
+
+$bp-phone: 640px;
+$bp-tablet: 900px;
+$bp-search: 1100px;
+
 :host {
   display: block;
   height: 100vh;
+  height: 100dvh;
 }
 
 .shell {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--color-page-bg);
 }
@@ -13,12 +27,35 @@
 // ---- Sidebar ----------------------------------------------------------
 .sidebar {
   flex: 0 0 auto;
+  width: var(--sidebar-width-expanded);
   background: var(--color-navy);
   color: #fff;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: width .15s;
+  transition: width .18s ease;
+}
+
+.sidebar--collapsed {
+  width: var(--sidebar-width-collapsed);
+
+  .sidebar__eyebrow,
+  .sidebar__group-label,
+  .sidebar__label {
+    display: none;
+  }
+
+  .sidebar__item,
+  .sidebar__collapse {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .sidebar__brand {
+    justify-content: center;
+    padding: 0;
+  }
 }
 
 .sidebar__brand {
@@ -27,31 +64,53 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 16px;
+  padding: 0 18px;
   border-bottom: 1px solid rgba(255, 255, 255, .08);
 }
 
-.sidebar__wordmark {
-  font-size: 18px;
-  font-weight: 700;
-  white-space: nowrap;
+.sidebar__logo {
+  flex: 0 0 auto;
+  height: 24px;
+  width: auto;
+  display: block;
 }
 
-.sidebar__wordmark-dot {
-  color: var(--color-accent);
+.sidebar__logo--mark {
+  height: 26px;
 }
 
 .sidebar__eyebrow {
-  font-size: 11px;
-  color: rgba(255, 255, 255, .35);
-  letter-spacing: .06em;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, .38);
+  letter-spacing: .1em;
   white-space: nowrap;
+}
+
+.sidebar__close {
+  display: none;
+  margin-left: auto;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, .6);
+  font-size: 15px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(255, 255, 255, .08);
+    color: #fff;
+  }
 }
 
 .sidebar__nav {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 12px 8px;
+  overflow-x: hidden;
+  padding: 12px 10px;
 }
 
 .sidebar__group {
@@ -59,10 +118,10 @@
 }
 
 .sidebar__group-label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: .08em;
-  color: rgba(255, 255, 255, .35);
+  letter-spacing: .1em;
+  color: rgba(255, 255, 255, .38);
   padding: 6px 12px;
   white-space: nowrap;
 }
@@ -72,17 +131,23 @@
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   background: transparent;
-  color: rgba(255, 255, 255, .75);
+  color: rgba(255, 255, 255, .72);
   margin-bottom: 2px;
-  transition: background .15s;
+  transition: background .15s, color .15s;
   text-decoration: none;
 
   &:hover {
-    background: #243044;
+    background: rgba(255, 255, 255, .06);
+    color: #fff;
     text-decoration: none;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, .35) inset;
   }
 }
 
@@ -97,27 +162,48 @@
 
 .sidebar__icon {
   font-size: 16px;
-  flex: 0 0 16px;
+  flex: 0 0 18px;
   line-height: 1;
+  text-align: center;
 }
 
 .sidebar__label {
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 500;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar__collapse {
   flex: 0 0 auto;
-  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  appearance: none;
+  border: none;
   border-top: 1px solid rgba(255, 255, 255, .08);
+  background: transparent;
+  padding: 12px 22px;
   color: rgba(255, 255, 255, .55);
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
+  text-align: left;
 
   &:hover {
     color: #fff;
   }
+}
+
+.sidebar__collapse-glyph {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.nav-scrim {
+  display: none;
 }
 
 // ---- Main column / topbar ----------------------------------------------
@@ -135,44 +221,117 @@
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 0 var(--space-10);
+  gap: 12px;
+  padding: 0 var(--content-padding);
+  min-width: 0;
+}
+
+.topbar__menu {
+  display: none;
+  flex: 0 0 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 36px;
+  height: 36px;
+  margin-left: -6px;
+  padding: 0 8px;
+  appearance: none;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+
+  span {
+    display: block;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--color-text);
+  }
+
+  &:hover {
+    background: var(--color-track);
+  }
 }
 
 .topbar__title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: -.01em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .topbar__search {
+  appearance: none;
+  font-family: inherit;
+  text-align: left;
   flex: 1 1 auto;
-  max-width: 420px;
+  max-width: 400px;
   display: flex;
   align-items: center;
   gap: 8px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-page-bg);
+  padding: 6px 10px;
   color: var(--color-text-muted);
   font-size: 13px;
   cursor: pointer;
-  transition: border-color .15s;
+  transition: border-color .15s, background .15s;
+  min-width: 0;
 
   &:hover {
-    border-color: var(--color-accent);
+    border-color: var(--color-border-strong);
+    background: var(--color-surface);
   }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-accent-ring);
+  }
+}
+
+// Icon-only search trigger for viewports where the full box is hidden.
+.topbar__search-icon {
+  display: none;
+  appearance: none;
+  border: none;
+  background: transparent;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  font-size: 18px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--color-track);
+    color: var(--color-text);
+  }
+}
+
+.topbar__search-glyph {
+  font-size: 15px;
+  line-height: 1;
 }
 
 .topbar__search-label {
   flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar__kbd {
   font-size: 11px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   padding: 1px 5px;
+  background: var(--color-surface);
 }
 
 .topbar__spacer {
@@ -180,9 +339,48 @@
 }
 
 .topbar__refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
   font-size: 13px;
+  font-weight: 500;
   color: var(--color-text-muted);
   cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+
+  &:hover:not(:disabled) {
+    background: var(--color-track);
+    color: var(--color-text);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-accent-ring);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+.topbar__refresh-glyph {
+  display: inline-block;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.topbar__refresh--busy .topbar__refresh-glyph {
+  animation: shell-spin .7s linear infinite;
+}
+
+@keyframes shell-spin {
+  to { transform: rotate(360deg); }
 }
 
 .topbar__divider {
@@ -192,15 +390,40 @@
 }
 
 .topbar__user {
+  position: relative;
   display: flex;
   align-items: center;
+}
+
+.topbar__user-btn {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
+  appearance: none;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  padding: 3px 8px 3px 3px;
+  cursor: pointer;
+  color: var(--color-text);
+  max-width: 220px;
+  transition: background .15s;
+
+  &:hover {
+    background: var(--color-track);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-accent-ring);
+  }
 }
 
 .topbar__avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 14px;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 50%;
   background: var(--color-info-bg);
   color: var(--color-info);
   font-size: 12px;
@@ -212,36 +435,191 @@
 
 .topbar__user-name {
   font-size: 13px;
-}
-
-.topbar__user-role {
-  color: var(--color-text-muted);
-}
-
-// One rule for both topbar text actions rather than a second, near-identical
-// block: "Change password" is a quiet sibling of "Log out" and must not drift
-// away from it. `text-decoration: none` and the muted colour are needed on the
-// link to override the global `a` rule in styles.scss.
-.topbar__logout,
-.topbar__account-link {
-  margin-left: 8px;
-  background: none;
-  border: none;
-  color: var(--color-text-muted);
-  font-size: 13px;
-  cursor: pointer;
-  font-family: inherit;
-  text-decoration: none;
+  font-weight: 500;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar__chevron {
+  font-size: 14px;
+  line-height: 0;
+  margin-top: -6px;
+  color: var(--color-text-muted);
+}
+
+.user-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+}
+
+.user-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  min-width: 220px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+  padding: 6px;
+  animation: menu-in .12s ease-out;
+}
+
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.user-menu__head {
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 6px;
+}
+
+.user-menu__name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.user-menu__role {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.user-menu__item {
+  display: block;
+  width: 100%;
+  appearance: none;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+  text-decoration: none;
 
   &:hover {
-    color: var(--color-accent);
-    text-decoration: underline;
+    background: var(--color-track);
+    color: var(--color-text);
+    text-decoration: none;
   }
 }
 
 .content {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: var(--space-10);
+  overflow-x: hidden;
+  padding: var(--content-padding);
+  min-width: 0;
+}
+
+// ---- Tablet & below: off-canvas drawer -------------------------------------
+@media (max-width: $bp-tablet) {
+  .sidebar,
+  .sidebar--collapsed {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    width: min(var(--sidebar-width-expanded), 84vw);
+    transform: translateX(-100%);
+    transition: transform .2s ease;
+    box-shadow: none;
+
+    .sidebar__eyebrow,
+    .sidebar__group-label,
+    .sidebar__label {
+      display: block;
+    }
+
+    .sidebar__item {
+      justify-content: flex-start;
+      padding: 10px 12px;
+    }
+
+    .sidebar__brand {
+      justify-content: flex-start;
+      padding: 0 18px;
+    }
+  }
+
+  .sidebar__logo--mark {
+    display: none;
+  }
+
+  .sidebar__collapse {
+    display: none;
+  }
+
+  .sidebar__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .shell--mobile-nav-open .sidebar {
+    transform: none;
+    box-shadow: var(--shadow-dialog);
+  }
+
+  .nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: var(--overlay-scrim);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease;
+  }
+
+  .shell--mobile-nav-open .nav-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .topbar__menu {
+    display: flex;
+  }
+}
+
+@media (max-width: $bp-search) {
+  .topbar__search {
+    display: none;
+  }
+
+  .topbar__search-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+@media (max-width: $bp-phone) {
+  .topbar {
+    gap: 8px;
+  }
+
+  .topbar__user-name,
+  .topbar__chevron,
+  .topbar__refresh-label,
+  .topbar__divider {
+    display: none;
+  }
+
+  .topbar__user-btn {
+    padding: 2px;
+  }
+
+  .topbar__refresh {
+    padding: 6px 8px;
+  }
 }

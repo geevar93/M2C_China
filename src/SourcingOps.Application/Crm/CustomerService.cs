@@ -162,6 +162,7 @@ public sealed class CustomerService : ICustomerService
             Phone = normalizedPhone,
             Email = Trim(request.Email),
             Gstin = gstin,
+            StateCode = NormalizeAndValidateStateCode(request.StateCode, gstin),
             City = Trim(request.City),
             Region = Trim(request.Region),
             SourceChannel = Trim(request.SourceChannel),
@@ -245,6 +246,7 @@ public sealed class CustomerService : ICustomerService
         customer.Phone = normalizedPhone;
         customer.Email = Trim(request.Email);
         customer.Gstin = gstin;
+        customer.StateCode = NormalizeAndValidateStateCode(request.StateCode, gstin);
         customer.City = Trim(request.City);
         customer.Region = Trim(request.Region);
         customer.SourceChannel = Trim(request.SourceChannel);
@@ -582,6 +584,32 @@ public sealed class CustomerService : ICustomerService
         return trimmed;
     }
 
+    /// <summary>
+    /// The buyer's place-of-supply state code. Blank falls back to the GSTIN's first two
+    /// digits, which ARE the state code — a derivation, not a guess — so a correctly entered
+    /// GSTIN normally means nobody has to pick a state by hand.
+    ///
+    /// An explicitly supplied code must be a real one. Rejecting an unknown code matters more
+    /// here than it would for a display field: this value decides CGST+SGST versus IGST, and a
+    /// junk code would silently be treated as "different from the seller's" and charge IGST on
+    /// what might be a local supply.
+    /// </summary>
+    private static string? NormalizeAndValidateStateCode(string? value, string? gstin)
+    {
+        var trimmed = Trim(value);
+        if (trimmed is null)
+        {
+            return IndianStateCodes.FromGstin(gstin);
+        }
+
+        if (!IndianStateCodes.IsValid(trimmed))
+        {
+            throw new AppValidationException("stateCode", $"'{trimmed}' is not a valid Indian GST state code.");
+        }
+
+        return trimmed;
+    }
+
     private static string[] NormalizeTags(IReadOnlyList<string>? tags) =>
         (tags ?? []).Select(t => t?.Trim() ?? string.Empty).Where(t => t.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
@@ -605,7 +633,9 @@ public sealed class CustomerService : ICustomerService
         c.Email, c.Notes,
         c.ExternalMarketplace, c.ExternalOrderRef, c.ExternalSupplierName,
         c.ExternalOrderValue, c.ExternalOrderCurrency, AsUtcOrNull(c.ExternalOrderDate),
-        c.Gstin);
+        c.Gstin,
+        c.StateCode,
+        IndianStateCodes.NameFor(c.StateCode));
 
     private static TimelineEventDto MapTimelineEvent(Interaction i)
     {

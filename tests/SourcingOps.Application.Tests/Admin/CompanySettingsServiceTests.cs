@@ -25,8 +25,8 @@ public class CompanySettingsServiceTests
     }
 
     private static UpsertCompanySettingsRequest ValidRequest() => new(
-        "Meridian Sourcing Pvt Ltd", "24AAAAA0000A1Z5", "123 Industrial Estate, Surat, Gujarat",
-        "Meridian Sourcing", "000123456789", "HDFC0000123", "Surat Main", "INV", "Goods once sold will not be taken back.");
+        "M2C Sourcing Pvt Ltd", "24AAAAA0000A1Z5", "24", "123 Industrial Estate, Surat, Gujarat",
+        "M2C Sourcing", "000123456789", "HDFC0000123", "Surat Main", "INV", "Goods once sold will not be taken back.");
 
     [Fact]
     public async Task GetAsync_NoRowYet_ReturnsAllNullShape()
@@ -52,7 +52,7 @@ public class CompanySettingsServiceTests
 
         var result = await sut.UpsertAsync(ValidRequest(), Actor);
 
-        result.LegalEntityName.Should().Be("Meridian Sourcing Pvt Ltd");
+        result.LegalEntityName.Should().Be("M2C Sourcing Pvt Ltd");
         result.RegisteredAddress.Should().Be("123 Industrial Estate, Surat, Gujarat");
         result.UpdatedAt.Should().NotBeNull();
         result.UpdatedByName.Should().Be("Priya Sharma");

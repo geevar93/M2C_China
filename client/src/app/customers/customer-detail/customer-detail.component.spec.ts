@@ -38,6 +38,8 @@ const detail: CustomerDetail = {
   createdAt: '2026-02-11T00:00:00Z',
   email: null,
   gstin: null,
+  stateCode: null,
+  stateName: null,
   notes: null,
   externalMarketplace: null,
   externalOrderRef: null,

@@ -122,7 +122,7 @@
   @if (createOpen()) {
     <div class="dialog-backdrop">
       <div class="dialog-panel">
-        <div class="section-title">New user</div>
+        <div class="dialog-title">New user</div>
         @if (createError()) {
           <div class="field-error" role="alert">{{ createError() }}</div>
         }
@@ -178,7 +178,7 @@
   @if (tempPassword(); as pw) {
     <div class="dialog-backdrop">
       <div class="dialog-panel">
-        <div class="section-title">Temporary password</div>
+        <div class="dialog-title">Temporary password</div>
         <p>This password will only be shown this one time. Copy it now and share it securely — it cannot be retrieved again.</p>
         <div class="secret-value">{{ pw }}</div>
         <div class="au-modal-actions">
@@ -195,7 +195,7 @@
   @if (deactivateTarget(); as target) {
     <div class="dialog-backdrop">
       <div class="dialog-panel">
-        <div class="section-title">Deactivate {{ target.name }}?</div>
+        <div class="dialog-title">Deactivate {{ target.name }}?</div>
         @if (deactivateError()) {
           <div class="field-error" role="alert">{{ deactivateError() }}</div>
         }
@@ -214,7 +214,7 @@
   @if (roleModalUser(); as ru) {
     <div class="dialog-backdrop">
       <div class="dialog-panel">
-        <div class="section-title">Manage roles — {{ ru.name }}</div>
+        <div class="dialog-title">Manage roles — {{ ru.name }}</div>
         <div class="banner-warning au-banner">
           The user must sign in again for a role change to take effect — permissions are only re-evaluated at next login/refresh.
         </div>

@@ -15,6 +15,7 @@ import {
   UpsertMasterDataRequest,
   isCategoryCollection
 } from '../models/admin-master-data.models';
+import { RefreshService } from '../../core/services/refresh.service';
 
 /**
  * Master data configuration (ACTION_PLAN E0-04b), against the existing M2
@@ -107,7 +108,12 @@ export class AdminMasterDataComponent {
   readonly formSaving = signal(false);
   readonly formError = signal<string | null>(null);
 
+  private readonly refreshService = inject(RefreshService);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => this.retry());
+
     this.fetch();
   }
 

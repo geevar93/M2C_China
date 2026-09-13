@@ -1,11 +1,11 @@
 <div class="dialog-backdrop">
   <div class="dialog-panel dialog-panel--narrow">
-    <div class="ibd-header">
+    <div class="dialog-header">
       <div>
-        <div class="section-title">Record Inbound Stock</div>
+        <div class="dialog-title">Record Inbound Stock</div>
         <div class="muted">Written as a durable, queryable inbound entry — not just an audit-log row.</div>
       </div>
-      <div class="dialog-close" (click)="cancel()">✕</div>
+      <button type="button" class="dialog-close" (click)="cancel()" aria-label="Close">✕</button>
     </div>
 
     @if (error()) {

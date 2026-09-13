@@ -13,17 +13,28 @@ namespace SourcingOps.Application.Common;
 public static class MoneyFormatter
 {
     /// <summary>
-    /// Indian lakh/crore digit grouping (2,2,3 — e.g. <c>1,47,500.00</c>), pinned explicitly via
+    /// Indian lakh/crore digit grouping (e.g. <c>1,47,500.00</c>), pinned explicitly via
     /// <see cref="NumberFormatInfo.NumberGroupSizes"/> rather than trusted to <c>en-IN</c>'s
-    /// default ICU data, since that data can differ across machines/containers. Verified on the
-    /// dev machine that plain <c>CultureInfo("en-IN")</c> already groups correctly, but pinning
-    /// it removes the dependency on that holding true everywhere this runs.
+    /// default ICU data, since that data can differ across machines/containers.
+    ///
+    /// Built from <see cref="CultureInfo.InvariantCulture"/>, NOT <c>CultureInfo.GetCultureInfo("en-IN")</c>.
+    /// The runtime image (<c>mcr.microsoft.com/dotnet/aspnet:10.0-alpine</c>) ships without ICU and
+    /// therefore runs in globalization-invariant mode, where looking up ANY named culture throws
+    /// <see cref="CultureNotFoundException"/> — inside a static constructor that surfaces as a
+    /// <see cref="TypeInitializationException"/> and 500s the request. It did exactly that on the
+    /// first DRAFT→ISSUED transition, because the PDF renderer is the first caller to touch this
+    /// type. Tests on a Windows dev box could not catch it: ICU is present there, so en-IN resolves.
+    ///
+    /// Nothing is lost by dropping en-IN. The only two properties that matter here are already
+    /// identical between en-IN and the invariant culture (<c>.</c> decimal separator, <c>,</c> group
+    /// separator), and the grouping itself is overridden on the next line regardless — en-IN was
+    /// never actually supplying the Indian grouping, only a starting point.
     /// </summary>
     private static readonly NumberFormatInfo IndianGrouping = CreateIndianGrouping();
 
     private static NumberFormatInfo CreateIndianGrouping()
     {
-        var format = (NumberFormatInfo)CultureInfo.GetCultureInfo("en-IN").NumberFormat.Clone();
+        var format = (NumberFormatInfo)CultureInfo.InvariantCulture.NumberFormat.Clone();
         format.NumberGroupSizes = [3, 2];
         return format;
     }

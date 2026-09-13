@@ -32,7 +32,42 @@ public sealed record InvoicePdfModel(
     string RegisteredAddress,
     string? Gstin,
     InvoicePdfBankDetails? BankDetails,
-    string? DeclarationText);
+    string? DeclarationText,
+    IReadOnlyList<InvoicePdfLine> Lines,
+    InvoicePdfTaxSummary TaxSummary);
+
+/// <summary>
+/// One rendered line. Every money figure arrives ALREADY COMPUTED by <c>GstCalculator</c> —
+/// the renderer does no arithmetic of its own, so the PDF cannot disagree with the screen or
+/// the stored totals. Same trust-your-input rule the model doc states for the company fields.
+/// </summary>
+public sealed record InvoicePdfLine(
+    string Description,
+    string? HsnCode,
+    decimal Quantity,
+    decimal UnitPrice,
+    decimal GstRate,
+    decimal TaxableValue,
+    decimal CgstAmount,
+    decimal SgstAmount,
+    decimal IgstAmount,
+    decimal LineTotal);
+
+/// <summary>
+/// The invoice-level tax block. <see cref="IsIntraState"/> decides which heads are printed:
+/// CGST + SGST columns for an intra-state supply, a single IGST column otherwise. Printing all
+/// three with zeroes in two of them is how a reader loses confidence in a tax document, so the
+/// renderer shows only the heads that actually apply.
+/// </summary>
+public sealed record InvoicePdfTaxSummary(
+    string? PlaceOfSupplyStateCode,
+    string? PlaceOfSupplyStateName,
+    bool IsIntraState,
+    decimal TaxableValue,
+    decimal CgstAmount,
+    decimal SgstAmount,
+    decimal IgstAmount,
+    decimal TotalTax);
 
 /// <summary>
 /// PDF rendering seam (DR-3). The QuestPDF implementation lives in <c>Infrastructure</c> —

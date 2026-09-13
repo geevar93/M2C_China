@@ -49,6 +49,7 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<ShipmentDocument> ShipmentDocuments => Set<ShipmentDocument>();
 
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
     public DbSet<InvoiceStatusHistory> InvoiceStatusHistory => Set<InvoiceStatusHistory>();
 
     public DbSet<CompanySettings> CompanySettings => Set<CompanySettings>();

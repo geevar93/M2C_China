@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using SourcingOps.Application.Common;
 using SourcingOps.Application.Interfaces;
+using SourcingOps.Domain.Constants;
 using SourcingOps.Domain.Entities;
 
 namespace SourcingOps.Application.Admin;
@@ -53,6 +55,10 @@ public sealed class CompanySettingsService : ICompanySettingsService
         // this is a Super-Admin-only settings screen, and an over-strict check that
         // refuses to save would block the one path that unblocks invoicing at all (H-1).
         settings.Gstin = Trim(request.Gstin)?.ToUpperInvariant();
+        // Same rule CustomerService applies to the buyer's: an explicit code must be a real
+        // one, blank derives from the GSTIN prefix. This value decides CGST+SGST versus IGST
+        // on every invoice issued, so a junk code must not be storable.
+        settings.StateCode = NormalizeAndValidateStateCode(request.StateCode, settings.Gstin);
         settings.RegisteredAddress = Trim(request.RegisteredAddress);
         settings.BankAccountName = Trim(request.BankAccountName);
         settings.BankAccountNumber = Trim(request.BankAccountNumber);
@@ -76,12 +82,30 @@ public sealed class CompanySettingsService : ICompanySettingsService
     private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static CompanySettingsDto EmptyDto() =>
-        new(null, null, null, null, null, null, null, null, null, null, null);
+        new(null, null, null, null, null, null, null, null, null, null, null, null, null);
 
     private static CompanySettingsDto MapDto(CompanySettings s, string? updatedByNameOverride = null) => new(
-        s.LegalEntityName, s.Gstin, s.RegisteredAddress,
+        s.LegalEntityName, s.Gstin,
+        s.StateCode, IndianStateCodes.NameFor(s.StateCode),
+        s.RegisteredAddress,
         s.BankAccountName, s.BankAccountNumber, s.BankIfsc, s.BankBranch,
         s.InvoiceNumberPrefix, s.DeclarationText,
         s.UpdatedAt.HasValue ? DateTime.SpecifyKind(s.UpdatedAt.Value, DateTimeKind.Utc) : null,
         updatedByNameOverride ?? s.UpdatedBy?.Name);
+
+    private static string? NormalizeAndValidateStateCode(string? value, string? gstin)
+    {
+        var trimmed = Trim(value);
+        if (trimmed is null)
+        {
+            return IndianStateCodes.FromGstin(gstin);
+        }
+
+        if (!IndianStateCodes.IsValid(trimmed))
+        {
+            throw new AppValidationException("stateCode", $"'{trimmed}' is not a valid Indian GST state code.");
+        }
+
+        return trimmed;
+    }
 }

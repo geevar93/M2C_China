@@ -37,7 +37,7 @@
 }
 
 .dash-row--panels {
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
 }
 
 .dash-panel-header {
@@ -95,6 +95,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-9);
+  flex-wrap: wrap;
 }
 
 .dash-donut {
@@ -224,4 +225,29 @@
 
 .dash-ship-chip-wrap {
   width: 78px;
+}
+
+// ---- Narrow viewports ------------------------------------------------------
+@media (max-width: 900px) {
+  .dash-row--charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .dash-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-6);
+  }
+
+  .dash-row {
+    gap: var(--space-6);
+  }
+
+  .dash-catmix-label {
+    width: 64px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }

@@ -1,11 +1,11 @@
 <div class="dialog-backdrop">
   <div class="dialog-panel">
-    <div class="vfd-header">
+    <div class="dialog-header">
       <div>
-        <div class="section-title">{{ dialogTitle() }}</div>
+        <div class="dialog-title">{{ dialogTitle() }}</div>
         <div class="muted">Changes are time-stamped in the audit trail.</div>
       </div>
-      <div class="dialog-close" (click)="cancel()">✕</div>
+      <button type="button" class="dialog-close" (click)="cancel()" aria-label="Close">✕</button>
     </div>
 
     @if (error()) {

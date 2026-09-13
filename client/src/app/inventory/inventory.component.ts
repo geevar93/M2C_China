@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
 import { MasterDataService } from '../core/services/master-data.service';
@@ -13,6 +13,7 @@ import { InventoryItem, InventorySummary, RecordAdjustmentResult, RecordInboundR
 import { formatQty, formatStockValue } from './utils/format.util';
 import { formatInrCompact } from '../shared/utils/money.util';
 import { stockBarWidth, stockLevelColor, stockLevelTextColor } from './utils/stock-level.util';
+import { RefreshService } from '../core/services/refresh.service';
 
 interface InventoryRow {
   id: string;
@@ -111,7 +112,24 @@ export class InventoryComponent {
 
   private readonly search$ = new Subject<string>();
 
+  private readonly refreshService = inject(RefreshService);
+  private readonly route = inject(ActivatedRoute);
+
   constructor() {
+    // Topbar "Refresh" reloads this screen the same way its Retry control does.
+    this.refreshService.onRefresh(() => this.retry());
+
+    // The command palette lands here with `?q=` for a section/item hit; apply it
+    // as the search filter, including when this screen is already on display.
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+      const q = params.get('q');
+      if (q && q !== this.search()) {
+        this.search.set(q);
+        this.page.set(1);
+        this.fetch();
+      }
+    });
+
     this.masterDataService.ensureLoaded().subscribe({ error: () => {} });
 
     this.search$.pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed()).subscribe((value) => {

@@ -1,13 +1,13 @@
 <div class="dialog-backdrop">
   <div class="dialog-panel wa-dialog-panel">
-    <div class="wa-header">
+    <div class="dialog-header">
       <div>
-        <div class="section-title">Send Catalog via WhatsApp</div>
+        <div class="dialog-title">Send Catalog via WhatsApp</div>
         <div class="muted wa-header-sub">
           The message includes a temporary link to the PDF, so the customer can open it straight from the chat — no attaching needed.
         </div>
       </div>
-      <div class="dialog-close" (click)="cancel()">✕</div>
+      <button type="button" class="dialog-close" (click)="cancel()" aria-label="Close">✕</button>
     </div>
 
     @if (customersError() || documentsError()) {
