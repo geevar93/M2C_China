@@ -276,6 +276,8 @@ public class InvoiceLineConfiguration : IEntityTypeConfiguration<InvoiceLine>
         b.Property(x => x.UnitPrice).HasPrecision(18, 2);
         // Percent, e.g. 18.00 — 5,2 covers every statutory slab including 0.25%.
         b.Property(x => x.GstRate).HasPrecision(5, 2);
+        b.Property(x => x.DiscountType).HasMaxLength(10);
+        b.Property(x => x.DiscountValue).HasPrecision(18, 2);
         // Serves the only query: this invoice's lines in display order.
         b.HasIndex(x => new { x.InvoiceId, x.SortOrder });
 

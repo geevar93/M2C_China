@@ -6,6 +6,7 @@ import { AuthService } from '../core/services/auth.service';
 import { MasterDataService } from '../core/services/master-data.service';
 import { extractErrorMessage } from '../core/services/problem-details.util';
 import { ItemFormDialogComponent } from './item-form-dialog/item-form-dialog.component';
+import { AddStockDialogComponent } from './add-stock-dialog/add-stock-dialog.component';
 import { InventoryService } from './services/inventory.service';
 import { InventoryItem, InventorySummary, StockLevel } from './models/inventory.models';
 import { formatQty, formatStockValue } from './utils/format.util';
@@ -56,7 +57,7 @@ const EMPTY_SUMMARY: InventorySummary = { onHandValue: 0, itemCount: 0, lowStock
 @Component({
   selector: 'app-inventory',
   standalone: true,
-  imports: [ItemFormDialogComponent],
+  imports: [ItemFormDialogComponent, AddStockDialogComponent],
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.scss'
 })
@@ -105,6 +106,10 @@ export class InventoryComponent {
 
   readonly createOpen = signal(false);
   readonly editItem = signal<InventoryItem | null>(null);
+  readonly addStockItem = signal<InventoryItem | null>(null);
+  /** Row whose quantity just changed via Add Stock — briefly highlighted. */
+  readonly flashId = signal<string | null>(null);
+  private flashTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly imageViewer = signal<ImageViewerState | null>(null);
   private imageObjectUrl: string | null = null;
@@ -117,7 +122,10 @@ export class InventoryComponent {
   constructor() {
     // Topbar "Refresh" reloads this screen the same way its Retry control does.
     this.refreshService.onRefresh(() => this.retry());
-    inject(DestroyRef).onDestroy(() => this.revokeImageUrl());
+    inject(DestroyRef).onDestroy(() => {
+      this.revokeImageUrl();
+      if (this.flashTimer) clearTimeout(this.flashTimer);
+    });
 
     // The command palette lands here with `?q=` for a section/item hit; apply it
     // as the search filter, including when this screen is already on display.
@@ -206,6 +214,25 @@ export class InventoryComponent {
 
   onItemSaved(_item: InventoryItem): void {
     this.editItem.set(null);
+    this.fetch();
+  }
+
+  openAddStock(row: InventoryRow): void {
+    const item = this.items().find((i) => i.id === row.id);
+    if (item) this.addStockItem.set(item);
+  }
+
+  cancelAddStock(): void {
+    this.addStockItem.set(null);
+  }
+
+  /** Patches the row straight away, then refetches so the stat tiles and banner catch up. */
+  onStockAdded(item: InventoryItem): void {
+    this.addStockItem.set(null);
+    this.items.update((list) => list.map((i) => (i.id === item.id ? item : i)));
+    this.flashId.set(item.id);
+    if (this.flashTimer) clearTimeout(this.flashTimer);
+    this.flashTimer = setTimeout(() => this.flashId.set(null), 1600);
     this.fetch();
   }
 

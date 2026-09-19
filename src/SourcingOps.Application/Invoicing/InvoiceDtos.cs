@@ -166,7 +166,11 @@ public sealed record InvoiceLineDto(
     decimal SgstAmount,
     decimal IgstAmount,
     decimal LineTotal,
-    int SortOrder);
+    int SortOrder,
+    decimal GrossValue,
+    string? DiscountType,
+    decimal? DiscountValue,
+    decimal DiscountAmount);
 
 /// <summary>
 /// One line as it comes IN. <see cref="InventoryItemId"/> is optional — a line may bill
@@ -184,7 +188,19 @@ public sealed record UpsertInvoiceLineRequest(
     string? HsnCode,
     decimal Quantity,
     decimal? UnitPrice,
-    decimal? GstRate);
+    decimal? GstRate,
+    string? DiscountType = null,
+    decimal? DiscountValue = null);
+
+/// <summary>
+/// Accepted values of <c>UpsertInvoiceLineRequest.DiscountType</c> — a percent of the line's
+/// gross value, or a flat amount off the whole line. The discount reduces the taxable value.
+/// </summary>
+public static class InvoiceDiscountTypes
+{
+    public const string Percent = "PERCENT";
+    public const string Amount = "AMOUNT";
+}
 
 /// <summary>
 /// The invoice-level tax summary the PDF and the detail screen both render. Derived from the
@@ -203,7 +219,9 @@ public sealed record InvoiceTaxSummaryDto(
     decimal SgstAmount,
     decimal IgstAmount,
     decimal TotalTax,
-    IReadOnlyList<InvoiceTaxRateBreakdownDto> RateBreakdown);
+    IReadOnlyList<InvoiceTaxRateBreakdownDto> RateBreakdown,
+    decimal GrossValue,
+    decimal TotalDiscount);
 
 /// <summary>
 /// Taxable value and tax grouped by rate — the "rate-wise summary" a GST invoice carries when

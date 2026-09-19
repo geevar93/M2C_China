@@ -182,6 +182,33 @@ public class InventoryServiceTests
         (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("reorderThreshold");
     }
 
+    [Theory]
+    [InlineData("12")]
+    [InlineData("pcs 50")]
+    [InlineData("kg/2")]
+    public async Task CreateAsync_NonAlphabeticUnit_Throws(string unit)
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+
+        var act = () => sut.CreateAsync(ValidCreate(f) with { Unit = unit }, Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("unit");
+    }
+
+    [Fact]
+    public async Task CreateAsync_AlphabeticUnit_IsTrimmedAndKept()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+
+        var created = await sut.CreateAsync(ValidCreate(f) with { Unit = "  sq ft " }, Actor);
+
+        created.Unit.Should().Be("sq ft");
+    }
+
     [Fact]
     public async Task CreateAsync_NegativeUnitCost_Throws()
     {

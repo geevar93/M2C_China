@@ -530,6 +530,88 @@ public class InvoiceServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_PercentDiscount_ReducesTheTaxableValueBeforeGst()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var request = ValidCreate(f) with { Lines = [Line(500m, 18m, quantity: 2m) with { DiscountType = "percent", DiscountValue = 10m }] };
+        var result = await sut.CreateAsync(request, Actor);
+
+        var line = result.Lines.Single();
+        line.DiscountType.Should().Be("PERCENT");
+        line.DiscountValue.Should().Be(10m);
+        line.GrossValue.Should().Be(1000m);
+        line.DiscountAmount.Should().Be(100m);
+        line.TaxableValue.Should().Be(900m);
+        result.Amount.Should().Be(900m);
+        result.TaxAmount.Should().Be(162m);
+        result.TotalAmount.Should().Be(1062m);
+        result.TaxSummary.GrossValue.Should().Be(1000m);
+        result.TaxSummary.TotalDiscount.Should().Be(100m);
+    }
+
+    [Fact]
+    public async Task CreateAsync_AmountDiscount_IsTakenOffTheWholeLine()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var request = ValidCreate(f) with { Lines = [Line(100m, 18m, quantity: 10m) with { DiscountType = "AMOUNT", DiscountValue = 250m }] };
+        var result = await sut.CreateAsync(request, Actor);
+
+        result.Lines.Single().DiscountAmount.Should().Be(250m);
+        result.Amount.Should().Be(750m);
+        result.TaxAmount.Should().Be(135m);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ZeroDiscount_IsStoredAsNoDiscount()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var request = ValidCreate(f) with { Lines = [Line(100m, 18m) with { DiscountType = "PERCENT", DiscountValue = 0m }] };
+        var result = await sut.CreateAsync(request, Actor);
+
+        result.Lines.Single().DiscountType.Should().BeNull();
+        result.Lines.Single().DiscountValue.Should().BeNull();
+        result.Amount.Should().Be(100m);
+    }
+
+    [Theory]
+    [InlineData("AMOUNT", 100.01)]
+    [InlineData("PERCENT", 100.5)]
+    [InlineData("PERCENT", -5)]
+    public async Task CreateAsync_OutOfRangeDiscount_ThrowsForThatLine(string type, double value)
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var request = ValidCreate(f) with { Lines = [Line(100m, 18m) with { DiscountType = type, DiscountValue = (decimal)value }] };
+        var act = () => sut.CreateAsync(request, Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("lines[0].discountValue");
+    }
+
+    [Fact]
+    public async Task CreateAsync_UnknownDiscountType_Throws()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _, out _);
+
+        var request = ValidCreate(f) with { Lines = [Line(100m, 18m) with { DiscountType = "BOGO", DiscountValue = 5m }] };
+        var act = () => sut.CreateAsync(request, Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("lines[0].discountType");
+    }
+
+    [Fact]
     public async Task CreateAsync_UnknownInventoryItem_ThrowsWithTheOffendingLineIndex()
     {
         using var db = TestDbContextFactory.Create();

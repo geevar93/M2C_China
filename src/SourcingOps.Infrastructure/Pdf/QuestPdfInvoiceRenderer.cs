@@ -20,6 +20,24 @@ namespace SourcingOps.Infrastructure.Pdf;
 /// </summary>
 public sealed class QuestPdfInvoiceRenderer : IInvoicePdfRenderer
 {
+    /// <summary>Printed width of the header logo, in points (~19 mm); height follows the image's aspect ratio.</summary>
+    private const float LogoWidth = 54f;
+
+    /// <summary>
+    /// The M2C globe mark, cropped from the app's <c>logo-dark.png</c> (the dark-on-light
+    /// variant — the sidebar's <c>logo-mark.png</c> is white artwork and would vanish on paper).
+    /// Embedded in this assembly and decoded once; QuestPDF images are safe to share across renders.
+    /// </summary>
+    private static readonly Image LogoMark = LoadLogo();
+
+    private static Image LoadLogo()
+    {
+        using var stream = typeof(QuestPdfInvoiceRenderer).Assembly
+            .GetManifestResourceStream("SourcingOps.Infrastructure.Pdf.m2c-logo-mark.png")
+            ?? throw new InvalidOperationException("Embedded invoice logo 'm2c-logo-mark.png' is missing from SourcingOps.Infrastructure.");
+        return Image.FromStream(stream);
+    }
+
     public byte[] Render(InvoicePdfModel model)
     {
         var document = Document.Create(container =>
@@ -32,12 +50,22 @@ public sealed class QuestPdfInvoiceRenderer : IInvoicePdfRenderer
 
                 page.Header().Column(col =>
                 {
-                    col.Item().Text(model.LegalEntityName).FontSize(16).Bold();
-                    col.Item().Text(model.RegisteredAddress);
-                    if (!string.IsNullOrWhiteSpace(model.Gstin))
+                    col.Item().Row(row =>
                     {
-                        col.Item().Text($"GSTIN: {model.Gstin}");
-                    }
+                        // Globe mark only, not the full wordmark: the legal entity name beside
+                        // it already carries the brand, and "M2C" twice reads as a mistake.
+                        row.ConstantItem(LogoWidth).AlignMiddle().Image(LogoMark).FitWidth();
+                        row.ConstantItem(12);
+                        row.RelativeItem().AlignMiddle().Column(issuer =>
+                        {
+                            issuer.Item().Text(model.LegalEntityName).FontSize(16).Bold();
+                            issuer.Item().Text(model.RegisteredAddress);
+                            if (!string.IsNullOrWhiteSpace(model.Gstin))
+                            {
+                                issuer.Item().Text($"GSTIN: {model.Gstin}");
+                            }
+                        });
+                    });
                     col.Item().PaddingTop(10).LineHorizontal(1);
                 });
 
@@ -71,6 +99,8 @@ public sealed class QuestPdfInvoiceRenderer : IInvoicePdfRenderer
                     col.Item().PaddingTop(15).LineHorizontal(0.5f);
 
                     var intra = model.TaxSummary.IsIntraState;
+                    // Same rule as the tax heads: no Discount column on an invoice with no discounts.
+                    var hasDiscount = model.Lines.Any(l => l.DiscountAmount > 0);
 
                     // Place of supply is stated explicitly: it is what justifies the tax heads
                     // below, and a reader (or an auditor) should not have to infer it.
@@ -93,6 +123,10 @@ public sealed class QuestPdfInvoiceRenderer : IInvoicePdfRenderer
                             c.RelativeColumn(1.2f); // HSN/SAC
                             c.RelativeColumn(1);   // Qty
                             c.RelativeColumn(1.4f); // Rate
+                            if (hasDiscount)
+                            {
+                                c.RelativeColumn(1.8f); // Discount
+                            }
                             c.RelativeColumn(1.6f); // Taxable
                             if (intra)
                             {
@@ -112,6 +146,10 @@ public sealed class QuestPdfInvoiceRenderer : IInvoicePdfRenderer
                             header.Cell().Text("HSN/SAC").Bold().FontSize(9);
                             header.Cell().AlignRight().Text("Qty").Bold().FontSize(9);
                             header.Cell().AlignRight().Text("Rate").Bold().FontSize(9);
+                            if (hasDiscount)
+                            {
+                                header.Cell().AlignRight().Text("Discount").Bold().FontSize(9);
+                            }
                             header.Cell().AlignRight().Text("Taxable").Bold().FontSize(9);
                             if (intra)
                             {
@@ -131,6 +169,11 @@ public sealed class QuestPdfInvoiceRenderer : IInvoicePdfRenderer
                             table.Cell().PaddingVertical(2).Text(line.HsnCode ?? "—").FontSize(9);
                             table.Cell().PaddingVertical(2).AlignRight().Text(QuantityFormatter.Format(line.Quantity)).FontSize(9);
                             table.Cell().PaddingVertical(2).AlignRight().Text($"{line.GstRate:0.##}%").FontSize(9);
+                            if (hasDiscount)
+                            {
+                                table.Cell().PaddingVertical(2).AlignRight()
+                                    .Text(line.DiscountAmount > 0 ? MoneyFormatter.Format(model.Currency, line.DiscountAmount) : "—").FontSize(9);
+                            }
                             table.Cell().PaddingVertical(2).AlignRight().Text(MoneyFormatter.Format(model.Currency, line.TaxableValue)).FontSize(9);
                             if (intra)
                             {
@@ -164,6 +207,12 @@ public sealed class QuestPdfInvoiceRenderer : IInvoicePdfRenderer
                                 l.Bold();
                                 v.Bold();
                             }
+                        }
+
+                        if (model.TaxSummary.TotalDiscount > 0)
+                        {
+                            Row("Gross Value", model.TaxSummary.TaxableValue + model.TaxSummary.TotalDiscount);
+                            Row("Less: Discount", model.TaxSummary.TotalDiscount);
                         }
 
                         Row("Taxable Value", model.TaxSummary.TaxableValue);

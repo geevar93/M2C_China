@@ -944,6 +944,6 @@ public class CustomerServiceTests
         var timeline = await sut.GetTimelineAsync(created.Created.Id);
 
         timeline.Should().ContainSingle(e => e.Kind == TimelineEventKinds.InvoiceCreated)
-            .Which.Body.Should().Be("Invoice INV-2608-002 created for INR 1,47,500.00.");
+            .Which.Body.Should().Be("Invoice INV-2608-002 created for ₹1,47,500.00.");
     }
 }

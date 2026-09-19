@@ -51,7 +51,8 @@ public sealed record InvoicePdfLine(
     decimal CgstAmount,
     decimal SgstAmount,
     decimal IgstAmount,
-    decimal LineTotal);
+    decimal LineTotal,
+    decimal DiscountAmount = 0m);
 
 /// <summary>
 /// The invoice-level tax block. <see cref="IsIntraState"/> decides which heads are printed:
@@ -67,7 +68,8 @@ public sealed record InvoicePdfTaxSummary(
     decimal CgstAmount,
     decimal SgstAmount,
     decimal IgstAmount,
-    decimal TotalTax);
+    decimal TotalTax,
+    decimal TotalDiscount = 0m);
 
 /// <summary>
 /// PDF rendering seam (DR-3). The QuestPDF implementation lives in <c>Infrastructure</c> —

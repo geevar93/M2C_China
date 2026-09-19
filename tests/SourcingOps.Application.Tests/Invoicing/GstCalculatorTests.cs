@@ -188,4 +188,45 @@ public class GstCalculatorTests
 
         lines.Sum(l => l.Igst).Should().Be(0.39m);
     }
+
+    // ---- Discounts come off BEFORE GST -------------------------------------------------
+
+    [Fact]
+    public void ForLine_WithDiscount_TaxesTheDiscountedValue()
+    {
+        var amounts = GstCalculator.ForLine(2m, 500m, 18m, false, discount: 100m);
+
+        amounts.GrossValue.Should().Be(1000m);
+        amounts.Discount.Should().Be(100m);
+        amounts.TaxableValue.Should().Be(900m);
+        amounts.Igst.Should().Be(162m);
+        amounts.LineTotal.Should().Be(1062m);
+    }
+
+    [Fact]
+    public void ForLine_DiscountAboveGross_Throws()
+    {
+        var act = () => GstCalculator.ForLine(1m, 100m, 18m, false, discount: 100.01m);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void LineDiscount_Percent_IsRoundedToPaise()
+    {
+        // 3 x 33.33 = 99.99; 12.5% of that is 12.49875 -> 12.50.
+        GstCalculator.LineDiscount(3m, 33.33m, InvoiceDiscountTypes.Percent, 12.5m).Should().Be(12.50m);
+    }
+
+    [Fact]
+    public void LineDiscount_Amount_IsTakenOffTheWholeLine_NotPerUnit()
+    {
+        GstCalculator.LineDiscount(10m, 100m, InvoiceDiscountTypes.Amount, 250m).Should().Be(250m);
+    }
+
+    [Fact]
+    public void LineDiscount_NoType_IsZero()
+    {
+        GstCalculator.LineDiscount(10m, 100m, null, 250m).Should().Be(0m);
+    }
 }

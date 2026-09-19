@@ -21,6 +21,11 @@
     <PackageReference Include="QuestPDF" Version="2026.7.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Invoice PDF logo, read from the assembly so it ships inside the DLL (no path to resolve in the container). -->
+    <EmbeddedResource Include="Pdf\Assets\m2c-logo-mark.png" LogicalName="SourcingOps.Infrastructure.Pdf.m2c-logo-mark.png" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

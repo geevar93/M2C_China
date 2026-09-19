@@ -25,7 +25,7 @@ public class Invoice
     public string? LineDescription { get; set; }
 
     /// <summary>
-    /// Net taxable value — the sum of every line's <c>Quantity * UnitPrice</c>, GST excluded.
+    /// Net taxable value — the sum of every line's <c>Quantity * UnitPrice</c> less its discount, GST excluded.
     ///
     /// DERIVED, not user input, since the line-items pass. It stays a stored column rather than
     /// becoming a computed property because the list/summary queries aggregate it in SQL
@@ -121,6 +121,21 @@ public class InvoiceLine
 
     /// <summary>GST rate as a percent (18m = 18%), snapshotted from the item. Required to issue.</summary>
     public decimal? GstRate { get; set; }
+
+    /// <summary>
+    /// How <see cref="DiscountValue"/> is read: <c>"PERCENT"</c> (of the line's gross value) or
+    /// <c>"AMOUNT"</c> (a flat figure off the whole line, not per unit). Null when the line has
+    /// no discount. Both the kind and the value the user typed are stored, not the resulting
+    /// amount, so an edit round-trips exactly what was entered — the amount itself is derived by
+    /// <c>GstCalculator.LineDiscount</c> like every other money figure on the line.
+    ///
+    /// The discount comes off BEFORE GST: a discount shown on the invoice reduces the taxable
+    /// value (CGST Act s.15(3)(a)), so tax is charged on the discounted figure.
+    /// </summary>
+    public string? DiscountType { get; set; }
+
+    /// <summary>The percent (10m = 10%) or flat amount entered; see <see cref="DiscountType"/>.</summary>
+    public decimal? DiscountValue { get; set; }
 
     /// <summary>Stable display order, assigned by the service from the incoming list position.</summary>
     public int SortOrder { get; set; }
