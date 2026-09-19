@@ -498,10 +498,11 @@ public sealed class InvoiceService : IInvoiceService
             .Select(l =>
             {
                 var rate = l.GstRate ?? 0m;
-                var amounts = GstCalculator.ForLine(l.Quantity, l.UnitPrice, rate, isIntraState);
+                var amounts = ComputeLine(l, isIntraState);
                 return new InvoicePdfLine(
                     l.Description, l.HsnCode, l.Quantity, l.UnitPrice, rate,
-                    amounts.TaxableValue, amounts.Cgst, amounts.Sgst, amounts.Igst, amounts.LineTotal);
+                    amounts.TaxableValue, amounts.Cgst, amounts.Sgst, amounts.Igst, amounts.LineTotal,
+                    amounts.Discount);
             })
             .ToList();
 
@@ -513,7 +514,8 @@ public sealed class InvoiceService : IInvoiceService
             pdfLines.Sum(l => l.CgstAmount),
             pdfLines.Sum(l => l.SgstAmount),
             pdfLines.Sum(l => l.IgstAmount),
-            pdfLines.Sum(l => l.CgstAmount + l.SgstAmount + l.IgstAmount));
+            pdfLines.Sum(l => l.CgstAmount + l.SgstAmount + l.IgstAmount),
+            pdfLines.Sum(l => l.DiscountAmount));
 
         var model = new InvoicePdfModel(
             invoice.InvoiceNumber,
@@ -701,6 +703,8 @@ public sealed class InvoiceService : IInvoiceService
                 errors[$"lines[{index}].gstRate"] = ["GST rate must be between 0 and 100."];
             }
 
+            var (discountType, discountValue) = ValidateDiscount(request, index, request.Quantity, unitPrice ?? 0m, errors);
+
             lines.Add(new InvoiceLine
             {
                 Id = Guid.NewGuid(),
@@ -711,6 +715,8 @@ public sealed class InvoiceService : IInvoiceService
                 Quantity = request.Quantity,
                 UnitPrice = unitPrice ?? 0m,
                 GstRate = gstRate,
+                DiscountType = discountType,
+                DiscountValue = discountValue,
                 SortOrder = index
             });
         }
@@ -722,6 +728,54 @@ public sealed class InvoiceService : IInvoiceService
 
         return lines;
     }
+
+    /// <summary>
+    /// Normalises a line's discount: a zero or missing value means "no discount" and is stored
+    /// as null/null, so the screen and PDF don't show a 0% discount. A percent must be 0–100; a
+    /// flat amount can't exceed the line's gross value (that would make the taxable value
+    /// negative). Errors are collected, not thrown, like the rest of the line checks.
+    /// </summary>
+    private static (string? Type, decimal? Value) ValidateDiscount(
+        UpsertInvoiceLineRequest request, int index, decimal quantity, decimal unitPrice, Dictionary<string, string[]> errors)
+    {
+        var type = Trim(request.DiscountType)?.ToUpperInvariant();
+        var value = request.DiscountValue ?? 0m;
+
+        if (type is null || value == 0m)
+        {
+            return (null, null);
+        }
+
+        var key = $"lines[{index}].discountValue";
+        if (type is not (InvoiceDiscountTypes.Percent or InvoiceDiscountTypes.Amount))
+        {
+            errors[$"lines[{index}].discountType"] = ["Discount type must be PERCENT or AMOUNT."];
+        }
+        else if (value < 0)
+        {
+            errors[key] = ["Discount cannot be negative."];
+        }
+        else if (type == InvoiceDiscountTypes.Percent && value > 100)
+        {
+            errors[key] = ["A percentage discount cannot exceed 100%."];
+        }
+        else if (type == InvoiceDiscountTypes.Amount && quantity > 0 && unitPrice >= 0
+                 && value > Math.Round(quantity * unitPrice, 2, MidpointRounding.AwayFromZero))
+        {
+            errors[key] = ["The discount cannot be more than the line's value."];
+        }
+
+        return (type, value);
+    }
+
+    /// <summary>
+    /// A line's amounts with its discount applied. The single path every screen, PDF and total
+    /// goes through, so the discount can never be applied in one place and missed in another.
+    /// </summary>
+    private static GstLineAmounts ComputeLine(InvoiceLine l, bool isIntraState) =>
+        GstCalculator.ForLine(
+            l.Quantity, l.UnitPrice, l.GstRate ?? 0m, isIntraState,
+            GstCalculator.LineDiscount(l.Quantity, l.UnitPrice, l.DiscountType, l.DiscountValue));
 
     /// <summary>
     /// Recomputes <see cref="Invoice.Amount"/> and <see cref="Invoice.TaxAmount"/> from the
@@ -742,7 +796,7 @@ public sealed class InvoiceService : IInvoiceService
 
         foreach (var line in lines)
         {
-            var amounts = GstCalculator.ForLine(line.Quantity, line.UnitPrice, line.GstRate ?? 0m, isIntraState);
+            var amounts = ComputeLine(line, isIntraState);
             taxable += amounts.TaxableValue;
             tax += amounts.TotalTax;
         }
@@ -881,18 +935,19 @@ public sealed class InvoiceService : IInvoiceService
     /// </summary>
     private static InvoiceLineDto MapLine(InvoiceLine l, bool isIntraState)
     {
-        var amounts = GstCalculator.ForLine(l.Quantity, l.UnitPrice, l.GstRate ?? 0m, isIntraState);
+        var amounts = ComputeLine(l, isIntraState);
         return new InvoiceLineDto(
             l.Id, l.InventoryItemId, l.Description, l.HsnCode,
             l.Quantity, l.UnitPrice, l.GstRate,
             amounts.TaxableValue, amounts.Cgst, amounts.Sgst, amounts.Igst, amounts.LineTotal,
-            l.SortOrder);
+            l.SortOrder,
+            amounts.GrossValue, l.DiscountType, l.DiscountValue, amounts.Discount);
     }
 
     private static InvoiceTaxSummaryDto BuildTaxSummary(Invoice i, List<InvoiceLine> lines, bool isIntraState)
     {
         var computed = lines
-            .Select(l => (Rate: l.GstRate ?? 0m, Amounts: GstCalculator.ForLine(l.Quantity, l.UnitPrice, l.GstRate ?? 0m, isIntraState)))
+            .Select(l => (Rate: l.GstRate ?? 0m, Amounts: ComputeLine(l, isIntraState)))
             .ToList();
 
         var breakdown = computed
@@ -915,7 +970,9 @@ public sealed class InvoiceService : IInvoiceService
             computed.Sum(c => c.Amounts.Sgst),
             computed.Sum(c => c.Amounts.Igst),
             computed.Sum(c => c.Amounts.TotalTax),
-            breakdown);
+            breakdown,
+            computed.Sum(c => c.Amounts.GrossValue),
+            computed.Sum(c => c.Amounts.Discount));
     }
 
     private static InvoiceStatusHistoryDto MapHistory(InvoiceStatusHistory h) => new(

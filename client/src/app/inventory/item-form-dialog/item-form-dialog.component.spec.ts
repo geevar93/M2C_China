@@ -59,6 +59,34 @@ describe('ItemFormDialogComponent', () => {
 
   afterEach(() => httpMock.verify());
 
+  it('strips digits and symbols from the unit as it is typed', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushLookups();
+
+    const input = { value: 'pcs 12/' } as HTMLInputElement;
+    fixture.componentInstance.onUnitInput({ target: input } as unknown as Event);
+
+    expect(input.value).toBe('pcs ');
+    expect(fixture.componentInstance.unit()).toBe('pcs ');
+  });
+
+  it('refuses to save a unit that is not letters only', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushLookups();
+
+    const c = fixture.componentInstance;
+    c.name.set('Pen');
+    c.categoryId.set('cat-stationery');
+    c.unit.set('50');
+    c.reorderThreshold.set('10');
+    c.save();
+
+    expect(c.error()).toContain('letters only');
+    httpMock.expectNone((r) => r.method === 'POST');
+  });
+
   it('creates an item via POST /inventory including the opening on-hand quantity', async () => {
     await configure();
     fixture.detectChanges();

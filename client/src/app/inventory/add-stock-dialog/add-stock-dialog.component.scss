@@ -1,0 +1,93 @@
+// Small, centred popup rather than the full-width form dialog.
+.asd-backdrop {
+  align-items: center;
+  animation: asd-fade .18s ease-out;
+}
+
+.asd-panel {
+  max-width: 400px;
+  animation: asd-pop .22s cubic-bezier(.2, .9, .3, 1.15);
+  transform-origin: center;
+}
+
+.asd-heading {
+  min-width: 0;
+}
+
+.asd-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asd-summary {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.asd-summary__cell {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-sm);
+  background: var(--color-page-bg);
+  border: 1px solid var(--color-border);
+  transition: background .2s, border-color .2s;
+
+  &--active {
+    background: var(--color-success-bg);
+    border-color: var(--color-success);
+
+    .asd-summary__value {
+      color: var(--color-success);
+    }
+  }
+}
+
+.asd-summary__label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--color-text-muted);
+}
+
+.asd-summary__value {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: color .2s;
+
+  .muted {
+    font-size: 12px;
+    font-weight: 400;
+  }
+}
+
+.asd-summary__arrow {
+  align-self: center;
+  color: var(--color-text-muted);
+}
+
+.asd-last-field {
+  margin-bottom: 0;
+}
+
+@keyframes asd-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes asd-pop {
+  from { opacity: 0; transform: translateY(8px) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asd-backdrop,
+  .asd-panel {
+    animation: none;
+  }
+}

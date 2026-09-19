@@ -1,12 +1,16 @@
 namespace SourcingOps.Application.Invoicing;
 
 /// <summary>The computed tax breakdown of a single invoice line.</summary>
-/// <param name="TaxableValue">Quantity * UnitPrice, rounded to 2dp. GST excluded.</param>
+/// <param name="TaxableValue">Quantity * UnitPrice, rounded to 2dp, less <paramref name="Discount"/>. GST excluded.</param>
 /// <param name="Cgst">Central GST — non-zero only on an intra-state supply.</param>
 /// <param name="Sgst">State GST — always equal to <paramref name="Cgst"/>, non-zero only intra-state.</param>
 /// <param name="Igst">Integrated GST — non-zero only on an inter-state supply.</param>
-public readonly record struct GstLineAmounts(decimal TaxableValue, decimal Cgst, decimal Sgst, decimal Igst)
+/// <param name="Discount">The line discount already taken off <paramref name="TaxableValue"/>.</param>
+public readonly record struct GstLineAmounts(decimal TaxableValue, decimal Cgst, decimal Sgst, decimal Igst, decimal Discount = 0m)
 {
+    /// <summary>Quantity * UnitPrice before the discount.</summary>
+    public decimal GrossValue => TaxableValue + Discount;
+
     public decimal TotalTax => Cgst + Sgst + Igst;
     public decimal LineTotal => TaxableValue + TotalTax;
 }
@@ -45,7 +49,8 @@ public static class GstCalculator
     /// <param name="unitPrice">Per-unit price, GST EXCLUSIVE. Must not be negative.</param>
     /// <param name="gstRatePercent">Rate as a percent — <c>18m</c> for 18%, not <c>0.18m</c>.</param>
     /// <param name="isIntraState">True splits into CGST + SGST; false yields a single IGST amount.</param>
-    public static GstLineAmounts ForLine(decimal quantity, decimal unitPrice, decimal gstRatePercent, bool isIntraState)
+    /// <param name="discount">Already-resolved discount amount (see <see cref="LineDiscount"/>), taken off before GST.</param>
+    public static GstLineAmounts ForLine(decimal quantity, decimal unitPrice, decimal gstRatePercent, bool isIntraState, decimal discount = 0m)
     {
         if (quantity < 0)
         {
@@ -62,18 +67,40 @@ public static class GstCalculator
             throw new ArgumentOutOfRangeException(nameof(gstRatePercent), "GST rate cannot be negative.");
         }
 
-        var taxableValue = Round(quantity * unitPrice);
+        var grossValue = Round(quantity * unitPrice);
+        if (discount < 0 || discount > grossValue)
+        {
+            throw new ArgumentOutOfRangeException(nameof(discount), "Discount must be between zero and the line's gross value.");
+        }
+
+        var taxableValue = grossValue - discount;
 
         if (isIntraState)
         {
             // Half the RATE, not half the tax — see the class doc on why the two are not
             // interchangeable once rounding is involved.
             var cgst = Round(taxableValue * (gstRatePercent / 2m) / 100m);
-            return new GstLineAmounts(taxableValue, cgst, cgst, 0m);
+            return new GstLineAmounts(taxableValue, cgst, cgst, 0m, discount);
         }
 
         var igst = Round(taxableValue * gstRatePercent / 100m);
-        return new GstLineAmounts(taxableValue, 0m, 0m, igst);
+        return new GstLineAmounts(taxableValue, 0m, 0m, igst, discount);
+    }
+
+    /// <summary>
+    /// The discount amount for one line. A percent applies to the line's rounded gross value and
+    /// is itself rounded to 2dp; a flat amount is taken as entered. No discount type means zero.
+    /// Range checks belong to the caller (the request validator) — this only does arithmetic.
+    /// </summary>
+    public static decimal LineDiscount(decimal quantity, decimal unitPrice, string? discountType, decimal? discountValue)
+    {
+        var value = discountValue ?? 0m;
+        return discountType switch
+        {
+            InvoiceDiscountTypes.Percent => Round(Round(quantity * unitPrice) * value / 100m),
+            InvoiceDiscountTypes.Amount => value,
+            _ => 0m
+        };
     }
 
     /// <summary>

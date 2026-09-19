@@ -9,6 +9,10 @@ import { InventoryService } from '../services/inventory.service';
 import { CreateInventoryItemRequest, InventoryItem, UpdateInventoryItemRequest } from '../models/inventory.models';
 import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_BYTES, createThumbnail } from '../../shared/utils/image-thumbnail.util';
 
+/** Anything other than a letter or a space. Mirrors the API's check in `InventoryService`. */
+const UNIT_DISALLOWED = /[^\p{L} ]/u;
+const UNIT_DISALLOWED_ALL = /[^\p{L} ]/gu;
+
 /**
  * Shared inventory item create/edit dialog (ACTION_PLAN E7-01), following
  * `VendorFormDialogComponent`'s house pattern (dialog atoms, `field`-atom
@@ -55,6 +59,8 @@ export class ItemFormDialogComponent implements OnInit, OnDestroy {
   readonly categoryId = signal('');
   readonly vendorId = signal('');
   readonly unit = signal('');
+  /** Offered in the Unit field's dropdown; any other letters-only unit may still be typed. */
+  readonly unitSuggestions = ['pcs', 'box', 'set', 'pair', 'dozen', 'pack', 'kg', 'g', 'ltr', 'ml', 'mtr', 'roll', 'carton', 'bag'];
   readonly reorderThreshold = signal('');
   readonly unitCost = signal('');
   readonly sellingPrice = signal('');
@@ -131,6 +137,14 @@ export class ItemFormDialogComponent implements OnInit, OnDestroy {
     this.closed.emit();
   }
 
+  /** Unit is a name (pcs, kg), never a number — drop anything but letters and spaces as it's typed. */
+  onUnitInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const cleaned = input.value.replace(UNIT_DISALLOWED_ALL, '');
+    if (cleaned !== input.value) input.value = cleaned;
+    this.unit.set(cleaned);
+  }
+
   save(): void {
     if (this.saving()) return;
     const name = this.name().trim();
@@ -139,6 +153,10 @@ export class ItemFormDialogComponent implements OnInit, OnDestroy {
     const reorderText = this.reorderThreshold().trim();
     if (!name || !categoryId || !unit || !reorderText) {
       this.error.set('Name, category, unit and reorder threshold are required.');
+      return;
+    }
+    if (UNIT_DISALLOWED.test(unit)) {
+      this.error.set('Unit must contain letters only (e.g. pcs, kg, box).');
       return;
     }
 

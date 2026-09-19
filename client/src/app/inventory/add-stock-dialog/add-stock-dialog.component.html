@@ -1,0 +1,70 @@
+<div class="dialog-backdrop asd-backdrop" (click)="cancel()">
+  <form
+    class="dialog-panel asd-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="asd-title"
+    (click)="$event.stopPropagation()"
+    (submit)="$event.preventDefault(); save()"
+  >
+    <div class="dialog-header">
+      <div class="asd-heading">
+        <div id="asd-title" class="dialog-title">Add Stock</div>
+        <div class="muted asd-item-name">{{ item.name }}@if (item.sku) { · {{ item.sku }} }</div>
+      </div>
+      <button type="button" class="dialog-close" (click)="cancel()" aria-label="Close">✕</button>
+    </div>
+
+    <div class="asd-summary">
+      <div class="asd-summary__cell">
+        <div class="asd-summary__label">Current</div>
+        <div class="asd-summary__value">{{ currentLabel() }} <span class="muted">{{ item.unit }}</span></div>
+      </div>
+      <div class="asd-summary__arrow" aria-hidden="true">→</div>
+      <div class="asd-summary__cell asd-summary__cell--new" [class.asd-summary__cell--active]="newTotalLabel()">
+        <div class="asd-summary__label">After adding</div>
+        <div class="asd-summary__value" aria-live="polite">
+          {{ newTotalLabel() ?? '—' }} <span class="muted">{{ item.unit }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="asd-qty">Quantity to add</label>
+      <input
+        #qtyInput
+        id="asd-qty"
+        class="field-input"
+        type="number"
+        inputmode="decimal"
+        min="0"
+        step="any"
+        placeholder="e.g. 250"
+        [value]="quantity()"
+        (input)="quantity.set($any($event.target).value); error.set(null)"
+      />
+    </div>
+
+    <div class="field asd-last-field">
+      <label for="asd-ref">Reference <span class="muted">(optional)</span></label>
+      <input
+        id="asd-ref"
+        class="field-input"
+        placeholder="PO / invoice no."
+        [value]="reference()"
+        (input)="reference.set($any($event.target).value)"
+      />
+    </div>
+
+    @if (error()) {
+      <div class="field-error" role="alert">{{ error() }}</div>
+    }
+
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-secondary" (click)="cancel()" [disabled]="saving()">Cancel</button>
+      <button type="submit" class="btn btn-primary" [disabled]="!canSave()">
+        {{ saving() ? 'Adding…' : 'Add Stock' }}
+      </button>
+    </div>
+  </form>
+</div>

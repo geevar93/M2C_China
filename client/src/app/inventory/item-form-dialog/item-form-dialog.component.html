@@ -76,8 +76,22 @@
         }
       </div>
       <div class="field">
-        <label for="if-unit">Unit <span class="muted">(e.g. pcs, kg, box)</span></label>
-        <input id="if-unit" class="field-input" [value]="unit()" (input)="unit.set($any($event.target).value)" />
+        <label for="if-unit">Unit</label>
+        <input
+          id="if-unit"
+          class="field-input"
+          list="if-unit-options"
+          autocomplete="off"
+          placeholder="e.g. pcs"
+          [value]="unit()"
+          (input)="onUnitInput($event)"
+        />
+        <datalist id="if-unit-options">
+          @for (u of unitSuggestions; track u) {
+            <option [value]="u"></option>
+          }
+        </datalist>
+        <div class="field-hint">Letters only, e.g. pcs, kg, box. Not a quantity.</div>
       </div>
       <div class="field">
         <label for="if-reorder">Reorder Threshold</label>

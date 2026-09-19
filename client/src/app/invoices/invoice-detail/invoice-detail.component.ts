@@ -18,6 +18,7 @@ import {
   CreateInvoiceRequest,
   InvoiceDetail,
   InvoiceStatusCode,
+  InvoiceDiscountType,
   UpsertInvoiceLineRequest,
   canIssueInvoices
 } from '../models/invoice.models';
@@ -62,12 +63,15 @@ interface FormLine {
   quantity: string;
   unitPrice: string;
   gstRate: string;
+  discountType: InvoiceDiscountType;
+  /** Blank means no discount. */
+  discountValue: string;
 }
 
 type MarkPaidAvailability = 'hidden' | 'disabled' | 'enabled';
 
 function emptyLine(): FormLine {
-  return { inventoryItemId: '', description: '', hsnCode: '', quantity: '1', unitPrice: '', gstRate: '' };
+  return { inventoryItemId: '', description: '', hsnCode: '', quantity: '1', unitPrice: '', gstRate: '', discountType: 'PERCENT', discountValue: '' };
 }
 
 /**
@@ -171,15 +175,10 @@ export class InvoiceDetailComponent {
   readonly itemOptions = signal<ItemOption[]>([]);
   readonly gstRates = GST_RATES;
 
-  /** Plain arithmetic, not tax logic — safe to do here. */
-  readonly formTaxableTotal = computed(() =>
-    this.formLines().reduce((sum, line) => {
-      const qty = Number(line.quantity);
-      const price = Number(line.unitPrice);
-      if (Number.isNaN(qty) || Number.isNaN(price)) return sum;
-      return sum + qty * price;
-    }, 0)
-  );
+  /** Plain arithmetic, not tax logic — safe to do here. Net of line discounts. */
+  readonly formTaxableTotal = computed(() => this.formLines().reduce((sum, line) => sum + this.lineSubtotal(line), 0));
+
+  readonly formDiscountTotal = computed(() => this.formLines().reduce((sum, line) => sum + this.lineDiscount(line), 0));
 
   /**
    * Live GST total for the form, so the rate visibly counts before saving. Only the
@@ -340,7 +339,9 @@ export class InvoiceDetailComponent {
             hsnCode: l.hsnCode ?? '',
             quantity: String(l.quantity),
             unitPrice: String(l.unitPrice),
-            gstRate: l.gstRate != null ? String(l.gstRate) : ''
+            gstRate: l.gstRate != null ? String(l.gstRate) : '',
+            discountType: l.discountType ?? 'PERCENT',
+            discountValue: l.discountValue != null ? String(l.discountValue) : ''
           }))
         : [emptyLine()]
     );
@@ -622,18 +623,40 @@ export class InvoiceDetailComponent {
     );
   }
 
-  /** Per-line taxable subtotal for the form preview. Plain arithmetic — see `formTaxableTotal`. */
   /** Line total including its GST, for the form's live preview column. */
   lineTotal(line: FormLine): number {
-    const taxable = roundMoney(this.lineSubtotal(line));
+    const taxable = this.lineSubtotal(line);
     const rate = Number(line.gstRate);
     return line.gstRate === '' || Number.isNaN(rate) ? taxable : taxable + roundMoney((taxable * rate) / 100);
   }
 
-  lineSubtotal(line: FormLine): number {
+  /** Quantity x price, rounded like the server's gross value. */
+  lineGross(line: FormLine): number {
     const qty = Number(line.quantity);
     const price = Number(line.unitPrice);
-    return Number.isNaN(qty) || Number.isNaN(price) ? 0 : qty * price;
+    return Number.isNaN(qty) || Number.isNaN(price) ? 0 : roundMoney(qty * price);
+  }
+
+  /**
+   * The line's discount for the preview — mirrors GstCalculator.LineDiscount (a percent of the
+   * rounded gross, rounded; a flat amount as entered). Clamped to the gross so an over-large
+   * entry previews as a free line; save still rejects it with a message.
+   */
+  lineDiscount(line: FormLine): number {
+    const value = Number(line.discountValue);
+    if (!line.discountValue.trim() || Number.isNaN(value) || value <= 0) return 0;
+    const gross = this.lineGross(line);
+    const discount = line.discountType === 'PERCENT' ? roundMoney((gross * value) / 100) : value;
+    return Math.min(discount, gross);
+  }
+
+  /** Per-line taxable value (after discount) for the form preview. Plain arithmetic — see `formTaxableTotal`. */
+  lineSubtotal(line: FormLine): number {
+    return roundMoney(this.lineGross(line) - this.lineDiscount(line));
+  }
+
+  setDiscountType(index: number, type: InvoiceDiscountType): void {
+    this.formLines.update((lines) => lines.map((line, i) => (i === index ? { ...line, discountType: type } : line)));
   }
 
   /**
@@ -677,6 +700,21 @@ export class InvoiceDetailComponent {
         return null;
       }
 
+      const discountText = line.discountValue.trim();
+      const discountValue = discountText ? Number(discountText) : 0;
+      if (Number.isNaN(discountValue) || discountValue < 0) {
+        this.formError.set(`${label}: discount must be a non-negative number.`);
+        return null;
+      }
+      if (line.discountType === 'PERCENT' && discountValue > 100) {
+        this.formError.set(`${label}: a percentage discount cannot exceed 100%.`);
+        return null;
+      }
+      if (line.discountType === 'AMOUNT' && discountValue > this.lineGross(line)) {
+        this.formError.set(`${label}: the discount cannot be more than the line's value.`);
+        return null;
+      }
+
       if (!line.description.trim() && !line.inventoryItemId) {
         this.formError.set(`${label}: pick an item or type a description.`);
         return null;
@@ -688,7 +726,9 @@ export class InvoiceDetailComponent {
         hsnCode: line.hsnCode.trim() || null,
         quantity,
         unitPrice,
-        gstRate
+        gstRate,
+        discountType: discountValue > 0 ? line.discountType : null,
+        discountValue: discountValue > 0 ? discountValue : null
       });
     }
 

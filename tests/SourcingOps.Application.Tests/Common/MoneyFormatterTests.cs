@@ -16,38 +16,48 @@ public class MoneyFormatterTests
     [Fact]
     public void Format_SixDigitAmount_UsesIndianLakhGrouping_NotWesternThousandsGrouping()
     {
-        MoneyFormatter.Format("INR", 147500.00m).Should().Be("INR 1,47,500.00");
+        MoneyFormatter.Format("INR", 147500.00m).Should().Be("₹1,47,500.00");
     }
 
     [Fact]
     public void Format_CroreRangeAmount_GroupsCorrectly()
     {
-        MoneyFormatter.Format("INR", 12347500.00m).Should().Be("INR 1,23,47,500.00");
+        MoneyFormatter.Format("INR", 12347500.00m).Should().Be("₹1,23,47,500.00");
     }
 
     [Fact]
     public void Format_SmallAmount_NoGroupingNeeded()
     {
-        MoneyFormatter.Format("INR", 180.00m).Should().Be("INR 180.00");
+        MoneyFormatter.Format("INR", 180.00m).Should().Be("₹180.00");
     }
 
     [Fact]
     public void Format_AmountBelowOneThousand_LessThanTheFirstGroupBoundary()
     {
-        MoneyFormatter.Format("INR", 999.99m).Should().Be("INR 999.99");
+        MoneyFormatter.Format("INR", 999.99m).Should().Be("₹999.99");
     }
 
     [Fact]
-    public void Format_KeepsIsoCurrencyCodePrefix_NotTheRupeeGlyph()
+    public void Format_Inr_UsesTheRupeeSymbol_NotTheIsoCode()
     {
-        // M6/N-30: the ISO code is deliberate on a tax invoice; the glyph is never used
-        // because the QuestPDF default font has no glyph for it.
-        MoneyFormatter.Format("INR", 100m).Should().StartWith("INR ").And.NotContain("₹");
+        MoneyFormatter.Format("INR", 100m).Should().Be("₹100.00");
+    }
+
+    [Fact]
+    public void Format_NegativeInr_PutsTheSignBeforeTheSymbol()
+    {
+        MoneyFormatter.Format("INR", -1500m).Should().Be("-₹1,500.00");
+    }
+
+    [Fact]
+    public void Format_OtherCurrency_KeepsItsIsoCodePrefix()
+    {
+        MoneyFormatter.Format("USD", 1000m).Should().Be("USD 1,000.00");
     }
 
     [Fact]
     public void Format_AlwaysTwoDecimalPlaces_EvenForAWholeNumber()
     {
-        MoneyFormatter.Format("INR", 5000m).Should().Be("INR 5,000.00");
+        MoneyFormatter.Format("INR", 5000m).Should().Be("₹5,000.00");
     }
 }

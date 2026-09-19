@@ -144,7 +144,18 @@ export interface InvoiceLine {
   igstAmount: number;
   lineTotal: number;
   sortOrder: number;
+  /** `quantity x unitPrice` before the discount. `taxableValue` is this less `discountAmount`. */
+  grossValue: number;
+  /** How `discountValue` is read; null when the line has no discount. */
+  discountType: InvoiceDiscountType | null;
+  /** What the user entered: a percent (`10` = 10%) or a flat amount off the whole line. */
+  discountValue: number | null;
+  /** The resolved discount, already taken off before GST. */
+  discountAmount: number;
 }
+
+/** A line discount is either a percent of the line's value or a flat amount off the whole line. */
+export type InvoiceDiscountType = 'PERCENT' | 'AMOUNT';
 
 /** Taxable value and tax grouped by rate — the rate-wise summary a GST invoice carries. */
 export interface InvoiceTaxRateBreakdown {
@@ -170,6 +181,10 @@ export interface InvoiceTaxSummary {
   igstAmount: number;
   totalTax: number;
   rateBreakdown: InvoiceTaxRateBreakdown[];
+  /** Sum of every line's value before discounts. */
+  grossValue: number;
+  /** Sum of every line's discount. `taxableValue` = `grossValue` - `totalDiscount`. */
+  totalDiscount: number;
 }
 
 /**
@@ -189,6 +204,9 @@ export interface UpsertInvoiceLineRequest {
   quantity: number;
   unitPrice: number | null;
   gstRate: number | null;
+  /** Omit (or send a zero value) for no discount. The discount is taken off before GST. */
+  discountType?: InvoiceDiscountType | null;
+  discountValue?: number | null;
 }
 
 /**

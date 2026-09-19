@@ -68,6 +68,22 @@
   gap: var(--space-6);
 }
 
+.qty-value {
+  display: inline-block;
+  padding: 1px 4px;
+  margin: -1px -4px;
+  border-radius: var(--radius-sm);
+
+  &--flash {
+    animation: qty-flash 1.6s ease-out;
+  }
+}
+
+@keyframes qty-flash {
+  0%, 30% { background: var(--color-success-bg); transform: scale(1.08); }
+  100% { background: transparent; transform: none; }
+}
+
 .qty-unit {
   margin-left: .35em;
 }

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using SourcingOps.Application.Common;
 using SourcingOps.Application.Interfaces;
@@ -158,7 +159,7 @@ public sealed class InventoryService : IInventoryService
             Category = category,
             VendorId = vendor?.Id,
             Vendor = vendor,
-            Unit = Trim(request.Unit) ?? "pcs",
+            Unit = NormalizeUnit(request.Unit),
             // Opening balance only — every later movement goes through RecordInboundAsync or a
             // shipment line, which is why UpdateInventoryItemRequest has no OnHandQty at all.
             OnHandQty = request.OnHandQty ?? 0m,
@@ -250,7 +251,7 @@ public sealed class InventoryService : IInventoryService
         item.Category = category;
         item.VendorId = vendor?.Id;
         item.Vendor = vendor;
-        item.Unit = Trim(request.Unit) ?? "pcs";
+        item.Unit = NormalizeUnit(request.Unit);
         item.ReorderThreshold = reorderThreshold;
         item.UnitCost = request.UnitCost;
         item.SellingPrice = request.SellingPrice;
@@ -552,6 +553,28 @@ public sealed class InventoryService : IInventoryService
     }
 
     private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// A unit is a name (pcs, kg, box), never a figure — numbers typed here were being read as
+    /// quantities. Letters and spaces only; omitted still defaults to "pcs".
+    /// </summary>
+    private static string NormalizeUnit(string? value)
+    {
+        var unit = Trim(value);
+        if (unit is null)
+        {
+            return "pcs";
+        }
+
+        if (!UnitPattern.IsMatch(unit))
+        {
+            throw new AppValidationException("unit", "Unit must contain letters only (e.g. pcs, kg, box).");
+        }
+
+        return unit;
+    }
+
+    private static readonly Regex UnitPattern = new(@"^[\p{L} ]+$", RegexOptions.Compiled);
 
     private static DateTime AsUtc(DateTime value) => DateTime.SpecifyKind(value, DateTimeKind.Utc);
 

@@ -102,6 +102,7 @@
                   }
                   @if (canEdit()) {
                     <div class="row-actions">
+                      <button type="button" class="row-action-link" (click)="openAddStock(r)">+ Add Stock</button>
                       <button type="button" class="row-action-link" (click)="openEdit(r)">Edit</button>
                     </div>
                   }
@@ -110,7 +111,7 @@
             </td>
             <td class="muted">{{ r.categoryName }}</td>
             <td class="muted">{{ r.vendorName }}</td>
-            <td class="align-right"><strong [style.color]="r.qtyColor">{{ r.qtyLabel }}</strong><span class="muted qty-unit">{{ r.unit }}</span></td>
+            <td class="align-right"><strong class="qty-value" [class.qty-value--flash]="flashId() === r.id" [style.color]="r.qtyColor">{{ r.qtyLabel }}</strong><span class="muted qty-unit">{{ r.unit }}</span></td>
             <td class="align-right muted">{{ r.reorderLabel }}</td>
             <td>
               <div class="level-cell">
@@ -155,6 +156,10 @@
 
   @if (editItem(); as ei) {
     <app-inventory-item-form-dialog [item]="ei" (closed)="cancelEdit()" (saved)="onItemSaved($event)"></app-inventory-item-form-dialog>
+  }
+
+  @if (addStockItem(); as si) {
+    <app-inventory-add-stock-dialog [item]="si" (closed)="cancelAddStock()" (saved)="onStockAdded($event)"></app-inventory-add-stock-dialog>
   }
 
   @if (imageViewer(); as iv) {

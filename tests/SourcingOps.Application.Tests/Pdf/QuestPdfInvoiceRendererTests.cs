@@ -72,4 +72,47 @@ public class QuestPdfInvoiceRendererTests
         withBlank.Should().BeEquivalentTo(withNull,
             "a blank GSTIN must be treated exactly like an absent one — no stray empty \"GSTIN:\" line");
     }
+
+    [Fact]
+    public void Render_WithLineDiscount_AddsTheDiscountColumnAndTotals()
+    {
+        var sut = new QuestPdfInvoiceRenderer();
+        var discounted = BaseModel(null) with
+        {
+            Amount = 900m,
+            TaxAmount = 162m,
+            TotalAmount = 1062m,
+            Lines = [new InvoicePdfLine("Consulting services", "998311", 1m, 1000m, 18m, 900m, 0m, 0m, 162m, 1062m, DiscountAmount: 100m)],
+            TaxSummary = new InvoicePdfTaxSummary("27", "Maharashtra", IsIntraState: false, 900m, 0m, 0m, 162m, 162m, TotalDiscount: 100m)
+        };
+
+        var bytes = sut.Render(discounted);
+
+        bytes.Should().NotBeEmpty();
+        bytes.Should().NotBeEquivalentTo(sut.Render(BaseModel(null)));
+    }
+
+    [Fact]
+    public void Render_RupeeSymbol_IsAvailableInTheBundledFont_WithoutSystemFonts()
+    {
+        // The API container (Alpine) has no system fonts, so ₹ must come from QuestPDF's
+        // bundled Lato. On a dev box a missing glyph would silently fall back to a Windows
+        // font; switching environment fonts off reproduces the container.
+        var previousEnvironmentFonts = QuestPDF.Settings.UseEnvironmentFonts;
+        var previousGlyphCheck = QuestPDF.Settings.CheckIfAllTextGlyphsAreAvailable;
+        try
+        {
+            QuestPDF.Settings.UseEnvironmentFonts = false;
+            QuestPDF.Settings.CheckIfAllTextGlyphsAreAvailable = true;
+
+            var act = () => new QuestPdfInvoiceRenderer().Render(BaseModel(null));
+
+            act.Should().NotThrow("every amount on the invoice is printed with the ₹ symbol");
+        }
+        finally
+        {
+            QuestPDF.Settings.UseEnvironmentFonts = previousEnvironmentFonts;
+            QuestPDF.Settings.CheckIfAllTextGlyphsAreAvailable = previousGlyphCheck;
+        }
+    }
 }

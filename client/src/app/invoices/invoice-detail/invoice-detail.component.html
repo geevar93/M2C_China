@@ -234,6 +234,7 @@
                   <th>HSN/SAC</th>
                   <th class="align-right">Qty</th>
                   <th class="align-right">Unit price</th>
+                  <th class="align-right">Discount</th>
                   <th class="align-right">GST</th>
                   <th class="align-right">Taxable</th>
                   <th class="align-right">Total incl. GST</th>
@@ -295,6 +296,40 @@
                       />
                     </td>
                     <td>
+                      <div class="inv-disc">
+                        <input
+                          class="field-input inv-disc__input"
+                          type="number"
+                          min="0"
+                          [attr.max]="line.discountType === 'PERCENT' ? 100 : null"
+                          step="0.01"
+                          placeholder="0"
+                          [value]="line.discountValue"
+                          (input)="updateLine($index, 'discountValue', $any($event.target).value)"
+                          [attr.aria-label]="'Discount for line ' + ($index + 1)"
+                        />
+                        <div class="inv-disc__toggle" role="group" [attr.aria-label]="'Discount type for line ' + ($index + 1)">
+                          <button
+                            type="button"
+                            [class.is-active]="line.discountType === 'PERCENT'"
+                            [attr.aria-pressed]="line.discountType === 'PERCENT'"
+                            (click)="setDiscountType($index, 'PERCENT')"
+                            title="Percent of the line value"
+                          >%</button>
+                          <button
+                            type="button"
+                            [class.is-active]="line.discountType === 'AMOUNT'"
+                            [attr.aria-pressed]="line.discountType === 'AMOUNT'"
+                            (click)="setDiscountType($index, 'AMOUNT')"
+                            title="Flat amount off the whole line"
+                          >₹</button>
+                        </div>
+                      </div>
+                      @if (lineDiscount(line) > 0) {
+                        <div class="inv-disc__hint muted">−{{ formatInr(lineDiscount(line)) }}</div>
+                      }
+                    </td>
+                    <td>
                       <select
                         class="field-input inv-lines__rate"
                         [value]="line.gstRate"
@@ -325,6 +360,12 @@
             </table>
           </div>
 
+          @if (formDiscountTotal() > 0) {
+            <div class="inv-lines__total inv-lines__total--sub">
+              <span class="muted">Discount</span>
+              <span class="nowrap">−{{ formatInr(formDiscountTotal()) }}</span>
+            </div>
+          }
           <div class="inv-lines__total inv-lines__total--sub">
             <span class="muted">Taxable value</span>
             <span class="nowrap">{{ formatInr(formTaxableTotal()) }}</span>
@@ -426,6 +467,9 @@
               <th>HSN/SAC</th>
               <th class="align-right">Qty</th>
               <th class="align-right">Unit price</th>
+              @if (inv.taxSummary.totalDiscount > 0) {
+                <th class="align-right">Discount</th>
+              }
               <th class="align-right">GST</th>
               <th class="align-right">Taxable</th>
               @if (inv.taxSummary.isIntraState) {
@@ -444,6 +488,18 @@
                 <td>{{ line.hsnCode || '—' }}</td>
                 <td class="align-right nowrap">{{ line.quantity }}</td>
                 <td class="align-right nowrap">{{ formatInr(line.unitPrice) }}</td>
+                @if (inv.taxSummary.totalDiscount > 0) {
+                  <td class="align-right nowrap">
+                    @if (line.discountAmount > 0) {
+                      −{{ formatInr(line.discountAmount) }}
+                      @if (line.discountType === 'PERCENT') {
+                        <span class="muted">({{ line.discountValue }}%)</span>
+                      }
+                    } @else {
+                      —
+                    }
+                  </td>
+                }
                 <td class="align-right nowrap">{{ line.gstRate !== null ? line.gstRate + '%' : '—' }}</td>
                 <td class="align-right nowrap">{{ formatInr(line.taxableValue) }}</td>
                 @if (inv.taxSummary.isIntraState) {
@@ -466,6 +522,16 @@
       </div>
 
       <div class="totals">
+        @if (inv.taxSummary.totalDiscount > 0) {
+          <div class="totals-row">
+            <span class="muted">Gross value</span>
+            <span class="nowrap">{{ formatInr(inv.taxSummary.grossValue) }}</span>
+          </div>
+          <div class="totals-row">
+            <span class="muted">Discount</span>
+            <span class="nowrap">−{{ formatInr(inv.taxSummary.totalDiscount) }}</span>
+          </div>
+        }
         <div class="totals-row">
           <span class="muted">Taxable value</span>
           <span class="nowrap">{{ formatInr(inv.amount) }}</span>

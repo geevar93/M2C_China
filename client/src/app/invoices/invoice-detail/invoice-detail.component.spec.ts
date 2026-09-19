@@ -103,7 +103,11 @@ function invoice(overrides: Partial<InvoiceDetail> = {}): InvoiceDetail {
         sgstAmount: 0,
         igstAmount: 22500.0,
         lineTotal: 147500.0,
-        sortOrder: 0
+        sortOrder: 0,
+        grossValue: 125000.0,
+        discountType: null,
+        discountValue: null,
+        discountAmount: 0
       }
     ],
     taxSummary: {
@@ -115,7 +119,9 @@ function invoice(overrides: Partial<InvoiceDetail> = {}): InvoiceDetail {
       sgstAmount: 0,
       igstAmount: 22500.0,
       totalTax: 22500.0,
-      rateBreakdown: [{ gstRate: 18, taxableValue: 125000.0, cgstAmount: 0, sgstAmount: 0, igstAmount: 22500.0 }]
+      rateBreakdown: [{ gstRate: 18, taxableValue: 125000.0, cgstAmount: 0, sgstAmount: 0, igstAmount: 22500.0 }],
+      grossValue: 125000.0,
+      totalDiscount: 0
     },
     statusHistory: [
       {
@@ -257,6 +263,60 @@ describe('InvoiceDetailComponent', () => {
     expect(fixture.componentInstance.invoice()?.totalAmount).toBe(147500.0);
   });
 
+  it('previews line discounts before GST and sends them with the create request', async () => {
+    await configure(null);
+    fixture.detectChanges();
+    flushMasterData();
+    flushCompanySettings();
+    flushCustomers();
+    flushItems();
+    fixture.detectChanges();
+
+    const c = fixture.componentInstance;
+    c.formCustomerId.set('cust-2');
+    fixture.detectChanges();
+    flushShipments();
+    c.formInvoiceDate.set('2026-08-03');
+    c.formLines.set([
+      { inventoryItemId: '', description: 'Chains', hsnCode: '7113', quantity: '2', unitPrice: '500', gstRate: '18', discountType: 'PERCENT', discountValue: '10' },
+      { inventoryItemId: '', description: 'Freight', hsnCode: '996511', quantity: '1', unitPrice: '1000', gstRate: '18', discountType: 'AMOUNT', discountValue: '250' }
+    ]);
+
+    // 1000 - 10% = 900, and 1000 - 250 = 750; GST is charged on the discounted values.
+    expect(c.formDiscountTotal()).toBe(350);
+    expect(c.formTaxableTotal()).toBe(1650);
+    expect(c.formTaxTotal()).toBe(297);
+
+    c.save();
+    const req = httpMock.expectOne((r) => r.url === '/api/v1/invoices' && r.method === 'POST');
+    expect(req.request.body.lines[0]).toEqual(jasmine.objectContaining({ discountType: 'PERCENT', discountValue: 10 }));
+    expect(req.request.body.lines[1]).toEqual(jasmine.objectContaining({ discountType: 'AMOUNT', discountValue: 250 }));
+    req.flush(invoice({ id: 'new-inv-id' }));
+  });
+
+  it('refuses a flat discount larger than the line value without calling the API', async () => {
+    await configure(null);
+    fixture.detectChanges();
+    flushMasterData();
+    flushCompanySettings();
+    flushCustomers();
+    flushItems();
+    fixture.detectChanges();
+
+    const c = fixture.componentInstance;
+    c.formCustomerId.set('cust-2');
+    fixture.detectChanges();
+    flushShipments();
+    c.formInvoiceDate.set('2026-08-03');
+    c.formLines.set([
+      { inventoryItemId: '', description: 'Freight', hsnCode: '996511', quantity: '1', unitPrice: '100', gstRate: '18', discountType: 'AMOUNT', discountValue: '150' }
+    ]);
+    c.save();
+
+    expect(c.formError()).toContain('more than the line');
+    httpMock.expectNone((r) => r.url === '/api/v1/invoices' && r.method === 'POST');
+  });
+
   it('POSTs a create request in generate mode and navigates to the new invoice', async () => {
     await configure(null);
     fixture.detectChanges();
@@ -272,7 +332,7 @@ describe('InvoiceDetailComponent', () => {
     fixture.componentInstance.formInvoiceDate.set('2026-08-03');
     fixture.componentInstance.formLineDescription.set('Freight forwarding');
     fixture.componentInstance.formLines.set([
-      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '50000', gstRate: '18' }
+      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '50000', gstRate: '18', discountType: 'PERCENT', discountValue: '' }
     ]);
     fixture.componentInstance.save();
 
@@ -292,7 +352,9 @@ describe('InvoiceDetailComponent', () => {
           hsnCode: '996511',
           quantity: 1,
           unitPrice: 50000,
-          gstRate: 18
+          gstRate: 18,
+          discountType: null,
+          discountValue: null
         }
       ]
     });
@@ -318,7 +380,7 @@ describe('InvoiceDetailComponent', () => {
     flushShipments();
     fixture.componentInstance.formInvoiceDate.set('2026-08-03');
     fixture.componentInstance.formLines.set([
-      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '125000', gstRate: '18' }
+      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '125000', gstRate: '18', discountType: 'PERCENT', discountValue: '' }
     ]);
     fixture.componentInstance.isEditing.set(true);
     fixture.componentInstance.save();
@@ -537,7 +599,7 @@ describe('InvoiceDetailComponent', () => {
     fixture.componentInstance.formShipmentId.set('shp-9');
     fixture.componentInstance.formInvoiceDate.set('2026-08-03');
     fixture.componentInstance.formLines.set([
-      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '50000', gstRate: '18' }
+      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '50000', gstRate: '18', discountType: 'PERCENT', discountValue: '' }
     ]);
     fixture.componentInstance.save();
 
@@ -620,7 +682,7 @@ describe('InvoiceDetailComponent', () => {
     // Deliberately leave formShipmentId unset.
     fixture.componentInstance.formInvoiceDate.set('2026-08-03');
     fixture.componentInstance.formLines.set([
-      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '50000', gstRate: '18' }
+      { inventoryItemId: '', description: 'Freight forwarding', hsnCode: '996511', quantity: '1', unitPrice: '50000', gstRate: '18', discountType: 'PERCENT', discountValue: '' }
     ]);
     fixture.componentInstance.save();
 
