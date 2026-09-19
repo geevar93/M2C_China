@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using FluentAssertions;
 using Moq;
 using SourcingOps.Application.Common;
@@ -20,11 +21,20 @@ public class InventoryServiceTests
 {
     private static readonly Guid Actor = Guid.NewGuid();
 
-    private static InventoryService CreateSut(AppDbContext db, out Mock<IAuditLogger> auditMock)
+    private static InventoryService CreateSut(AppDbContext db, out Mock<IAuditLogger> auditMock) =>
+        CreateSut(db, out auditMock, out _);
+
+    private static InventoryService CreateSut(AppDbContext db, out Mock<IAuditLogger> auditMock, out Mock<IFileStorage> storageMock)
     {
         auditMock = new Mock<IAuditLogger>();
-        return new InventoryService(db, auditMock.Object);
+        storageMock = new Mock<IFileStorage>();
+        storageMock.Setup(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string path, Stream _, CancellationToken _) => path);
+        return new InventoryService(db, auditMock.Object, storageMock.Object);
     }
+
+    private static readonly byte[] PngBytes = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
+    private static readonly byte[] JpegBytes = [0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0, 0];
 
     private sealed record Fixture(Category Jewellery, Category Tools, Vendor Vendor);
 
@@ -243,14 +253,13 @@ public class InventoryServiceTests
         var item = AddItem(db, f, "Adjustable Wrench", onHand: 145m, reorder: 200m);
         var sut = CreateSut(db, out _);
 
-        // UpdateInventoryItemRequest has no OnHandQty at all — this asserts the balance is
-        // untouched by an otherwise wholesale edit, which is the guarantee that decision buys.
+        // OnHandQty omitted from the request — the balance must be left untouched.
         var result = await sut.UpdateAsync(item.Id,
             new UpdateInventoryItemRequest("Renamed Wrench", "TLS-WRN-999", "New description", f.Tools.Id, f.Vendor.Id, "box", 50m, 700m), Actor);
 
         result!.Name.Should().Be("Renamed Wrench");
         result.Category.Name.Should().Be("Tools");
-        result.OnHandQty.Should().Be(145m, "a plain edit must never rewrite a balance an inbound entry or shipment is the audit record for");
+        result.OnHandQty.Should().Be(145m, "an edit that doesn't send onHandQty must not rewrite the balance");
         result.StockLevel.Should().Be(StockLevels.Healthy, "145 is now above the lowered threshold of 50");
     }
 
@@ -713,5 +722,119 @@ public class InventoryServiceTests
 
         result.Page.Should().Be(1);
         result.PageSize.Should().Be(25);
+    }
+
+    // ---- Edited count (onHandQty on update) ------------------------------------------------
+
+    [Fact]
+    public async Task UpdateAsync_WithChangedOnHandQty_SetsBalanceAndRecordsAdjustment()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Ring", onHand: 40m, reorder: 10m);
+        var sut = CreateSut(db, out _);
+
+        var result = await sut.UpdateAsync(item.Id,
+            new UpdateInventoryItemRequest("Ring", null, null, f.Jewellery.Id, null, "pcs", 10m, null, OnHandQty: 25m), Actor);
+
+        result!.OnHandQty.Should().Be(25m);
+        var adjustment = await db.InventoryStockAdjustments.SingleAsync(a => a.InventoryItemId == item.Id);
+        adjustment.PreviousQty.Should().Be(40m);
+        adjustment.CountedQty.Should().Be(25m);
+        adjustment.Delta.Should().Be(-15m);
+        adjustment.Reason.Should().Be(InventoryService.CountEditedReason);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WithUnchangedOnHandQty_RecordsNoAdjustment()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Ring", onHand: 40m, reorder: 10m);
+        var sut = CreateSut(db, out _);
+
+        await sut.UpdateAsync(item.Id,
+            new UpdateInventoryItemRequest("Ring", null, null, f.Jewellery.Id, null, "pcs", 10m, null, OnHandQty: 40m), Actor);
+
+        (await db.InventoryStockAdjustments.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UpdateAsync_NegativeOnHandQty_Throws()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Ring", onHand: 40m, reorder: 10m);
+        var sut = CreateSut(db, out _);
+
+        var act = () => sut.UpdateAsync(item.Id,
+            new UpdateInventoryItemRequest("Ring", null, null, f.Jewellery.Id, null, "pcs", 10m, null, OnHandQty: -1m), Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("onHandQty");
+    }
+
+    // ---- Images -----------------------------------------------------------------------------
+
+    [Fact]
+    public async Task SetImageAsync_StoresImageAndReturnsInlineThumbnail()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Ring", onHand: 1m, reorder: 0m);
+        var sut = CreateSut(db, out _, out var storage);
+
+        var result = await sut.SetImageAsync(item.Id, new MemoryStream(PngBytes), PngBytes.Length, JpegBytes, Actor);
+
+        result!.HasImage.Should().BeTrue();
+        result.ThumbnailDataUrl.Should().StartWith("data:image/jpeg;base64,");
+        storage.Verify(s => s.SaveAsync(It.Is<string>(p => p.StartsWith($"inventory-images/{item.Id}/") && p.EndsWith(".png")),
+            It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
+        (await db.InventoryItems.SingleAsync(i => i.Id == item.Id)).ImageContentType.Should().Be("image/png");
+    }
+
+    [Fact]
+    public async Task SetImageAsync_ReplacingImage_DeletesPreviousFile()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Ring", onHand: 1m, reorder: 0m);
+        var sut = CreateSut(db, out _, out var storage);
+
+        await sut.SetImageAsync(item.Id, new MemoryStream(PngBytes), PngBytes.Length, JpegBytes, Actor);
+        var firstPath = (await db.InventoryItems.SingleAsync(i => i.Id == item.Id)).ImagePath!;
+        await sut.SetImageAsync(item.Id, new MemoryStream(JpegBytes), JpegBytes.Length, JpegBytes, Actor);
+
+        storage.Verify(s => s.DeleteAsync(firstPath, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetImageAsync_NonImageBytes_Throws()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Ring", onHand: 1m, reorder: 0m);
+        var sut = CreateSut(db, out _);
+        var pdf = "%PDF-1.7 fake"u8.ToArray();
+
+        var act = () => sut.SetImageAsync(item.Id, new MemoryStream(pdf), pdf.Length, JpegBytes, Actor);
+
+        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("file");
+    }
+
+    [Fact]
+    public async Task RemoveImageAsync_ClearsImageAndDeletesFile()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var item = AddItem(db, f, "Ring", onHand: 1m, reorder: 0m);
+        var sut = CreateSut(db, out _, out var storage);
+        await sut.SetImageAsync(item.Id, new MemoryStream(PngBytes), PngBytes.Length, JpegBytes, Actor);
+        var path = (await db.InventoryItems.SingleAsync(i => i.Id == item.Id)).ImagePath!;
+
+        var result = await sut.RemoveImageAsync(item.Id, Actor);
+
+        result!.HasImage.Should().BeFalse();
+        result.ThumbnailDataUrl.Should().BeNull();
+        storage.Verify(s => s.DeleteAsync(path, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

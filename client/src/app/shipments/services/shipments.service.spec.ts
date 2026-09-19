@@ -136,11 +136,12 @@ describe('ShipmentsService', () => {
     req.flush(DETAIL);
   });
 
-  it('GETs the document list for a shipment', () => {
-    service.listDocuments('shp-1').subscribe();
-    const req = httpMock.expectOne('/api/v1/shipments/shp-1/documents');
-    expect(req.request.method).toBe('GET');
-    req.flush([]);
+  it('GETs the document list for a shipment and unwraps the { items } envelope', () => {
+    let result: unknown;
+    service.listDocuments('shp-1').subscribe((docs) => (result = docs));
+    const req = httpMock.expectOne((r) => r.url === '/api/v1/shipments/shp-1/documents' && r.method === 'GET');
+    req.flush({ items: [] });
+    expect(result).toEqual([]);
   });
 
   it('uploads a document as multipart form data', () => {

@@ -20,10 +20,14 @@ public class VendorServiceTests
 {
     private static readonly Guid Actor = Guid.NewGuid();
 
-    private static VendorService CreateSut(AppDbContext db, out Mock<IAuditLogger> auditMock)
+    private static VendorService CreateSut(AppDbContext db, out Mock<IAuditLogger> auditMock) =>
+        CreateSut(db, out auditMock, out _);
+
+    private static VendorService CreateSut(AppDbContext db, out Mock<IAuditLogger> auditMock, out Mock<IFileStorage> storageMock)
     {
         auditMock = new Mock<IAuditLogger>();
-        return new VendorService(db, auditMock.Object);
+        storageMock = new Mock<IFileStorage>();
+        return new VendorService(db, auditMock.Object, storageMock.Object);
     }
 
     private sealed record Fixture(VendorStatus Active, VendorStatus OnHold, Category Jewellery, Category Furniture);
@@ -285,5 +289,56 @@ public class VendorServiceTests
         detail.CatalogSections.Should().ContainSingle(s => s.Title == "Spring 2026 Collection");
         detail.CatalogSections.Single().Documents.Should().ContainSingle(d => d.OriginalFilename == "catalog.pdf");
         detail.CatalogSections.Single().VendorName.Should().Be(vendor.Name);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_RemovesVendorSectionsDocumentsAndStoredFiles_AndUnlinksInventory()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out var auditMock, out var storageMock);
+        var vendor = await sut.CreateAsync(ValidRequest(f), Actor);
+
+        var section = new CatalogSection
+        {
+            Id = Guid.NewGuid(), VendorId = vendor.Id, Title = "AW26", CategoryId = f.Jewellery.Id, CreatedAt = DateTime.UtcNow
+        };
+        db.CatalogSections.Add(section);
+        db.CatalogDocuments.Add(new CatalogDocument
+        {
+            Id = Guid.NewGuid(), CatalogSectionId = section.Id, FilePath = "catalog-docs/a.pdf",
+            OriginalFilename = "a.pdf", SizeBytes = 1, IsLatest = true, UploadedByUserId = Actor, UploadedAt = DateTime.UtcNow
+        });
+        var docType = new DocumentType { Id = Guid.NewGuid(), Code = "LICENCE", Label = "Licence", IsActive = true, SortOrder = 1 };
+        db.DocumentTypes.Add(docType);
+        db.VendorDocuments.Add(new VendorDocument
+        {
+            Id = Guid.NewGuid(), VendorId = vendor.Id, FilePath = "vendor-docs/licence.pdf", OriginalFilename = "licence.pdf",
+            SizeBytes = 1, DocTypeId = docType.Id, UploadedByUserId = Actor, UploadedAt = DateTime.UtcNow
+        });
+        var item = new InventoryItem { Id = Guid.NewGuid(), Name = "Ring", CategoryId = f.Jewellery.Id, VendorId = vendor.Id };
+        db.InventoryItems.Add(item);
+        await db.SaveChangesAsync();
+
+        var deleted = await sut.DeleteAsync(vendor.Id, Actor);
+
+        deleted.Should().BeTrue();
+        (await db.Vendors.AnyAsync(v => v.Id == vendor.Id)).Should().BeFalse();
+        (await db.CatalogSections.AnyAsync(s => s.VendorId == vendor.Id)).Should().BeFalse();
+        (await db.VendorDocuments.AnyAsync(d => d.VendorId == vendor.Id)).Should().BeFalse();
+        (await db.InventoryItems.SingleAsync(i => i.Id == item.Id)).VendorId.Should().BeNull();
+        storageMock.Verify(s => s.DeleteAsync("catalog-docs/a.pdf", It.IsAny<CancellationToken>()), Times.Once);
+        storageMock.Verify(s => s.DeleteAsync("vendor-docs/licence.pdf", It.IsAny<CancellationToken>()), Times.Once);
+        auditMock.Verify(a => a.LogAsync(Actor, "VendorDeleted", "Vendor", vendor.Id.ToString(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_UnknownId_ReturnsFalse()
+    {
+        using var db = TestDbContextFactory.Create();
+        SeedMasterData(db);
+        var sut = CreateSut(db, out _);
+
+        (await sut.DeleteAsync(Guid.NewGuid(), Actor)).Should().BeFalse();
     }
 }

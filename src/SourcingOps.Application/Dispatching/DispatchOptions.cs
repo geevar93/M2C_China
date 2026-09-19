@@ -27,7 +27,9 @@ public sealed class DispatchOptions
     /// link expires; a downloaded one is not.
     /// </remarks>
     public string MessageTemplate { get; set; } =
-        "Hi {CustomerName}, sharing our catalog \"{CatalogName}\" with you: {DocumentLink}\n\n" +
+        // The link sits on its own line: WhatsApp only turns a URL into a tappable link
+        // reliably when whitespace surrounds it.
+        "Hi {CustomerName}, sharing our catalog \"{CatalogName}\" with you:\n{DocumentLink}\n\n" +
         "This is a temporary link — it opens the PDF directly on your phone and stops working after " +
         "{LinkExpiryHours} hours, so please download and save the file soon. " +
         "Let us know if you have any questions!";

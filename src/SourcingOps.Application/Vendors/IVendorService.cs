@@ -12,4 +12,11 @@ public interface IVendorService
 
     /// <summary>Null return means the vendor id was not found.</summary>
     Task<VendorDetailDto?> UpdateAsync(Guid id, UpdateVendorRequest request, Guid actorUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes the vendor with its catalog sections, catalog documents and compliance documents
+    /// (stored files included). Inventory items keep their rows with the vendor link cleared.
+    /// False means the vendor id was not found.
+    /// </summary>
+    Task<bool> DeleteAsync(Guid id, Guid actorUserId, CancellationToken ct = default);
 }

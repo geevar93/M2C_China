@@ -24,11 +24,13 @@ public sealed class VendorService : IVendorService
 {
     private readonly IAppDbContext _db;
     private readonly IAuditLogger _audit;
+    private readonly IFileStorage _fileStorage;
 
-    public VendorService(IAppDbContext db, IAuditLogger audit)
+    public VendorService(IAppDbContext db, IAuditLogger audit, IFileStorage fileStorage)
     {
         _db = db;
         _audit = audit;
+        _fileStorage = fileStorage;
     }
 
     // ---- List / search / filter (E5-04) --------------------------------------------
@@ -178,6 +180,47 @@ public sealed class VendorService : IVendorService
         await _audit.LogAsync(actorUserId, "VendorUpdated", "Vendor", vendor.Id.ToString(), new { vendor.Name, StatusCode = status.Code }, ct);
 
         return MapDetail(vendor);
+    }
+
+    // ---- Delete -------------------------------------------------------------------------
+
+    public async Task<bool> DeleteAsync(Guid id, Guid actorUserId, CancellationToken ct = default)
+    {
+        var vendor = await _db.Vendors
+            .Include(v => v.CatalogSections).ThenInclude(s => s.Documents)
+            .Include(v => v.VendorDocuments)
+            .FirstOrDefaultAsync(v => v.Id == id, ct);
+        if (vendor is null)
+        {
+            return false;
+        }
+
+        // Same ordering as CatalogService.DeleteAsync: stored files first, so a storage failure
+        // leaves the rows (the only path to the files) intact rather than orphaning them.
+        foreach (var document in vendor.CatalogSections.SelectMany(s => s.Documents))
+        {
+            await _fileStorage.DeleteAsync(document.FilePath, ct);
+        }
+        foreach (var document in vendor.VendorDocuments)
+        {
+            await _fileStorage.DeleteAsync(document.FilePath, ct);
+        }
+
+        // Inventory items only reference the vendor optionally (SET NULL in the database);
+        // clear them explicitly too so the behaviour doesn't depend on the provider.
+        var linkedItems = await _db.InventoryItems.Where(i => i.VendorId == id).ToListAsync(ct);
+        foreach (var item in linkedItems)
+        {
+            item.VendorId = null;
+        }
+
+        // Cascades to vendor_categories, catalog_sections → catalog_documents, vendor_documents.
+        _db.Vendors.Remove(vendor);
+        await _db.SaveChangesAsync(ct);
+
+        await _audit.LogAsync(actorUserId, "VendorDeleted", "Vendor", id.ToString(),
+            new { vendor.Name, CatalogSections = vendor.CatalogSections.Count }, ct);
+        return true;
     }
 
     // ---- Shared helpers -----------------------------------------------------------------

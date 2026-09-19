@@ -75,6 +75,9 @@ public class InventoryItemConfiguration : IEntityTypeConfiguration<InventoryItem
         b.Property(x => x.HsnCode).HasMaxLength(10);
         // Percent, e.g. 18.00 - 5,2 covers every slab including 0.25%.
         b.Property(x => x.GstRate).HasPrecision(5, 2);
+        b.Property(x => x.ImagePath).HasMaxLength(500);
+        b.Property(x => x.ImageContentType).HasMaxLength(50);
+        b.Property(x => x.ThumbnailContentType).HasMaxLength(50);
         b.HasIndex(x => x.Sku);
         b.HasIndex(x => x.Name);
 

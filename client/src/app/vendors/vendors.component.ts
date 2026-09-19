@@ -10,6 +10,7 @@ import { VendorsService } from './services/vendors.service';
 import { VendorDetail, VendorListItem } from './models/vendor.models';
 import { VendorFormDialogComponent } from './vendor-form-dialog/vendor-form-dialog.component';
 import { RefreshService } from '../core/services/refresh.service';
+import { ConfirmDialogComponent } from '../shared/components/confirm-dialog/confirm-dialog.component';
 
 interface VendorRow {
   id: string;
@@ -40,7 +41,7 @@ const ALL = '';
 @Component({
   selector: 'app-vendors',
   standalone: true,
-  imports: [RouterLink, VendorFormDialogComponent],
+  imports: [RouterLink, VendorFormDialogComponent, ConfirmDialogComponent],
   templateUrl: './vendors.component.html',
   styleUrl: './vendors.component.scss'
 })
@@ -71,6 +72,10 @@ export class VendorsComponent {
   readonly noResults = computed(() => !this.loading() && !this.error() && this.rows().length === 0);
 
   readonly createOpen = signal(false);
+
+  readonly deleteTarget = signal<VendorRow | null>(null);
+  readonly deleting = signal(false);
+  readonly deleteError = signal<string | null>(null);
 
   private readonly search$ = new Subject<string>();
 
@@ -134,6 +139,35 @@ export class VendorsComponent {
   onVendorCreated(_vendor: VendorDetail): void {
     this.createOpen.set(false);
     this.fetch();
+  }
+
+  askDelete(row: VendorRow): void {
+    this.deleteError.set(null);
+    this.deleteTarget.set(row);
+  }
+
+  cancelDelete(): void {
+    this.deleteTarget.set(null);
+  }
+
+  confirmDelete(): void {
+    const target = this.deleteTarget();
+    if (!target || this.deleting()) return;
+    this.deleting.set(true);
+    this.deleteError.set(null);
+    this.vendorsService.delete(target.id).subscribe({
+      next: () => {
+        this.deleting.set(false);
+        this.deleteTarget.set(null);
+        // Step back a page if this removed the last row on it.
+        if (this.items().length === 1 && this.page() > 1) this.page.update((p) => p - 1);
+        this.fetch();
+      },
+      error: (err: unknown) => {
+        this.deleting.set(false);
+        this.deleteError.set(extractErrorMessage(err, 'Could not delete this vendor. Please try again.'));
+      }
+    });
   }
 
   private fetch(): void {

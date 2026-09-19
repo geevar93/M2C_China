@@ -61,13 +61,31 @@ export class InventoryService {
     return this.api.delete<void>(`/inventory/${id}`);
   }
 
+  /** Multipart: the original image plus a browser-generated thumbnail. Replaces any existing image. */
+  uploadImage(id: string, image: File, thumbnail: Blob): Observable<InventoryItem> {
+    const formData = new FormData();
+    formData.append('file', image);
+    formData.append('thumbnail', thumbnail, 'thumbnail.jpg');
+    return this.api.postFormData<InventoryItem>(`/inventory/${id}/image`, formData);
+  }
+
+  removeImage(id: string): Observable<InventoryItem> {
+    return this.api.delete<InventoryItem>(`/inventory/${id}/image`);
+  }
+
+  /** Full-size image (authenticated, so fetched as a blob rather than a plain `<img src>`). */
+  getImage(id: string): Observable<Blob> {
+    return this.api.getBlob(`/inventory/${id}/image`);
+  }
+
   /** Writes an `inventory_inbound_entries` row and increments `onHandQty` in one transaction; returns both the entry and the re-computed item (E7-02). */
   recordInbound(id: string, request: RecordInboundRequest): Observable<RecordInboundResult> {
     return this.api.post<RecordInboundResult>(`/inventory/${id}/inbound`, request);
   }
 
+  /** Unwraps the API's `{ items }` envelope (`InventoryInboundEntryListResultDto`). */
   listInbound(id: string): Observable<InboundEntry[]> {
-    return this.api.get<InboundEntry[]>(`/inventory/${id}/inbound`);
+    return this.api.get<{ items: InboundEntry[] }>(`/inventory/${id}/inbound`).pipe(map((res) => res.items ?? []));
   }
 
   /** Writes an `inventory_adjustments` row and sets `onHandQty` to `countedQty` in one transaction; returns both the adjustment and the re-computed item (N-38, `Inventory.Adjust`-gated — see this class's doc comment). */
@@ -75,7 +93,7 @@ export class InventoryService {
     return this.api.post<RecordAdjustmentResult>(`/inventory/${id}/adjustments`, request);
   }
 
-  /** Newest first per the N-38 contract. Unwraps the API's `{ items: [...] }` envelope (`InventoryStockAdjustmentListResultDto`) — unlike `listInbound`, this endpoint doesn't return a bare array. */
+  /** Newest first per the N-38 contract. Unwraps the API's `{ items: [...] }` envelope (`InventoryStockAdjustmentListResultDto`). */
   listAdjustments(id: string): Observable<AdjustmentEntry[]> {
     return this.api.get<AdjustmentListResult>(`/inventory/${id}/adjustments`).pipe(map((res) => res.items));
   }

@@ -14,7 +14,7 @@
       <select id="dud-type" class="field-input" [value]="documentTypeId()" (change)="documentTypeId.set($any($event.target).value)">
         <option value="">Choose a document type</option>
         @for (opt of documentTypeOptions(); track opt.id) {
-          <option [value]="opt.id">{{ opt.label }}</option>
+          <option [value]="opt.id" [selected]="opt.id === documentTypeId()">{{ opt.label }}</option>
         }
       </select>
     </div>

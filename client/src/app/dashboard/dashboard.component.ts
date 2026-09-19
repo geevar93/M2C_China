@@ -31,6 +31,8 @@ import {
   toPolylinePoints
 } from './utils/dashboard.util';
 import { RefreshService } from '../core/services/refresh.service';
+import { AuthService } from '../core/services/auth.service';
+import { LowStockCardComponent } from '../inventory/low-stock-card/low-stock-card.component';
 
 type LoadStatus = 'loading' | 'loaded' | 'error';
 
@@ -107,13 +109,17 @@ const DATE_RANGE_OPTIONS: DateRangeOption[] = ['Last 7 days', 'Last 30 days', 'T
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [RouterLink, NgClass],
+  imports: [RouterLink, NgClass, LowStockCardComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss'
 })
 export class DashboardComponent {
   private readonly analytics = inject(DashboardAnalyticsService);
   private readonly statusStyle = inject(StatusStyleService);
+  private readonly auth = inject(AuthService);
+
+  /** The low-stock card reads `/inventory`, so it only shows for users who can view inventory. */
+  readonly canViewInventory = computed(() => this.auth.hasPermission('Inventory.View'));
 
   readonly dateRangeOptions = DATE_RANGE_OPTIONS;
   readonly dateRange = signal<DateRangeOption>('Last 30 days');

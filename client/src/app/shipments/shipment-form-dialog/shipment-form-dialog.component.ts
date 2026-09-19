@@ -254,7 +254,7 @@ export class ShipmentFormDialogComponent implements OnInit {
     this.customersService.list({ page: 1, pageSize: 200 }).subscribe({
       next: (res) => {
         this.customersLoading.set(false);
-        this.customerOptions.set(res.items.map((c) => ({ id: c.id, name: c.businessName })));
+        this.customerOptions.set(res.items.map((c) => ({ id: c.id, name: c.businessName || c.name })));
       },
       error: () => this.customersLoading.set(false)
     });

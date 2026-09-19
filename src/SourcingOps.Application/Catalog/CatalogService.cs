@@ -52,7 +52,8 @@ public sealed class CatalogService : ICatalogService
             // Npgsql provider and the EF Core InMemory provider used by the unit tests (same
             // reasoning as CustomerService/VendorService).
             var term = query.Search.Trim().ToLowerInvariant();
-            filtered = filtered.Where(s => s.Title.ToLower().Contains(term));
+            // Title or vendor name — the Catalogs screen and the dispatch picker both promise both.
+            filtered = filtered.Where(s => s.Title.ToLower().Contains(term) || s.Vendor.Name.ToLower().Contains(term));
         }
 
         var totalCount = await filtered.CountAsync(ct);

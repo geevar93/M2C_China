@@ -34,8 +34,7 @@ interface TimelineRow extends TimelineEvent {
  *  - "Shipments" — no shipments endpoint exists in this pass's contract
  *    (shipments are M5); rendering it would mean fabricating rows, which the
  *    task brief explicitly says not to do.
- * "Edit" is ported as a visually-present but inert control (a later CRM
- * story). "Send Catalog via WhatsApp" is wired in this pass (E9-03) to the
+ * "Edit" opens the intake form in edit mode (`customers/:id/edit`). "Send Catalog via WhatsApp" is wired in this pass (E9-03) to the
  * shared `DispatchDialogComponent`, entered with the customer fixed
  * (`customerLock`) so the dialog only needs a catalog document picked. A
  * successful dispatch reloads the timeline rather than a second dispatch
@@ -58,6 +57,7 @@ export class CustomerDetailComponent {
   private readonly auth = inject(AuthService);
 
   readonly canDispatch = computed(() => this.auth.hasPermission('Dispatch.Send'));
+  readonly canEdit = computed(() => this.auth.hasPermission('Customers.Edit'));
   readonly dispatchOpen = signal(false);
 
   private readonly masterData = toSignal(this.masterDataService.masterData$, {
@@ -106,7 +106,7 @@ export class CustomerDetailComponent {
     const row = md?.serviceTypes.find((r) => r.id === c.serviceTypeId);
     return {
       id: c.id,
-      businessName: c.businessName,
+      businessName: c.businessName || c.name,
       subline: `${c.name} · ${c.phone}`,
       serviceTypeCode: row?.code ?? null
     };
@@ -121,7 +121,7 @@ export class CustomerDetailComponent {
       .filter((n): n is string => !!n);
 
     const fields: ProfileField[] = [
-      { k: 'Business Name', v: c.businessName },
+      { k: 'Business Name', v: c.businessName || '—' },
       { k: 'Contact Name', v: c.name },
       { k: 'Phone', v: c.phone },
       { k: 'Email', v: c.email ?? '—' },
@@ -133,10 +133,9 @@ export class CustomerDetailComponent {
       // technique already used below for the freight-only external-* block,
       // just applied to a single field instead of a group.
       ...(c.gstin ? [{ k: 'GSTIN', v: c.gstin }] : []),
-      // Shown unconditionally, unlike GSTIN above: this one being absent is
-      // actionable — an invoice cannot be issued to this customer until it is
-      // set — so an em-dash here is signal, not noise.
-      { k: 'GST State', v: c.stateName ? `${c.stateName} (${c.stateCode})` : '— not set, blocks invoicing' },
+      // Shown unconditionally, unlike GSTIN above. When unset, invoices treat
+      // the customer as being in your own state (CGST + SGST).
+      { k: 'GST State', v: c.stateName ? `${c.stateName} (${c.stateCode})` : '— (invoiced as your own state)' },
       // `sourceChannel` is a non-nullable string on the DTO, so it never hits the
       // `?? '—'` the nullable fields use — but it can be EMPTY, and an empty string
       // rendered a blank row where every neighbour shows an em-dash. Found in the

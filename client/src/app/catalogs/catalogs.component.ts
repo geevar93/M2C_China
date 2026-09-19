@@ -14,6 +14,7 @@ import { CatalogUploadDialogComponent } from './upload-dialog/upload-dialog.comp
 import { DispatchDialogComponent, DispatchDocumentLock } from '../dispatch/dispatch-dialog/dispatch-dialog.component';
 import { DispatchService } from '../dispatch/services/dispatch.service';
 import { RefreshService } from '../core/services/refresh.service';
+import { ConfirmDialogComponent } from '../shared/components/confirm-dialog/confirm-dialog.component';
 
 interface CatalogCard {
   id: string;
@@ -57,7 +58,7 @@ const ALL = '';
 @Component({
   selector: 'app-catalogs',
   standalone: true,
-  imports: [RouterLink, CatalogUploadDialogComponent, DispatchDialogComponent],
+  imports: [RouterLink, CatalogUploadDialogComponent, DispatchDialogComponent, ConfirmDialogComponent],
   templateUrl: './catalogs.component.html',
   styleUrl: './catalogs.component.scss'
 })
@@ -89,6 +90,10 @@ export class CatalogsComponent {
   readonly previewError = signal<string | null>(null);
 
   readonly uploadOpen = signal(false);
+
+  readonly deleteTarget = signal<CatalogCard | null>(null);
+  readonly deleting = signal(false);
+  readonly deleteError = signal<string | null>(null);
   readonly editSection = signal<CatalogSection | null>(null);
 
   readonly dispatchOpen = signal(false);
@@ -171,6 +176,34 @@ export class CatalogsComponent {
     this.uploadOpen.set(false);
     this.editSection.set(null);
     this.fetch();
+  }
+
+  askDelete(card: CatalogCard): void {
+    this.deleteError.set(null);
+    this.deleteTarget.set(card);
+  }
+
+  cancelDelete(): void {
+    this.deleteTarget.set(null);
+  }
+
+  confirmDelete(): void {
+    const target = this.deleteTarget();
+    if (!target || this.deleting()) return;
+    this.deleting.set(true);
+    this.deleteError.set(null);
+    this.catalogsService.delete(target.id).subscribe({
+      next: () => {
+        this.deleting.set(false);
+        this.deleteTarget.set(null);
+        if (this.items().length === 1 && this.page() > 1) this.page.update((p) => p - 1);
+        this.fetch();
+      },
+      error: (err: unknown) => {
+        this.deleting.set(false);
+        this.deleteError.set(extractErrorMessage(err, 'Could not delete this catalog. Please try again.'));
+      }
+    });
   }
 
   openDispatch(card: CatalogCard): void {

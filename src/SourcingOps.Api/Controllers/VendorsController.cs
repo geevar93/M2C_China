@@ -70,6 +70,14 @@ public sealed class VendorsController : ControllerBase
         return result is null ? NotFound() : Ok(result);
     }
 
+    [HttpDelete("{id:guid}")]
+    [Authorize(Policy = PermissionCodes.VendorsEdit)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var deleted = await _service.DeleteAsync(id, User.GetRequiredUserId(), ct);
+        return deleted ? NoContent() : NotFound();
+    }
+
     /// <summary>E5-07: non-catalog vendor documents (licence, quality certs) filed for reference only — see VendorDocumentService's doc comment.</summary>
     [HttpGet("{id:guid}/documents")]
     [Authorize(Policy = PermissionCodes.VendorsView)]

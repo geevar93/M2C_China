@@ -209,7 +209,7 @@ export class CustomersComponent {
 
     return {
       id: item.id,
-      business: item.businessName,
+      business: item.businessName || item.name,
       name: item.name,
       city: item.city ?? '—',
       phone: item.phone,

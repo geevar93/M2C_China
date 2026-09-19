@@ -12,7 +12,7 @@
         aria-label="Date range"
       >
         @for (opt of dateRangeOptions; track opt) {
-          <option [value]="opt">{{ opt }}</option>
+          <option [value]="opt" [selected]="opt === dateRange()">{{ opt }}</option>
         }
       </select>
       <a class="btn btn-primary" routerLink="/customers/intake">+ New Lead</a>
@@ -34,6 +34,12 @@
       </div>
     }
   </div>
+
+  @if (canViewInventory()) {
+    <div class="dash-row">
+      <app-low-stock-card></app-low-stock-card>
+    </div>
+  }
 
   <div class="dash-row dash-row--charts">
     <div class="card">

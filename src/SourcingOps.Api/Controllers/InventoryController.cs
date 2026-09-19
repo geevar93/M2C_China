@@ -77,6 +77,53 @@ public sealed class InventoryController : ControllerBase
         return deleted ? NoContent() : NotFound();
     }
 
+    /// <summary>
+    /// Multipart: <c>file</c> (full-size JPEG/PNG/WebP, ≤ 8 MB) and <c>thumbnail</c> (small
+    /// client-generated preview, ≤ 200 KB). Replaces any existing image. Returns the item.
+    /// </summary>
+    [HttpPost("{id:guid}/image")]
+    [Authorize(Policy = PermissionCodes.InventoryEdit)]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    public async Task<IActionResult> UploadImage(Guid id, [FromForm] IFormFile file, [FromForm] IFormFile thumbnail, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0 || thumbnail is null || thumbnail.Length == 0)
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Both an image and a thumbnail are required.");
+        }
+        if (thumbnail.Length > InventoryService.MaxThumbnailBytes)
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Thumbnail is too large.");
+        }
+
+        byte[] thumbBytes;
+        await using (var thumbStream = thumbnail.OpenReadStream())
+        using (var ms = new MemoryStream())
+        {
+            await thumbStream.CopyToAsync(ms, ct);
+            thumbBytes = ms.ToArray();
+        }
+
+        await using var imageStream = file.OpenReadStream();
+        var result = await _service.SetImageAsync(id, imageStream, file.Length, thumbBytes, User.GetRequiredUserId(), ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpDelete("{id:guid}/image")]
+    [Authorize(Policy = PermissionCodes.InventoryEdit)]
+    public async Task<IActionResult> RemoveImage(Guid id, CancellationToken ct)
+    {
+        var result = await _service.RemoveImageAsync(id, User.GetRequiredUserId(), ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpGet("{id:guid}/image")]
+    [Authorize(Policy = PermissionCodes.InventoryView)]
+    public async Task<IActionResult> GetImage(Guid id, CancellationToken ct)
+    {
+        var image = await _service.GetImageAsync(id, ct);
+        return image is null ? NotFound() : File(image.Content, image.ContentType);
+    }
+
     /// <summary>E7-02: records an inbound entry and raises on-hand quantity in one transaction.</summary>
     [HttpPost("{id:guid}/inbound")]
     [Authorize(Policy = PermissionCodes.InventoryEdit)]

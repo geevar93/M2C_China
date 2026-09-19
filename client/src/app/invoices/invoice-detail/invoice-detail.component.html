@@ -150,7 +150,7 @@
             >
               <option value="">Select a customer…</option>
               @for (c of customerOptions(); track c.id) {
-                <option [value]="c.id">{{ c.name }}</option>
+                <option [value]="c.id" [selected]="c.id === formCustomerId()">{{ c.name }}</option>
               }
             </select>
             @if (customersLoading()) {
@@ -169,7 +169,7 @@
             >
               <option value="">No shipment — freight-only invoice</option>
               @for (s of shipmentOptions(); track s.id) {
-                <option [value]="s.id">{{ s.reference }}</option>
+                <option [value]="s.id" [selected]="s.id === formShipmentId()">{{ s.reference }}</option>
               }
             </select>
             @if (!formCustomerId()) {
@@ -236,6 +236,7 @@
                   <th class="align-right">Unit price</th>
                   <th class="align-right">GST</th>
                   <th class="align-right">Taxable</th>
+                  <th class="align-right">Total incl. GST</th>
                   <th></th>
                 </tr>
               </thead>
@@ -307,6 +308,7 @@
                       </select>
                     </td>
                     <td class="align-right nowrap">{{ formatInr(lineSubtotal(line)) }}</td>
+                    <td class="align-right nowrap">{{ formatInr(lineTotal(line)) }}</td>
                     <td class="align-right">
                       <button
                         type="button"
@@ -323,12 +325,20 @@
             </table>
           </div>
 
-          <div class="inv-lines__total">
+          <div class="inv-lines__total inv-lines__total--sub">
             <span class="muted">Taxable value</span>
             <span class="nowrap">{{ formatInr(formTaxableTotal()) }}</span>
           </div>
+          <div class="inv-lines__total inv-lines__total--sub">
+            <span class="muted">GST</span>
+            <span class="nowrap">{{ formatInr(formTaxTotal()) }}</span>
+          </div>
+          <div class="inv-lines__total">
+            <span>Total incl. GST</span>
+            <span class="nowrap">{{ formatInr(formGrandTotal()) }}</span>
+          </div>
           <div class="inv-lines__note muted">
-            GST is calculated when you save — CGST + SGST when the customer is in your own state, IGST otherwise.
+            The split into CGST + SGST (customer in your own state, or no state set) or IGST is shown once saved.
           </div>
         </div>
         @if (formError()) {

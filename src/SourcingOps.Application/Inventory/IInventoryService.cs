@@ -25,4 +25,13 @@ public interface IInventoryService
 
     /// <summary>N-38: the item's stock-adjustment history, newest first. Null when the item does not exist.</summary>
     Task<InventoryStockAdjustmentListResultDto?> ListStockAdjustmentsAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Stores (or replaces) the item's image plus its client-generated thumbnail. Null means item not found.</summary>
+    Task<InventoryItemDto?> SetImageAsync(Guid id, Stream image, long imageSize, byte[] thumbnail, Guid actorUserId, CancellationToken ct = default);
+
+    /// <summary>Removes the item's image and thumbnail. Null means item not found.</summary>
+    Task<InventoryItemDto?> RemoveImageAsync(Guid id, Guid actorUserId, CancellationToken ct = default);
+
+    /// <summary>Null when the item or its image does not exist.</summary>
+    Task<InventoryImageDownload?> GetImageAsync(Guid id, CancellationToken ct = default);
 }

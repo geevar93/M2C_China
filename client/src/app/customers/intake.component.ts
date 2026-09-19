@@ -2,14 +2,14 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../core/services/auth.service';
 import { MasterDataService } from '../core/services/master-data.service';
 import { extractErrorMessage } from '../core/services/problem-details.util';
 import { StatusStyleService } from '../shared/services/status-style.service';
 import { SERVICE_TYPE_CIF, SERVICE_TYPE_FREIGHT_ONLY } from '../shared/constants/service-type-codes';
 import { CustomersService } from './services/customers.service';
-import { CreateCustomerRequest, DuplicateCustomerProblemDetails } from './models/customer.models';
+import { CreateCustomerRequest, CustomerDetail, DuplicateCustomerProblemDetails } from './models/customer.models';
 import { INDIAN_STATES, stateCodeFromGstin } from '../shared/models/indian-states';
 
 interface ServiceTypeCardCopy {
@@ -101,6 +101,16 @@ export class CustomerIntakeComponent {
   private readonly masterDataService = inject(MasterDataService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+
+  /** Set when mounted on `customers/:id/edit` — the same form then loads and
+   *  PUTs an existing customer instead of creating a lead. */
+  readonly editId = this.route.snapshot.paramMap.get('id');
+  readonly isEdit = !!this.editId;
+  readonly loadingCustomer = signal(this.isEdit);
+  readonly loadError = signal<string | null>(null);
+  /** Owner of the customer being edited (owner changes go through their own endpoint, not this form). */
+  readonly editOwnerName = signal<string | null>(null);
 
   readonly styles = inject(StatusStyleService);
   readonly countryCodes = COUNTRY_CODES;
@@ -131,7 +141,7 @@ export class CustomerIntakeComponent {
 
   readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
-    businessName: ['', Validators.required],
+    businessName: [''],
     cc: ['+91', Validators.required],
     phone: ['', [Validators.required, phoneDigitsValidator]],
     email: ['', Validators.email],
@@ -156,6 +166,7 @@ export class CustomerIntakeComponent {
 
   constructor() {
     this.masterDataService.ensureLoaded().subscribe({ error: () => {} });
+    if (this.editId) this.loadCustomer(this.editId);
 
     // Default the service-type/status pickers to a sane first choice once
     // master data has loaded — the prototype defaults form.svc to 'CIF' and
@@ -264,6 +275,57 @@ export class CustomerIntakeComponent {
     this.tags.update((list) => list.filter((t) => t !== tag));
   }
 
+  loadCustomer(id: string): void {
+    this.loadingCustomer.set(true);
+    this.loadError.set(null);
+    this.customersService.getById(id).subscribe({
+      next: (c) => {
+        this.patchFromCustomer(c);
+        this.loadingCustomer.set(false);
+      },
+      error: (err: unknown) => {
+        this.loadingCustomer.set(false);
+        this.loadError.set(extractErrorMessage(err, 'Could not load this customer. Please try again.'));
+      }
+    });
+  }
+
+  private patchFromCustomer(c: CustomerDetail): void {
+    // Phones are stored E.164 ("+919825041122"); split back into the dial
+    // code picker + national digits the form edits.
+    const phone = c.phone ?? '';
+    const cc = COUNTRY_CODES.find((code) => phone.startsWith(code)) ?? '+91';
+    const national = phone.startsWith(cc) ? phone.slice(cc.length) : phone.replace(/^\+/, '');
+
+    this.form.reset({
+      name: c.name ?? '',
+      businessName: c.businessName ?? '',
+      cc,
+      phone: national,
+      email: c.email ?? '',
+      gstin: c.gstin ?? '',
+      stateCode: c.stateCode ?? '',
+      city: c.city ?? '',
+      sourceChannel: c.sourceChannel || 'WhatsApp',
+      notes: c.notes ?? '',
+      externalMarketplace: c.externalMarketplace ?? '',
+      externalOrderRef: c.externalOrderRef ?? '',
+      externalSupplierName: c.externalSupplierName ?? '',
+      externalOrderValue: c.externalOrderValue != null ? String(c.externalOrderValue) : '',
+      externalOrderCurrency: c.externalOrderCurrency ?? '',
+      externalOrderDate: c.externalOrderDate ? c.externalOrderDate.slice(0, 10) : ''
+    });
+    this.serviceTypeId.set(c.serviceTypeId);
+    this.statusId.set(c.statusId);
+    this.selectedCategoryIds.set([...c.categoryIds]);
+    this.tags.set([...c.tags]);
+    this.editOwnerName.set(c.ownerName);
+  }
+
+  cancel(): void {
+    this.router.navigate(this.editId ? ['/customers', this.editId] : ['/customers']);
+  }
+
   save(): void {
     if (this.saving()) return;
     this.submitError.set(null);
@@ -288,7 +350,10 @@ export class CustomerIntakeComponent {
 
   private submit(confirmDuplicate: boolean): void {
     const payload = this.buildPayload(confirmDuplicate);
-    this.customersService.create(payload).subscribe({
+    const request$ = this.editId
+      ? this.customersService.update(this.editId, payload)
+      : this.customersService.create(payload);
+    request$.subscribe({
       next: (customer) => {
         this.saving.set(false);
         this.duplicate.set(null);
@@ -315,7 +380,9 @@ export class CustomerIntakeComponent {
             return;
           }
         }
-        this.submitError.set(extractErrorMessage(err, 'Could not save this lead. Please try again.'));
+        this.submitError.set(
+          extractErrorMessage(err, this.isEdit ? 'Could not save this customer. Please try again.' : 'Could not save this lead. Please try again.')
+        );
       }
     });
   }
@@ -332,7 +399,7 @@ export class CustomerIntakeComponent {
 
     return {
       name: raw.name.trim(),
-      businessName: raw.businessName.trim(),
+      businessName: raw.businessName.trim() || null,
       phone: this.rawPhone(),
       email: raw.email.trim() || null,
       gstin: raw.gstin.trim() ? raw.gstin.trim().toUpperCase() : null,

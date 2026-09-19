@@ -16,7 +16,7 @@
     <div class="detail-head">
       <div>
         <h1 class="detail-title">
-          {{ c.businessName }}
+          {{ c.businessName || c.name }}
           <span class="chip" [style.background]="svcChip().bg" [style.color]="svcChip().fg">{{ svcChip().label }}</span>
           <span class="chip" [style.background]="statusChip().bg" [style.color]="statusChip().fg">{{ statusChip().label }}</span>
         </h1>
@@ -32,7 +32,15 @@
         >
           Send Catalog via WhatsApp
         </button>
-        <button type="button" class="btn btn-secondary" disabled title="Edit is a later CRM story">Edit</button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          [disabled]="!canEdit()"
+          [title]="canEdit() ? '' : 'Requires the Customers.Edit permission'"
+          [routerLink]="['/customers', c.id, 'edit']"
+        >
+          Edit
+        </button>
       </div>
     </div>
 

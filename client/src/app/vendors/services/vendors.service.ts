@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { VendorDetail, VendorDocument, VendorsListParams, VendorsListResponse, VendorWriteRequest } from '../models/vendor.models';
 
@@ -39,8 +39,14 @@ export class VendorsService {
     return this.api.put<VendorDetail>(`/vendors/${id}`, request);
   }
 
+  /** Deletes the vendor with its catalog sections/documents and compliance documents. */
+  delete(id: string): Observable<void> {
+    return this.api.delete<void>(`/vendors/${id}`);
+  }
+
+  /** The API wraps the rows in an `{ items }` envelope (`VendorDocumentListResultDto`); unwrapped here. */
   listDocuments(id: string): Observable<VendorDocument[]> {
-    return this.api.get<VendorDocument[]>(`/vendors/${id}/documents`);
+    return this.api.get<{ items: VendorDocument[] }>(`/vendors/${id}/documents`).pipe(map((res) => res.items ?? []));
   }
 
   /** Multipart upload (ACTION_PLAN E5-10). The form field is `docTypeId` — `VendorsController.UploadDocument`'s `[FromForm] Guid docTypeId` parameter, NOT `documentTypeId` (that name is the shipment upload's, a distinct route). */

@@ -23,7 +23,7 @@
       <select id="cust-service" class="field-input" [value]="serviceTypeId()" (change)="setServiceType($any($event.target).value)">
         <option value="">All service types</option>
         @for (opt of serviceTypeOptions(); track opt.id) {
-          <option [value]="opt.id">{{ opt.label }}</option>
+          <option [value]="opt.id" [selected]="opt.id === serviceTypeId()">{{ opt.label }}</option>
         }
       </select>
     </div>
@@ -32,7 +32,7 @@
       <select id="cust-status" class="field-input" [value]="statusId()" (change)="setStatus($any($event.target).value)">
         <option value="">All statuses</option>
         @for (opt of leadStatusOptions(); track opt.id) {
-          <option [value]="opt.id">{{ opt.label }}</option>
+          <option [value]="opt.id" [selected]="opt.id === statusId()">{{ opt.label }}</option>
         }
       </select>
     </div>
@@ -41,7 +41,7 @@
       <select id="cust-cat" class="field-input" [value]="categoryId()" (change)="setCategory($any($event.target).value)">
         <option value="">All categories</option>
         @for (opt of categoryOptions(); track opt.id) {
-          <option [value]="opt.id">{{ opt.name }}</option>
+          <option [value]="opt.id" [selected]="opt.id === categoryId()">{{ opt.name }}</option>
         }
       </select>
     </div>

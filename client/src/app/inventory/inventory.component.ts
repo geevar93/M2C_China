@@ -1,15 +1,13 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
 import { MasterDataService } from '../core/services/master-data.service';
 import { extractErrorMessage } from '../core/services/problem-details.util';
-import { AdjustDialogComponent, AdjustTargetItem } from './adjust-dialog/adjust-dialog.component';
-import { InboundDialogComponent, InboundTargetItem } from './inbound-dialog/inbound-dialog.component';
 import { ItemFormDialogComponent } from './item-form-dialog/item-form-dialog.component';
 import { InventoryService } from './services/inventory.service';
-import { InventoryItem, InventorySummary, RecordAdjustmentResult, RecordInboundResult, StockLevel } from './models/inventory.models';
+import { InventoryItem, InventorySummary, StockLevel } from './models/inventory.models';
 import { formatQty, formatStockValue } from './utils/format.util';
 import { formatInrCompact } from '../shared/utils/money.util';
 import { stockBarWidth, stockLevelColor, stockLevelTextColor } from './utils/stock-level.util';
@@ -18,7 +16,10 @@ import { RefreshService } from '../core/services/refresh.service';
 interface InventoryRow {
   id: string;
   name: string;
-  skuUnitLabel: string;
+  sku: string | null;
+  unit: string;
+  thumbnail: string | null;
+  hasImage: boolean;
   categoryName: string;
   vendorName: string;
   qtyLabel: string;
@@ -31,7 +32,12 @@ interface InventoryRow {
   barWidth: number;
   valueLabel: string;
   rowBg: string;
-  inboundTarget: InboundTargetItem;
+}
+
+interface ImageViewerState {
+  name: string;
+  url: string | null;
+  error: string | null;
 }
 
 const PAGE_SIZE = 25;
@@ -50,7 +56,7 @@ const EMPTY_SUMMARY: InventorySummary = { onHandValue: 0, itemCount: 0, lowStock
 @Component({
   selector: 'app-inventory',
   standalone: true,
-  imports: [RouterLink, ItemFormDialogComponent, InboundDialogComponent, AdjustDialogComponent],
+  imports: [ItemFormDialogComponent],
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.scss'
 })
@@ -62,8 +68,6 @@ export class InventoryComponent {
   readonly categoryOptions = toSignal(this.masterDataService.categoryOptions(), { initialValue: [] });
 
   readonly canEdit = computed(() => this.auth.hasPermission('Inventory.Edit'));
-  /** N-38 — recording a stock adjustment sits behind its own `Inventory.Adjust` policy server-side (see `InventoryController.RecordAdjustment`), distinct from `Inventory.Edit`: a business can grant "record physical counts" without granting full item edit rights. */
-  readonly canAdjust = computed(() => this.auth.hasPermission('Inventory.Adjust'));
 
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
@@ -102,13 +106,8 @@ export class InventoryComponent {
   readonly createOpen = signal(false);
   readonly editItem = signal<InventoryItem | null>(null);
 
-  readonly inboundOpen = signal(false);
-  readonly inboundPresetItem = signal<InboundTargetItem | null>(null);
-  readonly inboundCandidates = computed<InboundTargetItem[]>(() =>
-    this.items().map((i) => ({ id: i.id, name: i.name, sku: i.sku, unit: i.unit }))
-  );
-
-  readonly adjustTargetItem = signal<AdjustTargetItem | null>(null);
+  readonly imageViewer = signal<ImageViewerState | null>(null);
+  private imageObjectUrl: string | null = null;
 
   private readonly search$ = new Subject<string>();
 
@@ -118,6 +117,7 @@ export class InventoryComponent {
   constructor() {
     // Topbar "Refresh" reloads this screen the same way its Retry control does.
     this.refreshService.onRefresh(() => this.retry());
+    inject(DestroyRef).onDestroy(() => this.revokeImageUrl());
 
     // The command palette lands here with `?q=` for a section/item hit; apply it
     // as the search filter, including when this screen is already on display.
@@ -127,6 +127,11 @@ export class InventoryComponent {
         this.search.set(q);
         this.page.set(1);
         this.fetch();
+      }
+      // The dashboard's low-stock card links here with `?level=LOW`.
+      const level = params.get('level');
+      if ((level === 'LOW' || level === 'HEALTHY') && level !== this.stockLevel()) {
+        this.setStockLevel(level);
       }
     });
 
@@ -204,43 +209,32 @@ export class InventoryComponent {
     this.fetch();
   }
 
-  openInboundForRow(row: InventoryRow): void {
-    this.inboundPresetItem.set(row.inboundTarget);
-    this.inboundOpen.set(true);
+  /** Opens the full-size image; it's behind auth, so it's fetched as a blob. */
+  viewImage(row: InventoryRow): void {
+    if (!row.hasImage) return;
+    this.revokeImageUrl();
+    this.imageViewer.set({ name: row.name, url: null, error: null });
+    this.inventoryService.getImage(row.id).subscribe({
+      next: (blob) => {
+        this.imageObjectUrl = URL.createObjectURL(blob);
+        this.imageViewer.update((v) => (v ? { ...v, url: this.imageObjectUrl } : v));
+      },
+      error: (err: unknown) => {
+        this.imageViewer.update((v) => (v ? { ...v, error: extractErrorMessage(err, 'Could not load this image.') } : v));
+      }
+    });
   }
 
-  openInboundFromHeader(): void {
-    this.inboundPresetItem.set(null);
-    this.inboundOpen.set(true);
+  closeImage(): void {
+    this.imageViewer.set(null);
+    this.revokeImageUrl();
   }
 
-  cancelInbound(): void {
-    this.inboundOpen.set(false);
-    this.inboundPresetItem.set(null);
-  }
-
-  /** The response carries both the new entry and the re-computed item (§15.3) — patch the one row from it rather than refetching the whole list. */
-  onInboundRecorded(result: RecordInboundResult): void {
-    this.inboundOpen.set(false);
-    this.inboundPresetItem.set(null);
-    this.items.update((items) => items.map((i) => (i.id === result.item.id ? result.item : i)));
-  }
-
-  /** N-38 — same per-row entry point convention as `openInboundForRow`: the row already carries everything the dialog needs, including `onHandQty` for the live delta preview. */
-  openAdjustForRow(row: InventoryRow): void {
-    const item = this.items().find((i) => i.id === row.id);
-    if (!item) return;
-    this.adjustTargetItem.set({ id: item.id, name: item.name, sku: item.sku, unit: item.unit, onHandQty: item.onHandQty });
-  }
-
-  cancelAdjust(): void {
-    this.adjustTargetItem.set(null);
-  }
-
-  /** Same "patch from the response" convention as `onInboundRecorded` — the assumed `RecordAdjustmentResult` shape (see its doc comment) carries the re-computed item. */
-  onAdjusted(result: RecordAdjustmentResult): void {
-    this.adjustTargetItem.set(null);
-    this.items.update((items) => items.map((i) => (i.id === result.item.id ? result.item : i)));
+  private revokeImageUrl(): void {
+    if (this.imageObjectUrl) {
+      URL.revokeObjectURL(this.imageObjectUrl);
+      this.imageObjectUrl = null;
+    }
   }
 
   private fetch(): void {
@@ -273,7 +267,10 @@ export class InventoryComponent {
     return {
       id: item.id,
       name: item.name,
-      skuUnitLabel: `${item.sku ?? '—'} · per ${item.unit}`,
+      sku: item.sku,
+      unit: item.unit,
+      thumbnail: item.thumbnailDataUrl,
+      hasImage: item.hasImage,
       categoryName: item.category.name,
       vendorName: item.vendor?.name ?? '—',
       qtyLabel: formatQty(item.onHandQty),
@@ -289,8 +286,7 @@ export class InventoryComponent {
       // token exists for its literal `#fff8f8` shade, so this reuses the
       // closest existing semantic token (`--color-danger-bg`) rather than
       // hand-inventing a new hex (flagged to the coordinator).
-      rowBg: item.stockLevel === 'NEGATIVE' ? 'var(--color-danger-bg-subtle)' : 'var(--color-surface)',
-      inboundTarget: { id: item.id, name: item.name, sku: item.sku, unit: item.unit }
+      rowBg: item.stockLevel === 'NEGATIVE' ? 'var(--color-danger-bg-subtle)' : 'var(--color-surface)'
     };
   }
 }

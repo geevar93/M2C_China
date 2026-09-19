@@ -1,9 +1,27 @@
 <div class="intake-page">
   <div class="intake-lead">
-    <a routerLink="/customers" class="back-link">← Back to customers</a>
-    <h1 class="page-title">New Lead Intake</h1>
-    <div class="page-sub">Log an enquiry that arrived over WhatsApp or a call. Service type drives which fields apply downstream.</div>
+    @if (isEdit) {
+      <a [routerLink]="['/customers', editId]" class="back-link">← Back to customer</a>
+      <h1 class="page-title">Edit Customer</h1>
+      <div class="page-sub">Update this customer's contact, service type, categories and notes.</div>
+    } @else {
+      <a routerLink="/customers" class="back-link">← Back to customers</a>
+      <h1 class="page-title">New Lead Intake</h1>
+      <div class="page-sub">Log an enquiry that arrived over WhatsApp or a call. Service type drives which fields apply downstream.</div>
+    }
   </div>
+
+  @if (loadingCustomer()) {
+    <div class="state-panel">
+      <div class="spinner"></div>
+      <span>Loading customer…</span>
+    </div>
+  } @else if (loadError()) {
+    <div class="state-panel">
+      <span>{{ loadError() }}</span>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="loadCustomer(editId!)">Retry</button>
+    </div>
+  } @else {
 
   @if (masterDataError()) {
     <div class="banner-warning intake-banner">Could not load dropdown options: {{ masterDataError() }}</div>
@@ -24,11 +42,8 @@
           }
         </div>
         <div class="field">
-          <label for="in-business">Business Name</label>
+          <label for="in-business">Business Name <span class="label-hint">(optional)</span></label>
           <input id="in-business" class="field-input" formControlName="businessName" placeholder="e.g. Meena Traders" />
-          @if (form.controls.businessName.touched && form.controls.businessName.invalid) {
-            <div class="field-error">Business name is required.</div>
-          }
         </div>
       </div>
       <div class="grid-cc">
@@ -91,7 +106,7 @@
         }
       </div>
       <div class="field">
-        <label for="in-state-code">GST state <span class="label-hint">(place of supply)</span></label>
+        <label for="in-state-code">GST state <span class="label-hint">(optional, place of supply)</span></label>
         <select id="in-state-code" class="field-input" formControlName="stateCode">
           <option value="">Choose…</option>
           @for (state of states; track state.code) {
@@ -100,7 +115,7 @@
         </select>
         <div class="field-hint">
           Decides whether GST is charged as CGST + SGST or IGST. Filled in from the GSTIN automatically.
-          An invoice cannot be issued until it is set.
+          If left blank, invoices treat the customer as being in your own state.
         </div>
       </div>
     </div>
@@ -204,14 +219,19 @@
       <div class="grid-2">
         <div class="field">
           <label>Assigned Owner</label>
-          <div class="field-input field-readonly">{{ currentUser()?.name ?? 'You' }}</div>
-          <div class="field-hint">Owned by you at creation. Reassignment is managed separately.</div>
+          @if (isEdit) {
+            <div class="field-input field-readonly">{{ editOwnerName() ?? 'Unassigned' }}</div>
+            <div class="field-hint">Reassignment is managed separately.</div>
+          } @else {
+            <div class="field-input field-readonly">{{ currentUser()?.name ?? 'You' }}</div>
+            <div class="field-hint">Owned by you at creation. Reassignment is managed separately.</div>
+          }
         </div>
         <div class="field">
-          <label for="in-status">Initial Status</label>
+          <label for="in-status">{{ isEdit ? 'Status' : 'Initial Status' }}</label>
           <select id="in-status" class="field-input" [value]="statusId()" (change)="statusId.set($any($event.target).value)">
             @for (opt of leadStatusOptions(); track opt.id) {
-              <option [value]="opt.id">{{ opt.label }}</option>
+              <option [value]="opt.id" [selected]="opt.id === statusId()">{{ opt.label }}</option>
             }
           </select>
         </div>
@@ -229,12 +249,18 @@
     </div>
 
     <div class="intake-actions">
-      <button type="submit" class="btn btn-primary" [disabled]="saving()">{{ saving() ? 'Saving…' : 'Save Lead' }}</button>
-      <button type="button" class="btn btn-secondary" disabled title="Wired in E9 (WhatsApp dispatch)">Save &amp; Send Catalog</button>
-      <div class="filter-spacer"></div>
-      <div class="form-meta">{{ formMeta }}</div>
+      @if (isEdit) {
+        <button type="submit" class="btn btn-primary" [disabled]="saving()">{{ saving() ? 'Saving…' : 'Save Changes' }}</button>
+        <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
+      } @else {
+        <button type="submit" class="btn btn-primary" [disabled]="saving()">{{ saving() ? 'Saving…' : 'Save Lead' }}</button>
+        <button type="button" class="btn btn-secondary" disabled title="Wired in E9 (WhatsApp dispatch)">Save &amp; Send Catalog</button>
+        <div class="filter-spacer"></div>
+        <div class="form-meta">{{ formMeta }}</div>
+      }
     </div>
   </form>
+  }
 
   @if (duplicate(); as dup) {
     <div class="dialog-backdrop">

@@ -95,6 +95,11 @@ function emptyLine(): FormLine {
  *    generic failure banner. The 400 issue-time company-settings validation
  *    error is handled the same way.
  */
+/** Two-decimal, half-away-from-zero — matches GstCalculator.Round on the server. */
+function roundMoney(value: number): number {
+  return Math.sign(value) * Math.round((Math.abs(value) + Number.EPSILON) * 100) / 100;
+}
+
 @Component({
   selector: 'app-invoice-detail',
   standalone: true,
@@ -175,6 +180,23 @@ export class InvoiceDetailComponent {
       return sum + qty * price;
     }, 0)
   );
+
+  /**
+   * Live GST total for the form, so the rate visibly counts before saving. Only the
+   * split-independent total (per line: round(taxable x rate), like the server's
+   * GstCalculator) — the CGST/SGST/IGST split still comes from the server on save,
+   * and may differ from this by a paisa of rounding when it is split in two.
+   */
+  readonly formTaxTotal = computed(() =>
+    this.formLines().reduce((sum, line) => {
+      const rate = Number(line.gstRate);
+      if (line.gstRate === '' || Number.isNaN(rate)) return sum;
+      const taxable = roundMoney(this.lineSubtotal(line));
+      return sum + roundMoney((taxable * rate) / 100);
+    }, 0)
+  );
+
+  readonly formGrandTotal = computed(() => roundMoney(this.formTaxableTotal()) + this.formTaxTotal());
 
   // ---- Shipment picker (N-32) — optional, scoped to the selected Bill-to customer.
   // Leaving no shipment selected is the normal, fully valid case (freight-only);
@@ -601,6 +623,13 @@ export class InvoiceDetailComponent {
   }
 
   /** Per-line taxable subtotal for the form preview. Plain arithmetic — see `formTaxableTotal`. */
+  /** Line total including its GST, for the form's live preview column. */
+  lineTotal(line: FormLine): number {
+    const taxable = roundMoney(this.lineSubtotal(line));
+    const rate = Number(line.gstRate);
+    return line.gstRate === '' || Number.isNaN(rate) ? taxable : taxable + roundMoney((taxable * rate) / 100);
+  }
+
   lineSubtotal(line: FormLine): number {
     const qty = Number(line.quantity);
     const price = Number(line.unitPrice);
@@ -689,7 +718,7 @@ export class InvoiceDetailComponent {
     this.customersService.list({ page: 1, pageSize: 200 }).subscribe({
       next: (res) => {
         this.customersLoading.set(false);
-        this.customerOptions.set(res.items.map((c) => ({ id: c.id, name: c.businessName })));
+        this.customerOptions.set(res.items.map((c) => ({ id: c.id, name: c.businessName || c.name })));
       },
       error: () => this.customersLoading.set(false)
     });

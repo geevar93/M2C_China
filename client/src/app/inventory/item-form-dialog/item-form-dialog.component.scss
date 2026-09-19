@@ -32,17 +32,46 @@
   }
 }
 
-// Read-only on-hand display in edit mode (D-42) — styled like a disabled
-// field-input so it reads consistently with the rest of the form despite not
-// being an actual input.
-.field-static {
-  width: 100%;
-  padding: var(--space-5) var(--space-6);
+.ifd-image-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.ifd-image-preview {
+  flex: 0 0 auto;
+  width: 88px;
+  height: 88px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
   background: var(--color-page-bg);
-  color: var(--color-text-muted);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &--empty {
+    border-style: dashed;
+  }
+}
+
+.ifd-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+
+  .field-hint {
+    flex: 1 0 100%;
+  }
 }
 
 .ifd-actions {

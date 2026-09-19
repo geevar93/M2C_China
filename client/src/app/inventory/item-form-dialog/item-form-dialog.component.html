@@ -12,6 +12,24 @@
       <div class="field-error ifd-banner" role="alert">{{ error() }}</div>
     }
 
+    <div class="ifd-image-row">
+      <div class="ifd-image-preview" [class.ifd-image-preview--empty]="!imagePreview()">
+        @if (imagePreview(); as src) {
+          <img [src]="src" alt="Item image preview" />
+        } @else {
+          <span aria-hidden="true">📦</span>
+        }
+      </div>
+      <div class="ifd-image-actions">
+        <label class="btn btn-secondary btn-sm" for="if-image">{{ imagePreview() ? 'Change Image' : 'Add Image' }}</label>
+        <input id="if-image" class="visually-hidden" type="file" [accept]="acceptedImageTypes" (change)="onImageSelected($event)" />
+        @if (imagePreview()) {
+          <button type="button" class="btn btn-secondary btn-sm" (click)="clearImage()">Remove</button>
+        }
+        <div class="field-hint">Optional · JPEG, PNG or WebP up to 8 MB. A thumbnail is saved automatically.</div>
+      </div>
+    </div>
+
     <div class="ifd-grid-2">
       <div class="field">
         <label for="if-name">Item Name</label>
@@ -34,7 +52,7 @@
         <select id="if-cat" class="field-input" [value]="categoryId()" (change)="categoryId.set($any($event.target).value)">
           <option value="">Choose a category</option>
           @for (opt of categoryOptions(); track opt.id) {
-            <option [value]="opt.id">{{ opt.name }}</option>
+            <option [value]="opt.id" [selected]="opt.id === categoryId()">{{ opt.name }}</option>
           }
         </select>
       </div>
@@ -43,13 +61,20 @@
         <select id="if-vendor" class="field-input" [value]="vendorId()" (change)="vendorId.set($any($event.target).value)">
           <option value="">No vendor</option>
           @for (opt of vendorOptions(); track opt.id) {
-            <option [value]="opt.id">{{ opt.name }}</option>
+            <option [value]="opt.id" [selected]="opt.id === vendorId()">{{ opt.name }}</option>
           }
         </select>
       </div>
     </div>
 
     <div class="ifd-grid-3">
+      <div class="field">
+        <label for="if-onhand">Current Stock</label>
+        <input id="if-onhand" class="field-input" inputmode="decimal" [value]="onHandQty()" (input)="onHandQty.set($any($event.target).value)" placeholder="0" />
+        @if (isEdit()) {
+          <div class="field-hint">Edit to correct the count. The change is kept in the item's history.</div>
+        }
+      </div>
       <div class="field">
         <label for="if-unit">Unit <span class="muted">(e.g. pcs, kg, box)</span></label>
         <input id="if-unit" class="field-input" [value]="unit()" (input)="unit.set($any($event.target).value)" />
@@ -58,6 +83,9 @@
         <label for="if-reorder">Reorder Threshold</label>
         <input id="if-reorder" class="field-input" inputmode="decimal" [value]="reorderThreshold()" (input)="reorderThreshold.set($any($event.target).value)" />
       </div>
+    </div>
+
+    <div class="ifd-grid-2">
       <div class="field">
         <label for="if-cost">Unit Cost <span class="muted">(optional)</span></label>
         <input id="if-cost" class="field-input" inputmode="decimal" [value]="unitCost()" (input)="unitCost.set($any($event.target).value)" />
@@ -65,49 +93,10 @@
       </div>
       <div class="field">
         <label for="if-selling">Selling Price <span class="muted">(optional)</span></label>
-        <input
-          id="if-selling"
-          class="field-input"
-          inputmode="decimal"
-          [value]="sellingPrice()"
-          (input)="sellingPrice.set($any($event.target).value)"
-        />
-        <div class="field-hint">
-          Price per unit EXCLUDING GST. Prefills the unit price on an invoice line, so setting it here is what
-          removes the manual entry there.
-        </div>
-      </div>
-      <div class="field">
-        <label for="if-hsn">HSN / SAC <span class="muted">(optional)</span></label>
-        <input id="if-hsn" class="field-input" [value]="hsnCode()" (input)="hsnCode.set($any($event.target).value)" />
-        <div class="field-hint">Required on an invoice line before that invoice can be issued.</div>
-      </div>
-      <div class="field">
-        <label for="if-gst">GST Rate <span class="muted">(optional)</span></label>
-        <select id="if-gst" class="field-input" [value]="gstRate()" (change)="gstRate.set($any($event.target).value)">
-          <option value="">Not set</option>
-          @for (rate of gstRates; track rate) {
-            <option [value]="rate" [selected]="isSelectedRate(rate)">{{ rate }}%</option>
-          }
-        </select>
-        <div class="field-hint">Snapshotted onto an invoice line, so a later rate change never rewrites an issued invoice.</div>
+        <input id="if-selling" class="field-input" inputmode="decimal" [value]="sellingPrice()" (input)="sellingPrice.set($any($event.target).value)" />
+        <div class="field-hint">Per unit, excluding GST. Prefills the price on an invoice line.</div>
       </div>
     </div>
-
-    @if (isEdit()) {
-      <!-- D-42: on-hand quantity is READ-ONLY on edit — there is no editable input here by design. -->
-      <div class="field">
-        <label>On Hand</label>
-        <div class="field-static" id="if-onhand-static">{{ onHandDisplay() }}</div>
-        <div class="field-hint">Stock only changes via a recorded inbound entry or a shipment — it can't be edited directly here.</div>
-      </div>
-    } @else {
-      <div class="field">
-        <label for="if-onhand">Opening On Hand Quantity <span class="muted">(optional, defaults to 0)</span></label>
-        <input id="if-onhand" class="field-input" inputmode="decimal" [value]="onHandQty()" (input)="onHandQty.set($any($event.target).value)" />
-        <div class="field-hint">Settable once, here. After creation, stock only moves via an inbound entry or a shipment.</div>
-      </div>
-    }
 
     <div class="ifd-actions">
       <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>

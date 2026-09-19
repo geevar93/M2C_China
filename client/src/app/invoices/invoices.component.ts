@@ -263,7 +263,7 @@ export class InvoicesComponent {
     this.customersService.list({ page: 1, pageSize: 200 }).subscribe({
       next: (res) => {
         this.customerOptions.set(
-          res.items.map((c) => ({ id: c.id, name: c.businessName })).sort((a, b) => a.name.localeCompare(b.name))
+          res.items.map((c) => ({ id: c.id, name: c.businessName || c.name })).sort((a, b) => a.name.localeCompare(b.name))
         );
       },
       error: () => {

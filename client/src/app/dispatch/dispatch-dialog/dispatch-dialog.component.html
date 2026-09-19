@@ -18,21 +18,24 @@
       <div class="wa-panel">
         <div class="wa-panel-label">Recipient</div>
         @if (!customerLock) {
-          @if (customersLoading()) {
+          @if (!customersEverLoaded() && customersLoading()) {
             <div class="muted">Loading customers…</div>
-          } @else if (customerOptions().length === 0) {
+          } @else if (customersEverLoaded() && !hasAnyCustomers()) {
             <div class="muted">No customers found.</div>
           } @else {
-            <select
-              class="field-input wa-select"
-              aria-label="Recipient"
+            <app-search-select
+              class="wa-select"
+              ariaLabel="Recipient"
+              placeholder="Choose a customer"
+              searchPlaceholder="Search name, business or phone…"
+              hint="Showing up to 20 matches. Type to narrow."
+              [options]="customerPickerOptions()"
               [value]="selectedCustomerId()"
-              (change)="onCustomerChange($any($event.target).value)"
-            >
-              @for (opt of customerOptions(); track opt.id) {
-                <option [value]="opt.id">{{ opt.businessName }}</option>
-              }
-            </select>
+              [selectedLabel]="selectedCustomerId() ? recipientBusinessName() : ''"
+              [loading]="customersLoading()"
+              (valueChange)="onCustomerChange($event)"
+              (searchChange)="searchCustomers($event)"
+            ></app-search-select>
           }
         } @else {
           <div class="wa-locked-name">{{ customerLock.businessName }}</div>
@@ -46,21 +49,24 @@
       <div class="wa-panel">
         <div class="wa-panel-label">Catalog PDF</div>
         @if (!documentLock) {
-          @if (documentsLoading()) {
+          @if (!documentsEverLoaded() && documentsLoading()) {
             <div class="muted">Loading catalog documents…</div>
-          } @else if (documentOptions().length === 0) {
+          } @else if (documentsEverLoaded() && !hasAnyDocuments()) {
             <div class="muted">No catalog documents available.</div>
           } @else {
-            <select
-              class="field-input wa-select"
-              aria-label="Catalog PDF"
+            <app-search-select
+              class="wa-select"
+              ariaLabel="Catalog PDF"
+              placeholder="Choose a catalog"
+              searchPlaceholder="Search catalog title or vendor…"
+              hint="Showing up to 20 matches. Type to narrow."
+              [options]="documentPickerOptions()"
               [value]="selectedDocumentId()"
-              (change)="onDocumentChange($any($event.target).value)"
-            >
-              @for (opt of documentOptions(); track opt.documentId) {
-                <option [value]="opt.documentId">{{ opt.title }}</option>
-              }
-            </select>
+              [selectedLabel]="selectedDocumentId() ? documentTitle() : ''"
+              [loading]="documentsLoading()"
+              (valueChange)="onDocumentChange($event)"
+              (searchChange)="searchDocuments($event)"
+            ></app-search-select>
           }
         } @else {
           <div class="wa-locked-name">{{ documentLock.title }}</div>

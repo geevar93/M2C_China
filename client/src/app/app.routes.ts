@@ -57,6 +57,12 @@ export const routes: Routes = [
         loadComponent: () => import('./customers/follow-ups/follow-ups.component').then((m) => m.FollowUpsComponent)
       },
       {
+        path: 'customers/:id/edit',
+        canActivate: [permissionGuard],
+        data: { title: 'Edit Customer', permission: 'Customers.Edit' },
+        loadComponent: () => import('./customers/intake.component').then((m) => m.CustomerIntakeComponent)
+      },
+      {
         path: 'customers/:id',
         canActivate: [permissionGuard],
         data: { title: 'Customer', permission: 'Customers.View' },

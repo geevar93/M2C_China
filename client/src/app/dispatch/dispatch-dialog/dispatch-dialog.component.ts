@@ -1,5 +1,7 @@
 import { Component, EventEmitter, Input, OnInit, Output, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { Subject, switchMap } from 'rxjs';
+import { SearchSelectComponent, SearchSelectOption } from '../../shared/components/search-select/search-select.component';
 import { MasterDataService } from '../../core/services/master-data.service';
 import { extractErrorMessage } from '../../core/services/problem-details.util';
 import { StatusStyleService } from '../../shared/services/status-style.service';
@@ -45,6 +47,9 @@ interface CustomerOption {
 }
 
 type StepId = 1 | 2;
+
+/** Matches shown per search in the recipient / catalog pickers; type to narrow further. */
+const PICKER_PAGE_SIZE = 20;
 
 /**
  * Shared WhatsApp dispatch dialog (ACTION_PLAN E9-03/E9-04/E9-05) — one
@@ -95,6 +100,7 @@ type StepId = 1 | 2;
 @Component({
   selector: 'app-dispatch-dialog',
   standalone: true,
+  imports: [SearchSelectComponent],
   templateUrl: './dispatch-dialog.component.html',
   styleUrl: './dispatch-dialog.component.scss'
 })
@@ -113,6 +119,7 @@ export class DispatchDialogComponent implements OnInit {
 
   private readonly serviceTypeOptions = toSignal(this.masterDataService.serviceTypeOptions(), { initialValue: [] });
 
+  /** Results of the current recipient search (server-side, first PICKER_PAGE_SIZE matches). */
   private readonly customersRaw = signal<CustomerListItem[]>([]);
   readonly customersLoading = signal(false);
   readonly customersError = signal<string | null>(null);
@@ -141,7 +148,7 @@ export class DispatchDialogComponent implements OnInit {
   readonly customerOptions = computed<CustomerOption[]>(() =>
     this.customersRaw().map((c) => ({
       id: c.id,
-      businessName: c.businessName,
+      businessName: c.businessName || c.name,
       subline: `${c.name} · ${c.phone}`,
       serviceTypeId: c.serviceTypeId
     }))
@@ -162,12 +169,63 @@ export class DispatchDialogComponent implements OnInit {
     return rows;
   });
 
-  private readonly selectedCustomerOption = computed(
-    () => this.customerOptions().find((o) => o.id === this.selectedCustomerId()) ?? null
+  /** The chosen rows are kept separately, so their details survive a later search that no longer contains them. */
+  private readonly pickedCustomer = signal<CustomerOption | null>(null);
+  private readonly pickedDocument = signal<DocumentOption | null>(null);
+
+  private readonly selectedCustomerOption = computed(() => this.pickedCustomer());
+  private readonly selectedDocumentOption = computed(() => this.pickedDocument());
+
+  readonly customerPickerOptions = computed<SearchSelectOption[]>(() =>
+    this.customerOptions().map((c) => ({ value: c.id, label: c.businessName, sublabel: c.subline }))
   );
-  private readonly selectedDocumentOption = computed(
-    () => this.documentOptions().find((o) => o.documentId === this.selectedDocumentId()) ?? null
+  readonly documentPickerOptions = computed<SearchSelectOption[]>(() =>
+    this.documentOptions().map((d) => ({ value: d.documentId, label: d.title, sublabel: `${d.filename} · ${d.meta}` }))
   );
+
+  private readonly customerSearch$ = new Subject<string>();
+  private readonly documentSearch$ = new Subject<string>();
+  /** Set once the unfiltered first page is back — only then is "there are none at all" knowable. */
+  readonly customersEverLoaded = signal(false);
+  readonly documentsEverLoaded = signal(false);
+  readonly hasAnyCustomers = signal(false);
+  readonly hasAnyDocuments = signal(false);
+
+  constructor() {
+    // switchMap drops a slower, older search response instead of letting it overwrite a newer one.
+    this.customerSearch$
+      .pipe(
+        switchMap((term) => {
+          this.customersLoading.set(true);
+          this.customersError.set(null);
+          return this.customersService.list({ search: term || undefined, page: 1, pageSize: PICKER_PAGE_SIZE });
+        }),
+        takeUntilDestroyed()
+      )
+      .subscribe({
+        next: (res) => this.onCustomersLoaded(res.items, res.totalCount),
+        error: (err: unknown) => {
+          this.customersLoading.set(false);
+          this.customersError.set(extractErrorMessage(err, 'Could not load customers. Please try again.'));
+        }
+      });
+    this.documentSearch$
+      .pipe(
+        switchMap((term) => {
+          this.documentsLoading.set(true);
+          this.documentsError.set(null);
+          return this.catalogsService.list({ search: term || undefined, page: 1, pageSize: PICKER_PAGE_SIZE });
+        }),
+        takeUntilDestroyed()
+      )
+      .subscribe({
+        next: (res) => this.onSectionsLoaded(res.items),
+        error: (err: unknown) => {
+          this.documentsLoading.set(false);
+          this.documentsError.set(extractErrorMessage(err, 'Could not load catalog documents. Please try again.'));
+        }
+      });
+  }
 
   readonly recipientBusinessName = computed(() => this.customerLock?.businessName ?? this.selectedCustomerOption()?.businessName ?? '—');
   readonly recipientSubline = computed(() => this.customerLock?.subline ?? this.selectedCustomerOption()?.subline ?? '—');
@@ -233,13 +291,23 @@ export class DispatchDialogComponent implements OnInit {
   }
 
   onCustomerChange(id: string): void {
+    this.pickedCustomer.set(this.customerOptions().find((o) => o.id === id) ?? null);
     this.selectedCustomerId.set(id);
     this.afterSelectionChanged();
   }
 
   onDocumentChange(id: string): void {
+    this.pickedDocument.set(this.documentOptions().find((o) => o.documentId === id) ?? null);
     this.selectedDocumentId.set(id);
     this.afterSelectionChanged();
+  }
+
+  searchCustomers(term: string): void {
+    this.customerSearch$.next(term);
+  }
+
+  searchDocuments(term: string): void {
+    this.documentSearch$.next(term);
   }
 
   onMessageInput(value: string): void {
@@ -313,42 +381,33 @@ export class DispatchDialogComponent implements OnInit {
   }
 
   private loadCustomers(): void {
-    this.customersLoading.set(true);
-    this.customersError.set(null);
-    this.customersService.list({ page: 1, pageSize: 200 }).subscribe({
-      next: (res) => {
-        this.customersLoading.set(false);
-        this.customersRaw.set(res.items);
-        if (res.items.length && !this.selectedCustomerId()) {
-          this.selectedCustomerId.set(res.items[0].id);
-          this.afterSelectionChanged();
-        }
-      },
-      error: (err: unknown) => {
-        this.customersLoading.set(false);
-        this.customersError.set(extractErrorMessage(err, 'Could not load customers. Please try again.'));
-      }
-    });
+    this.customerSearch$.next('');
   }
 
   private loadDocuments(): void {
-    this.documentsLoading.set(true);
-    this.documentsError.set(null);
-    this.catalogsService.list({ page: 1, pageSize: 100 }).subscribe({
-      next: (res) => {
-        this.documentsLoading.set(false);
-        this.sectionsRaw.set(res.items);
-        const first = this.documentOptions()[0];
-        if (first && !this.selectedDocumentId()) {
-          this.selectedDocumentId.set(first.documentId);
-          this.afterSelectionChanged();
-        }
-      },
-      error: (err: unknown) => {
-        this.documentsLoading.set(false);
-        this.documentsError.set(extractErrorMessage(err, 'Could not load catalog documents. Please try again.'));
-      }
-    });
+    this.documentSearch$.next('');
+  }
+
+  private onCustomersLoaded(items: CustomerListItem[], totalCount: number): void {
+    this.customersLoading.set(false);
+    this.customersRaw.set(items);
+    if (!this.customersEverLoaded()) {
+      this.customersEverLoaded.set(true);
+      this.hasAnyCustomers.set(totalCount > 0);
+      // Same default as before: preselect the first customer on open.
+      if (items.length && !this.selectedCustomerId()) this.onCustomerChange(items[0].id);
+    }
+  }
+
+  private onSectionsLoaded(sections: CatalogSection[]): void {
+    this.documentsLoading.set(false);
+    this.sectionsRaw.set(sections);
+    if (!this.documentsEverLoaded()) {
+      this.documentsEverLoaded.set(true);
+      this.hasAnyDocuments.set(this.documentOptions().length > 0);
+      const first = this.documentOptions()[0];
+      if (first && !this.selectedDocumentId()) this.onDocumentChange(first.documentId);
+    }
   }
 
   private afterSelectionChanged(): void {
