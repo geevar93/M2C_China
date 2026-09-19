@@ -294,6 +294,11 @@
   padding: var(--space-5) var(--space-4) 0;
 }
 
+.inv-lines__total--sub {
+  font-weight: 400;
+  padding-top: var(--space-2);
+}
+
 .inv-lines__note {
   text-align: right;
   font-size: 12px;

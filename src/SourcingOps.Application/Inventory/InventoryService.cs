@@ -16,13 +16,19 @@ namespace SourcingOps.Application.Inventory;
 /// </summary>
 public sealed class InventoryService : IInventoryService
 {
+    public const long MaxImageBytes = 8 * 1024 * 1024;
+    public const int MaxThumbnailBytes = 200 * 1024;
+    public const string CountEditedReason = "Count edited";
+
     private readonly IAppDbContext _db;
     private readonly IAuditLogger _audit;
+    private readonly IFileStorage _fileStorage;
 
-    public InventoryService(IAppDbContext db, IAuditLogger audit)
+    public InventoryService(IAppDbContext db, IAuditLogger audit, IFileStorage fileStorage)
     {
         _db = db;
         _audit = audit;
+        _fileStorage = fileStorage;
     }
 
     // ---- List / search / filter + summary (E7-03, E7-04, D-k) ------------------------
@@ -211,6 +217,32 @@ public sealed class InventoryService : IInventoryService
             throw new AppValidationException("unitCost", "Unit cost cannot be negative.");
         }
 
+        if (request.OnHandQty is < 0)
+        {
+            throw new AppValidationException("onHandQty", "Current stock cannot be negative.");
+        }
+
+        // An edited count is recorded as a stock adjustment in the same SaveChanges, so the
+        // balance never changes without a durable previous → new record.
+        InventoryStockAdjustment? adjustment = null;
+        if (request.OnHandQty is { } newQty && newQty != item.OnHandQty)
+        {
+            adjustment = new InventoryStockAdjustment
+            {
+                Id = Guid.NewGuid(),
+                InventoryItemId = item.Id,
+                CountedQty = newQty,
+                PreviousQty = item.OnHandQty,
+                Delta = newQty - item.OnHandQty,
+                Reason = CountEditedReason,
+                AdjustedOn = DateOnly.FromDateTime(DateTime.UtcNow),
+                AdjustedAt = DateTime.UtcNow,
+                AdjustedByUserId = actorUserId
+            };
+            _db.InventoryStockAdjustments.Add(adjustment);
+            item.OnHandQty = newQty;
+        }
+
         item.Name = name;
         item.Sku = Trim(request.Sku);
         item.Description = Trim(request.Description);
@@ -224,12 +256,16 @@ public sealed class InventoryService : IInventoryService
         item.SellingPrice = request.SellingPrice;
         item.HsnCode = Trim(request.HsnCode);
         item.GstRate = request.GstRate;
-        // OnHandQty is deliberately untouched — see UpdateInventoryItemRequest's doc comment.
 
         await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(actorUserId, "InventoryItemUpdated", "InventoryItem", item.Id.ToString(),
             new { item.Name, item.Sku, item.ReorderThreshold, CategoryName = category.Name }, ct);
+        if (adjustment is not null)
+        {
+            await _audit.LogAsync(actorUserId, "InventoryStockAdjustmentRecorded", "InventoryItem", item.Id.ToString(),
+                new { adjustment.CountedQty, adjustment.PreviousQty, adjustment.Delta, adjustment.Reason, NewOnHandQty = item.OnHandQty }, ct);
+        }
 
         return MapItem(item);
     }
@@ -251,6 +287,11 @@ public sealed class InventoryService : IInventoryService
         if (await _db.ShipmentLines.AnyAsync(l => l.InventoryItemId == id, ct))
         {
             throw new AppValidationException("id", "This item is referenced by one or more shipments and cannot be deleted.");
+        }
+
+        if (item.ImagePath is not null)
+        {
+            await _fileStorage.DeleteAsync(item.ImagePath, ct);
         }
 
         _db.InventoryItems.Remove(item);
@@ -400,6 +441,93 @@ public sealed class InventoryService : IInventoryService
             adjustments.Select(a => MapStockAdjustment(a, a.AdjustedByUser?.Name ?? "(unknown)")).ToList());
     }
 
+    // ---- Image (full size in file storage, thumbnail inline) --------------------------
+
+    public async Task<InventoryItemDto?> SetImageAsync(Guid id, Stream image, long imageSize, byte[] thumbnail, Guid actorUserId, CancellationToken ct = default)
+    {
+        var item = await LoadWithNavigationsAsync(id, ct);
+        if (item is null)
+        {
+            return null;
+        }
+
+        if (imageSize <= 0 || imageSize > MaxImageBytes)
+        {
+            throw new AppValidationException("file", $"Image must be between 1 byte and {MaxImageBytes / (1024 * 1024)} MB.");
+        }
+        if (thumbnail.Length == 0 || thumbnail.Length > MaxThumbnailBytes)
+        {
+            throw new AppValidationException("thumbnail", $"Thumbnail must be between 1 byte and {MaxThumbnailBytes / 1024} KB.");
+        }
+
+        // Buffer the (size-capped) upload so its leading bytes can be sniffed before storing.
+        using var buffer = new MemoryStream();
+        await image.CopyToAsync(buffer, ct);
+        var imageType = ImageUploadValidator.Sniff(buffer.GetBuffer().AsSpan(0, (int)Math.Min(buffer.Length, 16)))
+            ?? throw new AppValidationException("file", "Only JPEG, PNG or WebP images are supported.");
+        var thumbType = ImageUploadValidator.Sniff(thumbnail)
+            ?? throw new AppValidationException("thumbnail", "Thumbnail must be a JPEG, PNG or WebP image.");
+
+        buffer.Position = 0;
+        var relativePath = $"inventory-images/{item.Id}/{Guid.NewGuid():N}{ImageUploadValidator.ExtensionFor(imageType)}";
+        var storedPath = await _fileStorage.SaveAsync(relativePath, buffer, ct);
+
+        var previousPath = item.ImagePath;
+        item.ImagePath = storedPath;
+        item.ImageContentType = imageType;
+        item.ThumbnailData = thumbnail;
+        item.ThumbnailContentType = thumbType;
+        await _db.SaveChangesAsync(ct);
+
+        // Old file removed only after the row points at the new one.
+        if (previousPath is not null)
+        {
+            await _fileStorage.DeleteAsync(previousPath, ct);
+        }
+
+        await _audit.LogAsync(actorUserId, "InventoryImageSet", "InventoryItem", item.Id.ToString(),
+            new { ImageBytes = imageSize, ThumbnailBytes = thumbnail.Length, ContentType = imageType }, ct);
+
+        return MapItem(item);
+    }
+
+    public async Task<InventoryItemDto?> RemoveImageAsync(Guid id, Guid actorUserId, CancellationToken ct = default)
+    {
+        var item = await LoadWithNavigationsAsync(id, ct);
+        if (item is null)
+        {
+            return null;
+        }
+        if (item.ImagePath is null && item.ThumbnailData is null)
+        {
+            return MapItem(item);
+        }
+
+        if (item.ImagePath is not null)
+        {
+            await _fileStorage.DeleteAsync(item.ImagePath, ct);
+        }
+        item.ImagePath = null;
+        item.ImageContentType = null;
+        item.ThumbnailData = null;
+        item.ThumbnailContentType = null;
+        await _db.SaveChangesAsync(ct);
+
+        await _audit.LogAsync(actorUserId, "InventoryImageRemoved", "InventoryItem", item.Id.ToString(), null, ct);
+        return MapItem(item);
+    }
+
+    public async Task<InventoryImageDownload?> GetImageAsync(Guid id, CancellationToken ct = default)
+    {
+        var item = await _db.InventoryItems.AsNoTracking().FirstOrDefaultAsync(i => i.Id == id, ct);
+        if (item?.ImagePath is null)
+        {
+            return null;
+        }
+        var stream = await _fileStorage.OpenReadAsync(item.ImagePath, ct);
+        return new InventoryImageDownload(stream, item.ImageContentType ?? ImageUploadValidator.Jpeg);
+    }
+
     // ---- Shared helpers ---------------------------------------------------------------
 
     private Task<InventoryItem?> LoadWithNavigationsAsync(Guid id, CancellationToken ct) =>
@@ -444,7 +572,11 @@ public sealed class InventoryService : IInventoryService
         // Null rather than 0 when the item is not costed, so the screen can tell
         // "worth nothing" apart from "no cost captured yet".
         i.UnitCost.HasValue ? i.OnHandQty * i.UnitCost.Value : null,
-        StockLevels.For(i.OnHandQty, i.ReorderThreshold));
+        StockLevels.For(i.OnHandQty, i.ReorderThreshold),
+        HasImage: i.ImagePath is not null,
+        ThumbnailDataUrl: i.ThumbnailData is { Length: > 0 }
+            ? $"data:{i.ThumbnailContentType ?? ImageUploadValidator.Jpeg};base64,{Convert.ToBase64String(i.ThumbnailData)}"
+            : null);
 
     private static InventoryInboundEntryDto MapInboundEntry(InventoryInboundEntry e, string recordedByName) => new(
         e.Id, e.InventoryItemId, e.Quantity, e.EntryDate, e.Reference,

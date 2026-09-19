@@ -76,11 +76,13 @@ describe('VendorsService', () => {
     req.flush(DETAIL);
   });
 
-  it('GETs the compliance-document list for a vendor', () => {
-    service.listDocuments('ven-1').subscribe();
+  it('GETs the compliance-document list for a vendor and unwraps the { items } envelope', () => {
+    let result: unknown;
+    service.listDocuments('ven-1').subscribe((docs) => (result = docs));
     const req = httpMock.expectOne('/api/v1/vendors/ven-1/documents');
     expect(req.request.method).toBe('GET');
-    req.flush([]);
+    req.flush({ items: [] });
+    expect(result).toEqual([]);
   });
 
   /**

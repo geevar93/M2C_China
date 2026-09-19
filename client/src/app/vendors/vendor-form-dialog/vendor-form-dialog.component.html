@@ -60,7 +60,7 @@
         <select id="vf-status" class="field-input" [value]="statusId()" (change)="statusId.set($any($event.target).value)">
           <option value="">Choose a status</option>
           @for (opt of vendorStatusOptions(); track opt.id) {
-            <option [value]="opt.id">{{ opt.label }}</option>
+            <option [value]="opt.id" [selected]="opt.id === statusId()">{{ opt.label }}</option>
           }
         </select>
       </div>

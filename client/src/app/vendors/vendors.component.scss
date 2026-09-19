@@ -1,1 +1,7 @@
 // All shared shapes for this screen come from shared/styles/_atoms.scss.
+
+.row-actions {
+  display: inline-flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}

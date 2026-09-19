@@ -92,9 +92,9 @@ describe('VendorDetailComponent', () => {
     httpMock.expectOne((r) => r.url === '/api/v1/vendors/ven-1').flush(payload);
   }
 
-  /** The vendor-documents list is a separate `GET /vendors/{id}/documents` call — VendorDocumentDto is NOT embedded in VendorDetail, unlike catalogSections (E5-10). */
+  /** The vendor-documents list is a separate `GET /vendors/{id}/documents` call, returned in an `{ items }` envelope (VendorDocumentListResultDto). */
   function flushDocuments(docs: VendorDocument[] = []): void {
-    httpMock.expectOne((r) => r.url === '/api/v1/vendors/ven-1/documents').flush(docs);
+    httpMock.expectOne((r) => r.url === '/api/v1/vendors/ven-1/documents').flush({ items: docs });
   }
 
   it('renders the profile subline, stat tiles and status chip colour from a single GET /vendors/{id} (E5-05, no second call)', async () => {
@@ -308,6 +308,26 @@ describe('VendorDetailComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.uploadOpen()).toBeFalse();
+  });
+
+  it('regression: the edit dialog renders its saved values and button labels with the real { items } documents payload', async () => {
+    await configure();
+    fixture.detectChanges();
+    flushVendor();
+    flushDocuments();
+    fixture.detectChanges();
+
+    fixture.componentInstance.openEdit();
+    fixture.detectChanges();
+    httpMock.expectOne((r) => r.url === '/api/v1/master-data').flush({
+      categories: [], serviceTypes: [], leadStatuses: [], shipmentStatuses: [], invoiceStatuses: [], vendorStatuses: []
+    });
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    expect((el.querySelector('#vf-name') as HTMLInputElement).value).toBe('Yiwu Jewel Craft Co.');
+    expect(el.querySelector('.dialog-title')?.textContent).toContain('Edit Vendor');
+    expect(el.textContent).toContain('Save Vendor');
   });
 
   it('opens the edit-vendor dialog prefilled and applies the saved result without a refetch', async () => {

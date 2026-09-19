@@ -5,8 +5,10 @@ namespace SourcingOps.Infrastructure.Dispatching;
 
 /// <summary>
 /// E9-10's token primitive. 32 bytes (256 bits) from <see cref="RandomNumberGenerator"/>,
-/// Base64Url-encoded to 43 URL-safe characters with no padding, so the token survives being
-/// pasted into a WhatsApp message and re-parsed out of a URL path without escaping.
+/// hex-encoded to 64 lowercase characters. Hex rather than Base64Url on purpose: Base64Url's
+/// '_' and '-' collide with WhatsApp's message formatting ('_italic_') and its link detection
+/// (a trailing '-'/'_' is dropped), which left the shared link unclickable in the chat.
+/// [0-9a-f] survives being pasted into a message and re-parsed out of a URL path untouched.
 ///
 /// 256 bits is not arbitrary: this token is a bearer capability with no second factor, so its
 /// only defence against enumeration is search-space size. At 2^256 the space is far beyond
@@ -25,7 +27,7 @@ public sealed class Sha256ShareTokenFactory : IShareTokenFactory
     public string CreateToken()
     {
         var bytes = RandomNumberGenerator.GetBytes(TokenBytes);
-        return Base64UrlEncode(bytes);
+        return Convert.ToHexStringLower(bytes);
     }
 
     public string Hash(string token)
@@ -33,7 +35,4 @@ public sealed class Sha256ShareTokenFactory : IShareTokenFactory
         var digest = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token ?? string.Empty));
         return Convert.ToHexStringLower(digest);
     }
-
-    private static string Base64UrlEncode(byte[] bytes) =>
-        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 }

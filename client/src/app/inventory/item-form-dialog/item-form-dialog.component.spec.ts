@@ -33,7 +33,9 @@ const EXISTING_ITEM: InventoryItem = {
   hsnCode: null,
   gstRate: null,
   stockValue: 220800,
-  stockLevel: 'HEALTHY'
+  stockLevel: 'HEALTHY',
+  hasImage: false,
+  thumbnailDataUrl: null
 };
 
 describe('ItemFormDialogComponent', () => {
@@ -104,23 +106,80 @@ describe('ItemFormDialogComponent', () => {
     expect(c.unitCost()).toBe('120');
   });
 
-  it('D-42 regression: the edit form renders no editable on-hand-quantity input at all', async () => {
+  it('the edit form shows an editable current-stock input prefilled with the on-hand quantity', async () => {
     await configure();
     fixture.componentInstance.item = EXISTING_ITEM;
     fixture.detectChanges();
     flushLookups();
     fixture.detectChanges();
 
-    const onHandInput = fixture.nativeElement.querySelector('#if-onhand');
-    expect(onHandInput).toBeNull();
-
-    // the read-only display is present instead, and shows the real on-hand value
-    const staticEl = fixture.nativeElement.querySelector('#if-onhand-static');
-    expect(staticEl).not.toBeNull();
-    expect(staticEl.textContent).toContain('1,840');
+    const onHandInput: HTMLInputElement | null = fixture.nativeElement.querySelector('#if-onhand');
+    expect(onHandInput).not.toBeNull();
+    expect(onHandInput!.value).toBe('1840');
   });
 
-  it('D-42: updates via PUT /inventory/{id} and the request body never contains onHandQty', async () => {
+  it('sends onHandQty on update only when the count was edited', async () => {
+    await configure();
+    fixture.componentInstance.item = EXISTING_ITEM;
+    fixture.detectChanges();
+    flushLookups();
+    fixture.detectChanges();
+
+    const c = fixture.componentInstance;
+    c.onHandQty.set('1800');
+    c.save();
+
+    const req = httpMock.expectOne((r) => r.method === 'PUT' && r.url === '/api/v1/inventory/inv-1');
+    expect(req.request.body.onHandQty).toBe(1800);
+    req.flush({ ...EXISTING_ITEM, onHandQty: 1800 });
+  });
+
+  it('does not render HSN/SAC or GST rate fields, and passes stored values through on update', async () => {
+    await configure();
+    fixture.componentInstance.item = { ...EXISTING_ITEM, hsnCode: '7117', gstRate: 3 };
+    fixture.detectChanges();
+    flushLookups();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#if-hsn')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#if-gst')).toBeNull();
+
+    fixture.componentInstance.save();
+    const req = httpMock.expectOne((r) => r.method === 'PUT' && r.url === '/api/v1/inventory/inv-1');
+    expect(req.request.body.hsnCode).toBe('7117');
+    expect(req.request.body.gstRate).toBe(3);
+    req.flush(EXISTING_ITEM);
+  });
+
+  it('shows the existing thumbnail as the image preview in edit mode', async () => {
+    await configure();
+    fixture.componentInstance.item = { ...EXISTING_ITEM, hasImage: true, thumbnailDataUrl: 'data:image/jpeg;base64,AAAA' };
+    fixture.detectChanges();
+    flushLookups();
+    fixture.detectChanges();
+
+    const img: HTMLImageElement | null = fixture.nativeElement.querySelector('.ifd-image-preview img');
+    expect(img?.getAttribute('src')).toBe('data:image/jpeg;base64,AAAA');
+  });
+
+  it('removing an existing image calls DELETE /inventory/{id}/image after saving', async () => {
+    await configure();
+    fixture.componentInstance.item = { ...EXISTING_ITEM, hasImage: true, thumbnailDataUrl: 'data:image/jpeg;base64,AAAA' };
+    fixture.detectChanges();
+    flushLookups();
+    fixture.detectChanges();
+
+    const c = fixture.componentInstance;
+    c.clearImage();
+    c.save();
+
+    httpMock.expectOne((r) => r.method === 'PUT' && r.url === '/api/v1/inventory/inv-1')
+      .flush({ ...EXISTING_ITEM, hasImage: true });
+    httpMock.expectOne((r) => r.method === 'DELETE' && r.url === '/api/v1/inventory/inv-1/image')
+      .flush({ ...EXISTING_ITEM, hasImage: false, thumbnailDataUrl: null });
+  });
+
+  it('does not send onHandQty on update when the count is unchanged', async () => {
     await configure();
     fixture.componentInstance.item = EXISTING_ITEM;
     fixture.detectChanges();

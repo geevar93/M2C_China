@@ -62,6 +62,17 @@ public class InventoryItem
     /// </summary>
     public decimal? GstRate { get; set; }
 
+    /// <summary>Relative storage path of the full-size product image, if one was uploaded.</summary>
+    public string? ImagePath { get; set; }
+    public string? ImageContentType { get; set; }
+
+    /// <summary>
+    /// Small thumbnail (generated client-side, a few KB) kept in the row itself so the list
+    /// endpoint can return it inline without one storage read per row.
+    /// </summary>
+    public byte[]? ThumbnailData { get; set; }
+    public string? ThumbnailContentType { get; set; }
+
     public ICollection<ShipmentLine> ShipmentLines { get; set; } = new List<ShipmentLine>();
     public ICollection<InventoryInboundEntry> InboundEntries { get; set; } = new List<InventoryInboundEntry>();
     public ICollection<InventoryStockAdjustment> StockAdjustments { get; set; } = new List<InventoryStockAdjustment>();

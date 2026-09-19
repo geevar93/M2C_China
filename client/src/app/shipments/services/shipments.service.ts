@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import {
   ChangeShipmentStatusRequest,
@@ -73,7 +73,8 @@ export class ShipmentsService {
   }
 
   listDocuments(id: string): Observable<ShipmentDocument[]> {
-    return this.api.get<ShipmentDocument[]>(`/shipments/${id}/documents`);
+    // The API wraps the rows in an `{ items }` envelope (`ShipmentDocumentListResultDto`).
+    return this.api.get<{ items: ShipmentDocument[] }>(`/shipments/${id}/documents`).pipe(map((res) => res.items ?? []));
   }
 
   /** Multipart upload, reusing the E1-05 validator server-side (E7-09). */

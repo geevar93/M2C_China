@@ -22,7 +22,7 @@
       <select id="ven-cat" class="field-input" [value]="categoryId()" (change)="setCategory($any($event.target).value)">
         <option value="">All categories</option>
         @for (opt of categoryOptions(); track opt.id) {
-          <option [value]="opt.id">{{ opt.name }}</option>
+          <option [value]="opt.id" [selected]="opt.id === categoryId()">{{ opt.name }}</option>
         }
       </select>
     </div>
@@ -31,7 +31,7 @@
       <select id="ven-status" class="field-input" [value]="statusId()" (change)="setStatus($any($event.target).value)">
         <option value="">All statuses</option>
         @for (opt of vendorStatusOptions(); track opt.id) {
-          <option [value]="opt.id">{{ opt.label }}</option>
+          <option [value]="opt.id" [selected]="opt.id === statusId()">{{ opt.label }}</option>
         }
       </select>
     </div>
@@ -63,7 +63,12 @@
             <td>{{ v.catalogCount }}</td>
             <td><span class="chip" [style.background]="v.stBg" [style.color]="v.stFg">{{ v.statusLabel }}</span></td>
             <td class="align-right">
-              <a class="btn btn-secondary btn-sm" [routerLink]="['/vendors', v.id]">Open →</a>
+              <div class="row-actions">
+                <a class="btn btn-secondary btn-sm" [routerLink]="['/vendors', v.id]">Open →</a>
+                @if (canEdit()) {
+                  <button type="button" class="btn btn-danger-ghost btn-sm" (click)="askDelete(v)" [attr.aria-label]="'Delete ' + v.name">Delete</button>
+                }
+              </div>
             </td>
           </tr>
         }
@@ -91,6 +96,17 @@
       <span class="muted">Page {{ page() }} of {{ totalPages() }}</span>
       <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() >= totalPages()" (click)="nextPage()">Next →</button>
     </div>
+  }
+
+  @if (deleteTarget(); as target) {
+    <app-confirm-dialog
+      title="Delete vendor?"
+      [message]="'Delete ' + target.name + '? Its ' + target.catalogCount + ' catalog section(s), all catalog PDFs and compliance documents will be permanently removed. Inventory items stay but lose their vendor link.'"
+      [busy]="deleting()"
+      [error]="deleteError()"
+      (confirmed)="confirmDelete()"
+      (cancelled)="cancelDelete()"
+    ></app-confirm-dialog>
   }
 
   @if (createOpen()) {

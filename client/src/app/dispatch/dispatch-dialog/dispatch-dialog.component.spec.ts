@@ -189,6 +189,49 @@ describe('DispatchDialogComponent', () => {
     });
   });
 
+  describe('recipient search (searchable picker)', () => {
+    it('searches customers server-side and keeps the chosen customer after the results change', async () => {
+      await configure();
+      fixture.componentInstance.documentLock = {
+        documentId: 'doc-1',
+        title: 'AW26 Catalog',
+        filename: 'yiwu-jewel-craft-aw26-v3.pdf',
+        meta: 'v3 · 8.4 MB · Yiwu Jewel Craft Co.'
+      };
+      fixture.detectChanges();
+      flushMasterData();
+      const first = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+      expect(first.request.params.get('pageSize')).toBe('20');
+      expect(first.request.params.has('search')).toBeFalse();
+      first.flush({ items: [customer()], page: 1, pageSize: 20, totalCount: 1 });
+      httpMock.expectOne((r) => r.url === '/api/v1/dispatch-log/compose').flush(composeResponse());
+      fixture.detectChanges();
+
+      const c = fixture.componentInstance;
+      c.searchCustomers('sundar');
+      const searchReq = httpMock.expectOne((r) => r.url === '/api/v1/customers');
+      expect(searchReq.request.params.get('search')).toBe('sundar');
+      searchReq.flush({
+        items: [customer({ id: 'cust-2', businessName: 'Sundar Exports', name: 'Sundar', phone: '+919000000002' })],
+        page: 1,
+        pageSize: 20,
+        totalCount: 1
+      });
+      fixture.detectChanges();
+
+      c.onCustomerChange('cust-2');
+      httpMock.expectOne((r) => r.url === '/api/v1/dispatch-log/compose').flush(composeResponse());
+
+      // A later search that no longer contains the chosen customer must not blank the panel.
+      c.searchCustomers('zzz');
+      httpMock.expectOne((r) => r.url === '/api/v1/customers').flush({ items: [], page: 1, pageSize: 20, totalCount: 0 });
+      fixture.detectChanges();
+      expect(c.selectedCustomerId()).toBe('cust-2');
+      expect(c.recipientBusinessName()).toBe('Sundar Exports');
+      expect(fixture.nativeElement.querySelector('app-search-select')).not.toBeNull();
+    });
+  });
+
   describe('step actions', () => {
     async function configureLocked(): Promise<void> {
       await configure();

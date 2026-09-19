@@ -169,7 +169,7 @@
                   <option value="">Choose…</option>
                 }
                 @for (scope of documentTypeScopes; track scope) {
-                  <option [value]="scope">{{ scope }}</option>
+                  <option [value]="scope" [selected]="scope === formScope()">{{ scope }}</option>
                 }
               </select>
               @if (formMode() === 'edit') {

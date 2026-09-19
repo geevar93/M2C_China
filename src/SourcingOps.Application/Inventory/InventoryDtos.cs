@@ -74,7 +74,14 @@ public sealed record InventoryItemDto(
     /// <summary>GST rate as a PERCENT (18m = 18%), not a fraction.</summary>
     decimal? GstRate,
     decimal? StockValue,
-    string StockLevel);
+    string StockLevel,
+    /// <summary>True when a full-size image is stored (fetch it from <c>GET /inventory/{id}/image</c>).</summary>
+    bool HasImage = false,
+    /// <summary>Inline <c>data:</c> URL of the small thumbnail, or null when there is no image.</summary>
+    string? ThumbnailDataUrl = null);
+
+/// <summary>Full-size image stream for <c>GET /inventory/{id}/image</c>.</summary>
+public sealed record InventoryImageDownload(Stream Content, string ContentType);
 
 /// <summary>
 /// The four stat tiles the approved inventory screen renders above the table (deviation
@@ -141,11 +148,10 @@ public sealed record CreateInventoryItemRequest(
     decimal? GstRate = null);
 
 /// <summary>
-/// Deliberately has NO <c>OnHandQty</c>. Stock moves only through the two recorded paths —
-/// an inbound entry (E7-02) or a shipment line (E7-06) — so a plain edit can never silently
-/// rewrite a balance that an inbound entry or a shipment is the audit record for. An opening
-/// balance is settable once, at create. See the M5 build report's deviation list; the stock-take
-/// correction case this leaves unserved is recorded there as an open item.
+/// <see cref="OnHandQty"/> is optional: when sent and different from the stored balance, the
+/// edit is recorded as a stock adjustment (previous → new, reason "Count edited") in the same
+/// transaction, so the balance still never changes without a durable record of it. Omit it to
+/// leave stock untouched.
 /// </summary>
 public sealed record UpdateInventoryItemRequest(
     string Name,
@@ -165,7 +171,8 @@ public sealed record UpdateInventoryItemRequest(
     /// <summary>HSN (goods) or SAC (services) code. Required on every invoice line before it can be issued.</summary>
     string? HsnCode = null,
     /// <summary>GST rate as a PERCENT (18m = 18%), not a fraction.</summary>
-    decimal? GstRate = null);
+    decimal? GstRate = null,
+    decimal? OnHandQty = null);
 
 /// <summary>
 /// E7-02. <see cref="EntryDate"/> defaults to today (UTC) when omitted;

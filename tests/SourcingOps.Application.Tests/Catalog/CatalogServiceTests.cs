@@ -341,6 +341,20 @@ public class CatalogServiceTests
     }
 
     [Fact]
+    public async Task ListAsync_SearchAlsoMatchesVendorName()
+    {
+        using var db = TestDbContextFactory.Create();
+        var f = SeedMasterData(db);
+        var sut = CreateSut(db, out _, out _);
+        var section = await sut.CreateAsync(ValidCreateRequest(f), Actor);
+
+        var term = f.Vendor.Name.Split(' ')[0].ToUpperInvariant();
+        var result = await sut.ListAsync(new CatalogSectionListQuery(term, 1, 25, null, null, null));
+
+        result.Items.Should().ContainSingle(i => i.Id == section.Id);
+    }
+
+    [Fact]
     public async Task ListAsync_Paginates()
     {
         using var db = TestDbContextFactory.Create();

@@ -746,6 +746,16 @@ namespace SourcingOps.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("hsn_code");
 
+                    b.Property<string>("ImageContentType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("image_content_type");
+
+                    b.Property<string>("ImagePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("image_path");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -771,6 +781,15 @@ namespace SourcingOps.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("sku");
+
+                    b.Property<string>("ThumbnailContentType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("thumbnail_content_type");
+
+                    b.Property<byte[]>("ThumbnailData")
+                        .HasColumnType("bytea")
+                        .HasColumnName("thumbnail_data");
 
                     b.Property<string>("Unit")
                         .IsRequired()

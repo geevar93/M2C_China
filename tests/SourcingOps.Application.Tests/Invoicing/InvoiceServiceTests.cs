@@ -387,7 +387,7 @@ public class InvoiceServiceTests
     }
 
     [Fact]
-    public async Task ChangeStatusAsync_DraftToIssued_CustomerWithNoStateCodeOrGstin_RefusesRatherThanGuessing()
+    public async Task ChangeStatusAsync_DraftToIssued_CustomerWithNoStateCodeOrGstin_DefaultsToSellerState()
     {
         using var db = TestDbContextFactory.Create();
         var f = SeedMasterData(db);
@@ -396,9 +396,11 @@ public class InvoiceServiceTests
         await db.SaveChangesAsync();
         var sut = CreateSut(db, out _, out _, out _);
 
-        var act = () => IssueAsync(sut, db, f, ValidCreate(f));
+        var issued = await IssueAsync(sut, db, f, ValidCreate(f));
 
-        (await act.Should().ThrowAsync<AppValidationException>()).And.Errors.Should().ContainKey("customer");
+        issued!.TaxSummary.IsIntraState.Should().BeTrue("a customer with no GST state is treated as being in the seller's state");
+        issued.TaxSummary.PlaceOfSupplyStateCode.Should().Be("24");
+        issued.TaxSummary.IgstAmount.Should().Be(0m);
     }
 
     [Fact]

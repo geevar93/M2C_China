@@ -14,17 +14,17 @@ public class Sha256ShareTokenFactoryTests
     private readonly Sha256ShareTokenFactory _sut = new();
 
     /// <summary>
-    /// 32 random bytes Base64Url-encode to 43 unpadded characters. The length matters because it
+    /// 32 random bytes hex-encode to 64 characters. The length matters because it
     /// is the visible proxy for the entropy the whole security argument rests on — a regression
     /// that shortened the token would otherwise pass every other test in this file.
     /// </summary>
     [Fact]
-    public void CreateToken_Is43UrlSafeCharacters()
+    public void CreateToken_Is64LowercaseHexCharacters()
     {
         var token = _sut.CreateToken();
 
-        token.Should().HaveLength(43);
-        token.Should().MatchRegex("^[A-Za-z0-9_-]+$", "the token is pasted into a URL path and into a WhatsApp message — no padding, no '+' or '/'");
+        token.Should().HaveLength(64);
+        token.Should().MatchRegex("^[0-9a-f]+$", "the token is pasted into a WhatsApp message, where '_' and '-' trigger formatting and break link detection");
     }
 
     [Fact]

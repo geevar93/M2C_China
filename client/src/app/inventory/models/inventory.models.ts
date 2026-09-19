@@ -46,6 +46,10 @@ export interface InventoryItem {
   /** COMPUTED `onHandQty * unitCost` server-side. `null` means "not costed", NOT "worth zero" (D-30). */
   stockValue: number | null;
   stockLevel: StockLevel;
+  /** A full-size image is stored — fetch it via `InventoryService.getImage()`. */
+  hasImage: boolean;
+  /** Inline `data:` URL of the small thumbnail, or null when there is no image. */
+  thumbnailDataUrl: string | null;
 }
 
 /** Stat-tile summary over the WHOLE filtered set (D-39), not just the current page. */
@@ -96,11 +100,9 @@ export interface CreateInventoryItemRequest {
 }
 
 /**
- * Body for `PUT /inventory/{id}`. Deliberately has **no `onHandQty`** (D-42,
- * live-verified: sending `onHandQty: 999999` left the stored value
- * unchanged). Stock moves only through `recordInbound()` or a shipment line
- * — an edit form that renders an editable on-hand field will silently drop
- * whatever the user typed into it.
+ * Body for `PUT /inventory/{id}`. `onHandQty` is optional: send it only when
+ * the count was edited — the API records the change as a stock adjustment
+ * ("Count edited"). Omit it to leave stock untouched.
  */
 export interface UpdateInventoryItemRequest {
   name: string;
@@ -114,6 +116,7 @@ export interface UpdateInventoryItemRequest {
   sellingPrice?: number | null;
   hsnCode?: string | null;
   gstRate?: number | null;
+  onHandQty?: number;
 }
 
 /** A durable, queryable business record (D-32) — distinct from the audit log. */

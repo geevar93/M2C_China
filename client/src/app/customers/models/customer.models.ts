@@ -12,7 +12,7 @@
 export interface CustomerListItem {
   id: string;
   name: string;
-  businessName: string;
+  businessName: string | null;
   phone: string;
   city: string | null;
   region: string | null;
@@ -82,7 +82,7 @@ export interface CustomersListParams {
  */
 export interface CreateCustomerRequest {
   name: string;
-  businessName: string;
+  businessName?: string | null;
   phone: string;
   email?: string | null;
   /** N-37. `string | null`, max length 15; server stores it uppercased. */

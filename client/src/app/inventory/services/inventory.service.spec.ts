@@ -19,7 +19,9 @@ const ITEM: InventoryItem = {
   hsnCode: null,
   gstRate: null,
   stockValue: 220800,
-  stockLevel: 'HEALTHY'
+  stockLevel: 'HEALTHY',
+  hasImage: false,
+  thumbnailDataUrl: null
 };
 
 describe('InventoryService', () => {
@@ -112,10 +114,12 @@ describe('InventoryService', () => {
   });
 
   it('GETs the inbound entry list for an item', () => {
-    service.listInbound('inv-1').subscribe();
+    let result: unknown;
+    service.listInbound('inv-1').subscribe((rows) => (result = rows));
     const req = httpMock.expectOne('/api/v1/inventory/inv-1/inbound');
     expect(req.request.method).toBe('GET');
-    req.flush([]);
+    req.flush({ items: [] });
+    expect(result).toEqual([]);
   });
 
   it('POSTs an adjustment and receives both the adjustment and the recomputed item (N-38)', () => {

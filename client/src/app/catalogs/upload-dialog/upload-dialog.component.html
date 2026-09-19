@@ -36,7 +36,7 @@
           <select id="ud-category" class="field-input" [value]="categoryId()" (change)="categoryId.set($any($event.target).value)">
             <option value="">Choose a category</option>
             @for (opt of categoryOptions(); track opt.id) {
-              <option [value]="opt.id">{{ opt.name }}</option>
+              <option [value]="opt.id" [selected]="opt.id === categoryId()">{{ opt.name }}</option>
             }
           </select>
         </div>
@@ -56,7 +56,7 @@
             <select id="ud-vendor" class="field-input" [value]="vendorId()" (change)="vendorId.set($any($event.target).value)">
               <option value="">Choose a vendor</option>
               @for (v of vendorOptions(); track v.id) {
-                <option [value]="v.id">{{ v.name }}</option>
+                <option [value]="v.id" [selected]="v.id === vendorId()">{{ v.name }}</option>
               }
             </select>
           </div>
@@ -87,7 +87,7 @@
             (change)="selectedSectionId.set($any($event.target).value)"
           >
             @for (s of sectionOptions(); track s.id) {
-              <option [value]="s.id">{{ s.title }}</option>
+              <option [value]="s.id" [selected]="s.id === selectedSectionId()">{{ s.title }}</option>
             }
           </select>
         }

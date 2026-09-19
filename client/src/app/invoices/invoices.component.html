@@ -22,7 +22,7 @@
       <select id="inv-customer" class="field-input" [value]="customerId()" (change)="setCustomer($any($event.target).value)">
         <option value="">All customers</option>
         @for (c of customerOptions(); track c.id) {
-          <option [value]="c.id">{{ c.name }}</option>
+          <option [value]="c.id" [selected]="c.id === customerId()">{{ c.name }}</option>
         }
       </select>
     </div>
@@ -31,7 +31,7 @@
       <select id="inv-svc" class="field-input" [value]="serviceTypeId()" (change)="setServiceType($any($event.target).value)">
         <option value="">All service types</option>
         @for (opt of serviceTypeOptions(); track opt.id) {
-          <option [value]="opt.id">{{ opt.label }}</option>
+          <option [value]="opt.id" [selected]="opt.id === serviceTypeId()">{{ opt.label }}</option>
         }
       </select>
     </div>

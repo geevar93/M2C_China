@@ -38,6 +38,8 @@ function item(overrides: Partial<InventoryItem> = {}): InventoryItem {
     unitCost: 120,
     stockValue: 220800,
     stockLevel: 'HEALTHY',
+    hasImage: false,
+    thumbnailDataUrl: null,
     ...overrides
   };
 }
@@ -82,7 +84,7 @@ describe('InventoryComponent', () => {
 
     const text: string = fixture.nativeElement.textContent;
     expect(text).toContain('Silver Chain');
-    expect(text).toContain('SKU-001 · per pcs');
+    expect(text).toContain('SKU-001');
     expect(text).toContain('Jewellery');
     expect(text).toContain('Yiwu Jewel Craft Co.');
     expect(text).toContain('HEALTHY');
@@ -222,14 +224,11 @@ describe('InventoryComponent', () => {
 
     const text: string = fixture.nativeElement.textContent;
     expect(text).not.toContain('+ Add Item');
-    expect(text).not.toContain('+ Record Inbound Stock');
-    expect(text).not.toContain('+ Inbound');
-    expect(text).not.toContain('Adjust Stock');
     expect(text).not.toContain('Edit');
   });
 
-  it('shows mutating actions with Inventory.Edit permission', async () => {
-    await configure(['Inventory.Edit']);
+  it('shows Add Item and Edit with Inventory.Edit permission, and no inbound / adjust / shipment actions', async () => {
+    await configure(['Inventory.Edit', 'Inventory.Adjust']);
     fixture.detectChanges();
     flushMasterData();
     flushList([item()]);
@@ -237,91 +236,36 @@ describe('InventoryComponent', () => {
 
     const text: string = fixture.nativeElement.textContent;
     expect(text).toContain('+ Add Item');
-    expect(text).toContain('+ Record Inbound Stock');
+    expect(text).toContain('Edit');
+    expect(text).not.toContain('Inbound');
+    expect(text).not.toContain('Adjust Stock');
+    expect(text).not.toContain('Record Shipment');
+    expect(text).not.toContain('per pcs');
   });
 
-  it('gates "Adjust Stock" on its own Inventory.Adjust permission, separate from Inventory.Edit (N-38 — the server enforces this via a distinct policy)', async () => {
-    await configure(['Inventory.Edit']);
+  it('shows the current stock with its unit', async () => {
+    await configure();
     fixture.detectChanges();
     flushMasterData();
     flushList([item()]);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).not.toContain('Adjust Stock');
+    const header: string = fixture.nativeElement.querySelector('thead').textContent;
+    expect(header).toContain('Current Stock');
+    expect(fixture.componentInstance.rows()[0].qtyLabel).toBe('1,840');
+    expect(fixture.componentInstance.rows()[0].unit).toBe('pcs');
   });
 
-  it('shows "Adjust Stock" with Inventory.Adjust permission even without Inventory.Edit', async () => {
-    await configure(['Inventory.Adjust']);
+  it('renders the inline thumbnail in front of the item, or a placeholder when there is none', async () => {
+    await configure();
     fixture.detectChanges();
     flushMasterData();
-    flushList([item()]);
+    flushList([item({ hasImage: true, thumbnailDataUrl: 'data:image/jpeg;base64,AAAA' }), item({ id: 'inv-2', name: 'No Image' })]);
     fixture.detectChanges();
 
-    const text: string = fixture.nativeElement.textContent;
-    expect(text).toContain('Adjust Stock');
-    expect(text).not.toContain('+ Add Item');
-  });
-
-  it('opens the adjust dialog for a row with the item\'s current onHandQty, and patches the row from the response instead of refetching the list (N-38)', async () => {
-    await configure(['Inventory.Adjust']);
-    fixture.detectChanges();
-    flushMasterData();
-    flushList([item()]);
-    fixture.detectChanges();
-
-    fixture.componentInstance.openAdjustForRow(fixture.componentInstance.rows()[0]);
-    expect(fixture.componentInstance.adjustTargetItem()).toEqual({
-      id: 'inv-1',
-      name: 'Silver Chain',
-      sku: 'SKU-001',
-      unit: 'pcs',
-      onHandQty: 1840
-    });
-
-    const updated = item({ onHandQty: 1837 });
-    fixture.componentInstance.onAdjusted({
-      adjustment: {
-        id: 'adj-1',
-        countedQty: 1837,
-        previousQty: 1840,
-        delta: -3,
-        reason: 'Physical count',
-        adjustedOn: '2026-07-29',
-        adjustedAt: '2026-07-29T10:00:00Z',
-        adjustedByUserId: 'user-1',
-        adjustedByName: 'Priya Sharma'
-      },
-      item: updated
-    });
-
-    expect(fixture.componentInstance.adjustTargetItem()).toBeNull();
-    expect(fixture.componentInstance.rows()[0].qtyLabel).toBe('1,837');
-    httpMock.expectNone((r) => r.url === '/api/v1/inventory');
-  });
-
-  it('patches the row from the inbound response instead of refetching the list', async () => {
-    await configure(['Inventory.Edit']);
-    fixture.detectChanges();
-    flushMasterData();
-    flushList([item()]);
-    fixture.detectChanges();
-
-    const updated = item({ onHandQty: 2040 });
-    fixture.componentInstance.onInboundRecorded({
-      entry: {
-        id: 'entry-1',
-        inventoryItemId: 'inv-1',
-        quantity: 200,
-        entryDate: '2026-07-29',
-        reference: null,
-        recordedByUserId: 'user-1',
-        recordedByName: 'Priya Sharma',
-        createdAt: '2026-07-29T10:00:00Z'
-      },
-      item: updated
-    });
-
-    expect(fixture.componentInstance.rows()[0].qtyLabel).toBe('2,040');
-    httpMock.expectNone((r) => r.url === '/api/v1/inventory');
+    const thumbs = fixture.nativeElement.querySelectorAll('.item-thumb');
+    expect(thumbs.length).toBe(2);
+    expect(thumbs[0].querySelector('img')?.getAttribute('src')).toBe('data:image/jpeg;base64,AAAA');
+    expect(thumbs[1].querySelector('img')).toBeNull();
   });
 });

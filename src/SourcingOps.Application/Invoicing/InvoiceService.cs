@@ -388,12 +388,11 @@ public sealed class InvoiceService : IInvoiceService
     ///   <item>no lines at all;</item>
     ///   <item>a line with no GST rate or no HSN/SAC code (a compliant tax invoice must state both);</item>
     ///   <item>a line priced at zero, which is almost always an unset selling price rather than a genuine giveaway;</item>
-    ///   <item>no state code on the seller or the buyer.</item>
+    ///   <item>no state code on the seller.</item>
     /// </list>
-    /// The last one is the important one: defaulting a missing state code to intra-state would
-    /// halve the rate on what may well be an inter-state supply, and the error would be
-    /// invisible — the invoice would simply be wrong, and legally so. Refusing costs one piece
-    /// of data entry; guessing costs a misdeclared tax return.
+    /// A customer's GSTIN and GST state are optional. When the buyer has neither, the place of
+    /// supply defaults to the seller's own state (intra-state, CGST + SGST) rather than blocking
+    /// the invoice; the place of supply is printed on the invoice either way.
     /// </summary>
     private async Task ApplyPlaceOfSupplyAsync(Invoice invoice, CancellationToken ct)
     {
@@ -427,7 +426,7 @@ public sealed class InvoiceService : IInvoiceService
             throw new AppValidationException("lines",
                 "Every line needs a unit price, an HSN/SAC code and a GST rate before the invoice can be issued. " +
                 string.Join(" ", lineErrors) +
-                " These default from the inventory item — set them under Inventory, or override them on the line.");
+                " Enter them on the invoice line.");
         }
 
         var sellerStateCode = await ResolveSellerStateCodeAsync(ct);
@@ -439,14 +438,8 @@ public sealed class InvoiceService : IInvoiceService
                 "CGST + SGST or is charged as IGST.");
         }
 
-        var buyerStateCode = ResolvePlaceOfSupply(invoice.Customer);
-        if (buyerStateCode is null)
-        {
-            throw new AppValidationException("customer",
-                $"'{ResolveCustomerName(invoice.Customer)}' has no GST state set, so the place of supply cannot be " +
-                "determined and the tax treatment would be a guess. Set the customer's state (or a valid GSTIN) " +
-                "on their record, then issue this invoice.");
-        }
+        // Optional on the customer: with no state and no GSTIN, supply is treated as intra-state.
+        var buyerStateCode = ResolvePlaceOfSupply(invoice.Customer) ?? sellerStateCode;
 
         var isIntraState = GstCalculator.IsIntraState(sellerStateCode, buyerStateCode);
         invoice.PlaceOfSupplyStateCode = buyerStateCode;
@@ -760,21 +753,20 @@ public sealed class InvoiceService : IInvoiceService
 
     /// <summary>
     /// The buyer's place of supply, defaulted from their GSTIN when the explicit field is blank.
-    /// Returns null when neither is usable — callers must then refuse rather than assume, since
-    /// assuming intra-state would halve the rate on what may be an inter-state supply.
+    /// Null when neither is usable; callers then fall back to the seller's own state.
     /// </summary>
     private static string? ResolvePlaceOfSupply(Customer customer) =>
         IndianStateCodes.IsValid(customer.StateCode) ? customer.StateCode : IndianStateCodes.FromGstin(customer.Gstin);
 
     /// <summary>
-    /// The DRAFT-only provisional treatment. Falls back to inter-state when the customer has no
-    /// usable state code, purely so a draft can display a total at all; nothing is snapshotted
-    /// and <see cref="EnsureIssuable"/> still blocks the issue until a real code exists.
+    /// The DRAFT-only provisional treatment, using the same fallback the issue step applies: a
+    /// customer with no usable state code is treated as being in the seller's own state.
     /// </summary>
     private static bool ProvisionalIntraState(Customer customer, string? sellerStateCode)
     {
-        var buyer = ResolvePlaceOfSupply(customer);
-        return buyer is not null && sellerStateCode is not null && GstCalculator.IsIntraState(sellerStateCode, buyer);
+        if (sellerStateCode is null) return false;
+        var buyer = ResolvePlaceOfSupply(customer) ?? sellerStateCode;
+        return GstCalculator.IsIntraState(sellerStateCode, buyer);
     }
 
     private static string NormalizeCurrency(string? currency)

@@ -29,7 +29,7 @@
         <select id="sf-customer" class="field-input" [value]="customerId()" (change)="customerId.set($any($event.target).value)">
           <option value="">Choose a customer</option>
           @for (c of customerOptions(); track c.id) {
-            <option [value]="c.id">{{ c.name }}</option>
+            <option [value]="c.id" [selected]="c.id === customerId()">{{ c.name }}</option>
           }
         </select>
       </div>
@@ -45,7 +45,7 @@
         <select id="sf-service" class="field-input" [value]="serviceTypeId()" (change)="serviceTypeId.set($any($event.target).value)">
           <option value="">Choose a service type</option>
           @for (opt of serviceTypeOptions(); track opt.id) {
-            <option [value]="opt.id">{{ opt.label }}</option>
+            <option [value]="opt.id" [selected]="opt.id === serviceTypeId()">{{ opt.label }}</option>
           }
         </select>
       </div>
@@ -60,7 +60,7 @@
           <select id="sf-status" class="field-input" [value]="statusId()" (change)="statusId.set($any($event.target).value)">
             <option value="">Choose a status</option>
             @for (opt of shipmentStatusOptions(); track opt.id) {
-              <option [value]="opt.id">{{ opt.label }}</option>
+              <option [value]="opt.id" [selected]="opt.id === statusId()">{{ opt.label }}</option>
             }
           </select>
         </div>
@@ -112,7 +112,7 @@
             <select class="field-input" [value]="row.inventoryItemId" (change)="setLineItem($index, $any($event.target).value)">
               <option value="">Choose an item</option>
               @for (item of inventoryOptions(); track item.id) {
-                <option [value]="item.id">{{ item.name }}{{ item.sku ? ' · ' + item.sku : '' }}</option>
+                <option [value]="item.id" [selected]="item.id === row.inventoryItemId">{{ item.name }}{{ item.sku ? ' · ' + item.sku : '' }}</option>
               }
             </select>
             <input

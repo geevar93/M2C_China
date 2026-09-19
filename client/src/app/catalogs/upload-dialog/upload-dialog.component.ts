@@ -218,7 +218,9 @@ export class CatalogUploadDialogComponent implements OnInit {
       tags: this.parseTags()
     };
     this.catalogsService.create(request).subscribe({
-      next: (section) => this.uploadTo(section.id, file),
+      // A brand-new section is removed again if its first upload fails, so a retry
+      // doesn't leave an empty duplicate catalog behind.
+      next: (section) => this.uploadTo(section.id, file, true),
       error: (err: unknown) => {
         this.saving.set(false);
         this.error.set(extractErrorMessage(err, 'Could not create this catalog section. Please try again.'));
@@ -235,7 +237,7 @@ export class CatalogUploadDialogComponent implements OnInit {
     this.uploadTo(section.id, file);
   }
 
-  private uploadTo(sectionId: string, file: File): void {
+  private uploadTo(sectionId: string, file: File, rollbackSectionOnFailure = false): void {
     this.catalogsService.uploadDocument(sectionId, file).subscribe({
       next: () => {
         this.catalogsService.getById(sectionId).subscribe({
@@ -252,6 +254,9 @@ export class CatalogUploadDialogComponent implements OnInit {
       error: (err: unknown) => {
         this.saving.set(false);
         this.error.set(extractErrorMessage(err, 'Could not upload this document. Please try again.'));
+        if (rollbackSectionOnFailure) {
+          this.catalogsService.delete(sectionId).subscribe({ error: () => {} });
+        }
       }
     });
   }
